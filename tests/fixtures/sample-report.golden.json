@@ -1,0 +1,354 @@
+{
+  "data_provenance": {
+    "tool_version": "test",
+    "source_format": "cloudformation",
+    "mode": "public",
+    "target_region": "eusc-de-east-1",
+    "input_environments": [],
+    "botocore_version": "1.43.120",
+    "botocore_urls": [],
+    "regional_table_url": "https://api.regional-table.region-services.aws.a2z.com/index.json",
+    "regional_table_source_version": "20251113063700",
+    "endpoints_docs_url": "https://docs.aws.eu/general/latest/gr/endpoints.html",
+    "user_guide": {
+      "toc_url": "",
+      "pages": 16,
+      "stale_rules": [],
+      "unmapped_pages": []
+    },
+    "fetched_at": "1970-01-01T00:00:00Z",
+    "terraform": null,
+    "live": null
+  },
+  "summary": {
+    "resources": 8,
+    "available": 5,
+    "available_single_source": 0,
+    "not_available": 2,
+    "disputed": 1,
+    "cannot_assess": 0,
+    "hazards": 3,
+    "environment_literals": 0,
+    "divergences": 0,
+    "depth_blockers": 0,
+    "deviations": 0,
+    "fixes": 2,
+    "proposals": 1,
+    "flags": 3
+  },
+  "findings": [
+    {
+      "logical_id": "Assistant",
+      "resource_type": "AWS::QBusiness::Application",
+      "service": "qbusiness",
+      "verdict": "disputed",
+      "evidence": {
+        "botocore_listed": true,
+        "regional_table_listed": false,
+        "endpoints_page_listed": false,
+        "user_guide_listed": false,
+        "live_listed": null,
+        "live_check": null
+      },
+      "note": null,
+      "divergence": false,
+      "depth": []
+    },
+    {
+      "logical_id": "AutoDelete",
+      "resource_type": "Custom::S3AutoDeleteObjects",
+      "service": "s3",
+      "verdict": "available",
+      "single_source": false,
+      "evidence": {
+        "botocore_listed": true,
+        "regional_table_listed": true,
+        "endpoints_page_listed": true,
+        "user_guide_listed": true,
+        "live_listed": null,
+        "live_check": null
+      },
+      "note": null,
+      "divergence": false,
+      "depth": []
+    },
+    {
+      "logical_id": "Bucket",
+      "resource_type": "AWS::S3::Bucket",
+      "service": "s3",
+      "verdict": "available",
+      "single_source": false,
+      "evidence": {
+        "botocore_listed": true,
+        "regional_table_listed": true,
+        "endpoints_page_listed": true,
+        "user_guide_listed": true,
+        "live_listed": null,
+        "live_check": null
+      },
+      "note": null,
+      "divergence": false,
+      "depth": []
+    },
+    {
+      "logical_id": "Build",
+      "resource_type": "AWS::CodeBuild::Project",
+      "service": "codebuild",
+      "verdict": "not-available",
+      "evidence": {
+        "botocore_listed": false,
+        "regional_table_listed": false,
+        "endpoints_page_listed": false,
+        "user_guide_listed": false,
+        "live_listed": null,
+        "live_check": null
+      },
+      "note": "Not available in the target region. Remove the resource from the deployment there or replace it with a service the region offers.",
+      "divergence": false,
+      "depth": []
+    },
+    {
+      "logical_id": "Cdn",
+      "resource_type": "AWS::CloudFront::Distribution",
+      "service": "cloudfront",
+      "verdict": "not-available",
+      "evidence": {
+        "botocore_listed": false,
+        "regional_table_listed": false,
+        "endpoints_page_listed": false,
+        "user_guide_listed": false,
+        "live_listed": null,
+        "live_check": null
+      },
+      "note": "Not available in the target region. Remove the resource from the deployment there or replace it with a service the region offers.",
+      "divergence": false,
+      "depth": []
+    },
+    {
+      "logical_id": "Fn",
+      "resource_type": "AWS::Lambda::Function",
+      "service": "lambda",
+      "verdict": "available",
+      "single_source": false,
+      "evidence": {
+        "botocore_listed": true,
+        "regional_table_listed": true,
+        "endpoints_page_listed": true,
+        "user_guide_listed": true,
+        "live_listed": null,
+        "live_check": null
+      },
+      "note": null,
+      "divergence": false,
+      "depth": []
+    },
+    {
+      "logical_id": "FnRole",
+      "resource_type": "AWS::IAM::Role",
+      "service": "iam",
+      "verdict": "available",
+      "single_source": false,
+      "evidence": {
+        "botocore_listed": false,
+        "regional_table_listed": true,
+        "endpoints_page_listed": true,
+        "user_guide_listed": true,
+        "live_listed": null,
+        "live_check": null
+      },
+      "note": null,
+      "divergence": false,
+      "depth": []
+    },
+    {
+      "logical_id": "Subnet",
+      "resource_type": "AWS::EC2::Subnet",
+      "service": "ec2",
+      "verdict": "available",
+      "single_source": false,
+      "evidence": {
+        "botocore_listed": true,
+        "regional_table_listed": true,
+        "endpoints_page_listed": true,
+        "user_guide_listed": true,
+        "live_listed": null,
+        "live_check": null
+      },
+      "note": null,
+      "divergence": false,
+      "depth": []
+    }
+  ],
+  "hazards": [
+    {
+      "logical_id": "Fn",
+      "path": "Properties.Environment.Variables.QUEUE_URL",
+      "literals": [
+        {
+          "kind": "dns-suffix",
+          "value": "amazonaws.com"
+        },
+        {
+          "kind": "region-literal",
+          "value": "eu-central-1"
+        }
+      ]
+    },
+    {
+      "logical_id": "FnRole",
+      "path": "Properties.ManagedPolicyArns[1]",
+      "literals": [
+        {
+          "kind": "arn-partition",
+          "value": "arn:aws:"
+        }
+      ]
+    },
+    {
+      "logical_id": "Subnet",
+      "path": "Properties.AvailabilityZone",
+      "literals": [
+        {
+          "kind": "availability-zone",
+          "value": "eu-central-1a"
+        }
+      ]
+    }
+  ],
+  "deviations": [],
+  "documented_differences": [
+    {
+      "page": "ec2",
+      "url": "https://docs.aws.eu/esc/latest/userguide/ec2.html",
+      "differences": [
+        "HTTP API is not available.",
+        "Global Tables and Cross-Region Restore.",
+        "S3 Express One Zone is not available.",
+        "EKS support for Fargate is not available.",
+        "Multi-Region secrets are not available."
+      ]
+    },
+    {
+      "page": "iam",
+      "url": "https://docs.aws.eu/esc/latest/userguide/iam.html",
+      "differences": [
+        "HTTP API is not available.",
+        "Global Tables and Cross-Region Restore.",
+        "S3 Express One Zone is not available.",
+        "EKS support for Fargate is not available.",
+        "Multi-Region secrets are not available."
+      ]
+    },
+    {
+      "page": "lambda",
+      "url": "https://docs.aws.eu/esc/latest/userguide/lambda.html",
+      "differences": [
+        "Function URLs is not available.",
+        "The following event sources are not available: Apache Kafka; Amazon MQ"
+      ]
+    },
+    {
+      "page": "s3",
+      "url": "https://docs.aws.eu/esc/latest/userguide/s3.html",
+      "differences": [
+        "HTTP API is not available.",
+        "Global Tables and Cross-Region Restore.",
+        "S3 Express One Zone is not available.",
+        "EKS support for Fargate is not available.",
+        "Multi-Region secrets are not available."
+      ]
+    },
+    {
+      "page": "vpc",
+      "url": "https://docs.aws.eu/esc/latest/userguide/vpc.html",
+      "differences": [
+        "HTTP API is not available.",
+        "Global Tables and Cross-Region Restore.",
+        "S3 Express One Zone is not available.",
+        "EKS support for Fargate is not available.",
+        "Multi-Region secrets are not available."
+      ]
+    }
+  ],
+  "environment_literals": [],
+  "zones": null,
+  "required_changes": [
+    {
+      "logical_id": "Build",
+      "tier": "flag",
+      "reason": "AWS::CodeBuild::Project is not available in eusc-de-east-1",
+      "change": "Not available in the target region. Remove the resource from the deployment there or replace it with a service the region offers."
+    },
+    {
+      "logical_id": "Cdn",
+      "tier": "flag",
+      "reason": "AWS::CloudFront::Distribution is not available in eusc-de-east-1",
+      "change": "Not available in the target region. Remove the resource from the deployment there or replace it with a service the region offers."
+    },
+    {
+      "logical_id": "Fn",
+      "tier": "fix",
+      "reason": "hardcoded `amazonaws.com` at Properties.Environment.Variables.QUEUE_URL",
+      "change": "Build the host name from the partition's DNS suffix instead of the literal.",
+      "edits": [
+        {
+          "path": "Properties.Environment.Variables.QUEUE_URL",
+          "find": "amazonaws.com",
+          "replace": {
+            "cloudformation": "${AWS::URLSuffix}",
+            "cdk": "${Aws.URL_SUFFIX}",
+            "terraform": "${data.aws_partition.current.dns_suffix}"
+          }
+        }
+      ]
+    },
+    {
+      "logical_id": "Fn",
+      "tier": "propose",
+      "reason": "hardcoded `eu-central-1` at Properties.Environment.Variables.QUEUE_URL",
+      "change": "Use the deployment Region instead of `eu-central-1`.",
+      "precondition": "The value means the Region the stack deploys to. The input does not say which Region it was written for.",
+      "edits": [
+        {
+          "path": "Properties.Environment.Variables.QUEUE_URL",
+          "find": "eu-central-1",
+          "replace": {
+            "cloudformation": "${AWS::Region}",
+            "cdk": "${Aws.REGION}",
+            "terraform": "${data.aws_region.current.region}"
+          }
+        }
+      ]
+    },
+    {
+      "logical_id": "FnRole",
+      "tier": "fix",
+      "reason": "hardcoded `arn:aws:` at Properties.ManagedPolicyArns[1]",
+      "change": "Build the ARN from the partition instead of the literal.",
+      "edits": [
+        {
+          "path": "Properties.ManagedPolicyArns[1]",
+          "find": "arn:aws:",
+          "replace": {
+            "cloudformation": "arn:${AWS::Partition}:",
+            "cdk": "arn:${Aws.PARTITION}:",
+            "terraform": "arn:${data.aws_partition.current.partition}:"
+          }
+        }
+      ]
+    },
+    {
+      "logical_id": "Subnet",
+      "tier": "flag",
+      "reason": "hardcoded `eu-central-1a` at Properties.AvailabilityZone",
+      "change": "Choose the zone for `eu-central-1a` in the target. Run in live mode to compare with the target's zones."
+    }
+  ],
+  "source_disagreements": [
+    "qbusiness"
+  ],
+  "out_of_scope": [],
+  "warnings": [
+    "Public sources list services, not resource types. A type the service does not support in eusc-de-east-1 is only found in live mode, unless the ESC User Guide documents it."
+  ]
+}

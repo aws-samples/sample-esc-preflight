@@ -1,0 +1,10 @@
+{
+  "version": "48.0.0",
+  "artifacts": {
+    "ProdApp": {
+      "type": "aws:cloudformation:stack",
+      "environment": "aws://unknown-account/unknown-region",
+      "properties": { "templateFile": "ProdApp.template.json" }
+    }
+  }
+}

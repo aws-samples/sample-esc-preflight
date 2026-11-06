@@ -1,0 +1,1 @@
+{ "Resources": { "Queue": { "Type": "AWS::SQS::Queue", "Properties": {} } } }

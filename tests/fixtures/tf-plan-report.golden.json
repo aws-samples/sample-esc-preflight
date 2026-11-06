@@ -1,0 +1,445 @@
+{
+  "data_provenance": {
+    "tool_version": "test",
+    "source_format": "terraform-plan",
+    "mode": "public",
+    "target_region": "eusc-de-east-1",
+    "input_environments": [
+      {
+        "region": "eusc-de-east-1",
+        "account": null
+      }
+    ],
+    "botocore_version": "1.43.120",
+    "botocore_urls": [],
+    "regional_table_url": "https://api.regional-table.region-services.aws.a2z.com/index.json",
+    "regional_table_source_version": "20251113063700",
+    "endpoints_docs_url": "https://docs.aws.eu/general/latest/gr/endpoints.html",
+    "user_guide": {
+      "toc_url": "",
+      "pages": 16,
+      "stale_rules": [],
+      "unmapped_pages": []
+    },
+    "fetched_at": "1970-01-01T00:00:00Z",
+    "terraform": {
+      "aws_provider_version": "6.71.0",
+      "awscc_provider_version": "1.108.0",
+      "urls": []
+    },
+    "live": null
+  },
+  "summary": {
+    "resources": 15,
+    "available": 14,
+    "available_single_source": 0,
+    "not_available": 1,
+    "disputed": 0,
+    "cannot_assess": 0,
+    "hazards": 1,
+    "environment_literals": 0,
+    "divergences": 0,
+    "depth_blockers": 0,
+    "deviations": 0,
+    "fixes": 1,
+    "proposals": 0,
+    "flags": 1
+  },
+  "findings": [
+    {
+      "logical_id": "aws_cloudwatch_log_group.this",
+      "resource_type": "aws_cloudwatch_log_group",
+      "service": "logs",
+      "verdict": "available",
+      "single_source": false,
+      "evidence": {
+        "botocore_listed": true,
+        "regional_table_listed": true,
+        "endpoints_page_listed": true,
+        "user_guide_listed": false,
+        "live_listed": null,
+        "live_check": null
+      },
+      "note": null,
+      "divergence": false,
+      "depth": []
+    },
+    {
+      "logical_id": "aws_cloudwatch_metric_alarm.this",
+      "resource_type": "aws_cloudwatch_metric_alarm",
+      "service": "monitoring",
+      "verdict": "available",
+      "single_source": false,
+      "evidence": {
+        "botocore_listed": true,
+        "regional_table_listed": true,
+        "endpoints_page_listed": true,
+        "user_guide_listed": false,
+        "live_listed": null,
+        "live_check": null
+      },
+      "note": null,
+      "divergence": false,
+      "depth": []
+    },
+    {
+      "logical_id": "aws_codebuild_project.this",
+      "resource_type": "aws_codebuild_project",
+      "service": "codebuild",
+      "verdict": "not-available",
+      "evidence": {
+        "botocore_listed": false,
+        "regional_table_listed": false,
+        "endpoints_page_listed": false,
+        "user_guide_listed": false,
+        "live_listed": null,
+        "live_check": null
+      },
+      "note": "Not available in the target region. Remove the resource from the deployment there or replace it with a service the region offers.",
+      "divergence": false,
+      "depth": []
+    },
+    {
+      "logical_id": "aws_cognito_identity_pool.this",
+      "resource_type": "aws_cognito_identity_pool",
+      "service": "cognito-identity",
+      "verdict": "available",
+      "single_source": false,
+      "evidence": {
+        "botocore_listed": true,
+        "regional_table_listed": true,
+        "endpoints_page_listed": true,
+        "user_guide_listed": true,
+        "live_listed": null,
+        "live_check": null
+      },
+      "note": null,
+      "divergence": false,
+      "depth": []
+    },
+    {
+      "logical_id": "aws_db_instance.this",
+      "resource_type": "aws_db_instance",
+      "service": "rds",
+      "verdict": "available",
+      "single_source": false,
+      "evidence": {
+        "botocore_listed": true,
+        "regional_table_listed": true,
+        "endpoints_page_listed": true,
+        "user_guide_listed": true,
+        "live_listed": null,
+        "live_check": null
+      },
+      "note": null,
+      "divergence": false,
+      "depth": []
+    },
+    {
+      "logical_id": "aws_dynamodb_table.this",
+      "resource_type": "aws_dynamodb_table",
+      "service": "dynamodb",
+      "verdict": "available",
+      "single_source": false,
+      "evidence": {
+        "botocore_listed": true,
+        "regional_table_listed": true,
+        "endpoints_page_listed": true,
+        "user_guide_listed": true,
+        "live_listed": null,
+        "live_check": null
+      },
+      "note": null,
+      "divergence": false,
+      "depth": []
+    },
+    {
+      "logical_id": "aws_iam_policy.bedrock",
+      "resource_type": "aws_iam_policy",
+      "service": "iam",
+      "verdict": "available",
+      "single_source": false,
+      "evidence": {
+        "botocore_listed": false,
+        "regional_table_listed": true,
+        "endpoints_page_listed": true,
+        "user_guide_listed": true,
+        "live_listed": null,
+        "live_check": null
+      },
+      "note": null,
+      "divergence": false,
+      "depth": []
+    },
+    {
+      "logical_id": "aws_instance.this",
+      "resource_type": "aws_instance",
+      "service": "ec2",
+      "verdict": "available",
+      "single_source": false,
+      "evidence": {
+        "botocore_listed": true,
+        "regional_table_listed": true,
+        "endpoints_page_listed": true,
+        "user_guide_listed": true,
+        "live_listed": null,
+        "live_check": null
+      },
+      "note": null,
+      "divergence": false,
+      "depth": []
+    },
+    {
+      "logical_id": "aws_lb.this",
+      "resource_type": "aws_lb",
+      "service": "elasticloadbalancing",
+      "verdict": "available",
+      "single_source": false,
+      "evidence": {
+        "botocore_listed": true,
+        "regional_table_listed": true,
+        "endpoints_page_listed": true,
+        "user_guide_listed": false,
+        "live_listed": null,
+        "live_check": null
+      },
+      "note": null,
+      "divergence": false,
+      "depth": []
+    },
+    {
+      "logical_id": "aws_s3_bucket.this",
+      "resource_type": "aws_s3_bucket",
+      "service": "s3",
+      "verdict": "available",
+      "single_source": false,
+      "evidence": {
+        "botocore_listed": true,
+        "regional_table_listed": true,
+        "endpoints_page_listed": true,
+        "user_guide_listed": true,
+        "live_listed": null,
+        "live_check": null
+      },
+      "note": null,
+      "divergence": false,
+      "depth": []
+    },
+    {
+      "logical_id": "module.net.aws_security_group.this",
+      "resource_type": "aws_security_group",
+      "service": "ec2",
+      "verdict": "available",
+      "single_source": false,
+      "evidence": {
+        "botocore_listed": true,
+        "regional_table_listed": true,
+        "endpoints_page_listed": true,
+        "user_guide_listed": true,
+        "live_listed": null,
+        "live_check": null
+      },
+      "note": null,
+      "divergence": false,
+      "depth": []
+    },
+    {
+      "logical_id": "module.net.aws_subnet.private[0]",
+      "resource_type": "aws_subnet",
+      "service": "ec2",
+      "verdict": "available",
+      "single_source": false,
+      "evidence": {
+        "botocore_listed": true,
+        "regional_table_listed": true,
+        "endpoints_page_listed": true,
+        "user_guide_listed": true,
+        "live_listed": null,
+        "live_check": null
+      },
+      "note": null,
+      "divergence": false,
+      "depth": []
+    },
+    {
+      "logical_id": "module.net.aws_subnet.private[1]",
+      "resource_type": "aws_subnet",
+      "service": "ec2",
+      "verdict": "available",
+      "single_source": false,
+      "evidence": {
+        "botocore_listed": true,
+        "regional_table_listed": true,
+        "endpoints_page_listed": true,
+        "user_guide_listed": true,
+        "live_listed": null,
+        "live_check": null
+      },
+      "note": null,
+      "divergence": false,
+      "depth": []
+    },
+    {
+      "logical_id": "module.net.aws_subnet.private[2]",
+      "resource_type": "aws_subnet",
+      "service": "ec2",
+      "verdict": "available",
+      "single_source": false,
+      "evidence": {
+        "botocore_listed": true,
+        "regional_table_listed": true,
+        "endpoints_page_listed": true,
+        "user_guide_listed": true,
+        "live_listed": null,
+        "live_check": null
+      },
+      "note": null,
+      "divergence": false,
+      "depth": []
+    },
+    {
+      "logical_id": "module.net.aws_vpc.this",
+      "resource_type": "aws_vpc",
+      "service": "ec2",
+      "verdict": "available",
+      "single_source": false,
+      "evidence": {
+        "botocore_listed": true,
+        "regional_table_listed": true,
+        "endpoints_page_listed": true,
+        "user_guide_listed": true,
+        "live_listed": null,
+        "live_check": null
+      },
+      "note": null,
+      "divergence": false,
+      "depth": []
+    }
+  ],
+  "hazards": [
+    {
+      "logical_id": "aws_iam_policy.bedrock",
+      "path": "values.policy.Statement[0].Resource[0]",
+      "literals": [
+        {
+          "kind": "arn-partition",
+          "value": "arn:aws:"
+        }
+      ]
+    }
+  ],
+  "deviations": [],
+  "documented_differences": [
+    {
+      "page": "cognito",
+      "url": "https://docs.aws.eu/esc/latest/userguide/cognito.html",
+      "differences": [
+        "HTTP API is not available.",
+        "Global Tables and Cross-Region Restore.",
+        "S3 Express One Zone is not available.",
+        "EKS support for Fargate is not available.",
+        "Multi-Region secrets are not available."
+      ]
+    },
+    {
+      "page": "dynamodb",
+      "url": "https://docs.aws.eu/esc/latest/userguide/dynamodb.html",
+      "differences": [
+        "HTTP API is not available.",
+        "Global Tables and Cross-Region Restore.",
+        "S3 Express One Zone is not available.",
+        "EKS support for Fargate is not available.",
+        "Multi-Region secrets are not available."
+      ]
+    },
+    {
+      "page": "ec2",
+      "url": "https://docs.aws.eu/esc/latest/userguide/ec2.html",
+      "differences": [
+        "HTTP API is not available.",
+        "Global Tables and Cross-Region Restore.",
+        "S3 Express One Zone is not available.",
+        "EKS support for Fargate is not available.",
+        "Multi-Region secrets are not available."
+      ]
+    },
+    {
+      "page": "iam",
+      "url": "https://docs.aws.eu/esc/latest/userguide/iam.html",
+      "differences": [
+        "HTTP API is not available.",
+        "Global Tables and Cross-Region Restore.",
+        "S3 Express One Zone is not available.",
+        "EKS support for Fargate is not available.",
+        "Multi-Region secrets are not available."
+      ]
+    },
+    {
+      "page": "rds",
+      "url": "https://docs.aws.eu/esc/latest/userguide/rds.html",
+      "differences": [
+        "Cross Region Read Replicas are not available.",
+        "Features not available for Aurora PostgreSQL: Global Databases",
+        "Features not available for Aurora PostgreSQL: Optimized Reads"
+      ]
+    },
+    {
+      "page": "s3",
+      "url": "https://docs.aws.eu/esc/latest/userguide/s3.html",
+      "differences": [
+        "HTTP API is not available.",
+        "Global Tables and Cross-Region Restore.",
+        "S3 Express One Zone is not available.",
+        "EKS support for Fargate is not available.",
+        "Multi-Region secrets are not available."
+      ]
+    },
+    {
+      "page": "vpc",
+      "url": "https://docs.aws.eu/esc/latest/userguide/vpc.html",
+      "differences": [
+        "HTTP API is not available.",
+        "Global Tables and Cross-Region Restore.",
+        "S3 Express One Zone is not available.",
+        "EKS support for Fargate is not available.",
+        "Multi-Region secrets are not available."
+      ]
+    }
+  ],
+  "environment_literals": [],
+  "zones": null,
+  "required_changes": [
+    {
+      "logical_id": "aws_codebuild_project.this",
+      "tier": "flag",
+      "reason": "aws_codebuild_project is not available in eusc-de-east-1",
+      "change": "Not available in the target region. Remove the resource from the deployment there or replace it with a service the region offers."
+    },
+    {
+      "logical_id": "aws_iam_policy.bedrock",
+      "tier": "fix",
+      "reason": "hardcoded `arn:aws:` at values.policy.Statement[0].Resource[0]",
+      "change": "Build the ARN from the partition instead of the literal.",
+      "edits": [
+        {
+          "path": "values.policy.Statement[0].Resource[0]",
+          "find": "arn:aws:",
+          "replace": {
+            "cloudformation": "arn:${AWS::Partition}:",
+            "cdk": "arn:${Aws.PARTITION}:",
+            "terraform": "arn:${data.aws_partition.current.partition}:"
+          }
+        }
+      ]
+    }
+  ],
+  "source_disagreements": [],
+  "out_of_scope": [
+    {
+      "address": "random_id.suffix",
+      "resource_type": "random_id",
+      "provider": "registry.terraform.io/hashicorp/random"
+    }
+  ],
+  "warnings": []
+}

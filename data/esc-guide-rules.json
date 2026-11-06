@@ -1,0 +1,824 @@
+{
+  "_comment": "Rules tying a difference documented in the ESC User Guide to the resources that use the feature. Format and safeguards: docs/DEVELOPMENT.md. Check changes with scripts/check-rules.py.",
+  "rules": [
+    {
+      "id": "lambda-function-urls",
+      "page": "lambda",
+      "text": "Function URLs is not available",
+      "types": ["AWS::Lambda::Url", "aws_lambda_function_url", "awscc_lambda_url"]
+    },
+    {
+      "id": "apigateway-http-api",
+      "page": "apigateway",
+      "text": "HTTP API is not available",
+      "types": ["AWS::ApiGatewayV2::Api", "aws_apigatewayv2_api", "awscc_apigatewayv2_api"],
+      "when": [{"path": "ProtocolType", "equals": "HTTP"}, {"path": "protocol_type", "equals": "HTTP"}]
+    },
+    {
+      "id": "apigateway-websocket-api",
+      "page": "apigateway",
+      "text": "WebSockets API is not available",
+      "types": ["AWS::ApiGatewayV2::Api", "aws_apigatewayv2_api", "awscc_apigatewayv2_api"],
+      "when": [{"path": "ProtocolType", "equals": "WEBSOCKET"}, {"path": "protocol_type", "equals": "WEBSOCKET"}]
+    },
+    {
+      "id": "eks-fargate",
+      "page": "eks",
+      "text": "EKS support for Fargate is not available",
+      "types": ["AWS::EKS::FargateProfile", "aws_eks_fargate_profile", "awscc_eks_fargate_profile"]
+    },
+    {
+      "id": "s3-express-one-zone",
+      "page": "s3",
+      "text": "S3 Express One Zone is not available",
+      "types": ["AWS::S3Express::DirectoryBucket", "aws_s3_directory_bucket", "awscc_s3express_directory_bucket"]
+    },
+    {
+      "id": "s3-multi-region-access-points",
+      "page": "s3",
+      "text": "S3 Multi-Region Access Points is not available",
+      "types": ["AWS::S3::MultiRegionAccessPoint", "aws_s3control_multi_region_access_point", "awscc_s3_multi_region_access_point"]
+    },
+    {
+      "id": "s3-object-lambda",
+      "page": "s3",
+      "text": "S3 Object Lambda is not available",
+      "types": ["AWS::S3ObjectLambda::AccessPoint", "aws_s3control_object_lambda_access_point", "awscc_s3objectlambda_access_point"]
+    },
+    {
+      "id": "s3-tables",
+      "page": "s3",
+      "text": "S3 Tables is not available",
+      "types": ["AWS::S3Tables::TableBucket", "aws_s3tables_table_bucket", "awscc_s3tables_table_bucket"]
+    },
+    {
+      "id": "dynamodb-global-tables",
+      "page": "dynamodb",
+      "text": "Global Tables and Cross-Region Restore",
+      "types": ["AWS::DynamoDB::GlobalTable", "aws_dynamodb_table_replica", "awscc_dynamodb_global_table"],
+      "remediation": {"change": "Replace the global table with a single-Region table: AWS::DynamoDB::GlobalTable becomes AWS::DynamoDB::Table (CDK TableV2 becomes Table, awscc_dynamodb_global_table becomes aws_dynamodb_table) and aws_dynamodb_table_replica resources are removed. Carry the keys, indexes, stream, TTL and encryption settings over, and set the billing mode explicitly.", "consequence": "The new resource type replaces the table, so an existing table's data must be migrated. CDK Table defaults to provisioned capacity, TableV2 to on-demand.", "doc": "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-dynamodb-table.html"}
+    },
+    {
+      "id": "dynamodb-table-replica",
+      "page": "dynamodb",
+      "text": "Global Tables and Cross-Region Restore",
+      "types": ["aws_dynamodb_table"],
+      "when": [{"path": "replica"}],
+      "remediation": {"change": "Remove the replica blocks from the table.", "consequence": "Writes are no longer replicated to other Regions.", "doc": "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-dynamodb-table.html"}
+    },
+    {
+      "id": "secretsmanager-multi-region",
+      "page": "secretsmanager",
+      "text": "Multi-Region secrets are not available",
+      "types": ["AWS::SecretsManager::Secret", "aws_secretsmanager_secret"],
+      "when": [{"path": "ReplicaRegions"}, {"path": "replica"}],
+      "remediation": {"change": "Remove ReplicaRegions (Terraform: the replica blocks) from the secret.", "consequence": "No copies of the secret exist in other Regions.", "doc": "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-secretsmanager-secret.html"}
+    },
+    {
+      "id": "vpc-inter-region-peering",
+      "page": "vpc",
+      "text": "Inter-Region VPC Peering is not available",
+      "types": ["AWS::EC2::VPCPeeringConnection", "aws_vpc_peering_connection"],
+      "when": [{"path": "PeerRegion"}, {"path": "peer_region"}]
+    },
+    {
+      "id": "msk-serverless",
+      "page": "msk",
+      "text": "MSK Serverless is not available",
+      "types": ["AWS::MSK::ServerlessCluster", "aws_msk_serverless_cluster", "awscc_msk_serverless_cluster"]
+    },
+    {
+      "id": "msk-connect",
+      "page": "msk",
+      "text": "MSK Connect is not available",
+      "types": ["AWS::KafkaConnect::Connector", "aws_mskconnect_connector", "awscc_kafkaconnect_connector"]
+    },
+    {
+      "id": "opensearch-serverless",
+      "page": "opensearch-service",
+      "text": "Amazon OpenSearch Serverless is not available",
+      "types": ["AWS::OpenSearchServerless::Collection", "aws_opensearchserverless_collection", "awscc_opensearchserverless_collection"]
+    },
+    {
+      "id": "documentdb-elastic-clusters",
+      "page": "documentdb",
+      "text": "Amazon DocumentDB elastic clusters are not available",
+      "types": ["AWS::DocDBElastic::Cluster", "aws_docdbelastic_cluster", "awscc_docdbelastic_cluster"]
+    },
+    {
+      "id": "cloudtrail-lake",
+      "page": "cloudtrail",
+      "text": "AWS CloudTrail Lake is not available",
+      "types": ["AWS::CloudTrail::EventDataStore", "aws_cloudtrail_event_data_store", "awscc_cloudtrail_event_data_store"]
+    },
+    {
+      "id": "cognito-custom-domain",
+      "page": "cognito",
+      "text": "Custom domains for user pools are not available",
+      "types": ["AWS::Cognito::UserPoolDomain", "aws_cognito_user_pool_domain"],
+      "when": [{"path": "CustomDomainConfig"}, {"path": "certificate_arn"}]
+    },
+    {
+      "id": "autoscaling-predictive",
+      "page": "autoscaling",
+      "text": "Predictive scaling policies are not available",
+      "types": ["AWS::AutoScaling::ScalingPolicy", "aws_autoscaling_policy"],
+      "when": [{"path": "PolicyType", "equals": "PredictiveScaling"}, {"path": "policy_type", "equals": "PredictiveScaling"}]
+    },
+    {
+      "id": "elb-trust-store",
+      "page": "elasticloadbalancing",
+      "text": "ALB Trust Store, ALB mTLS are not available",
+      "types": ["AWS::ElasticLoadBalancingV2::TrustStore", "aws_lb_trust_store", "awscc_elasticloadbalancingv2_trust_store"]
+    },
+    {
+      "id": "efs-one-zone",
+      "page": "efs",
+      "text": "EFS One Zone file systems",
+      "types": ["AWS::EFS::FileSystem", "aws_efs_file_system"],
+      "when": [{"path": "AvailabilityZoneName"}, {"path": "availability_zone_name"}]
+    },
+    {
+      "id": "mq-activemq",
+      "page": "amazon-mq",
+      "text": "Amazon MQ for ActiveMQ is not available",
+      "types": ["AWS::AmazonMQ::Broker", "aws_mq_broker"],
+      "when": [{"path": "EngineType", "equals": "ACTIVEMQ"}, {"path": "engine_type", "equals": "ActiveMQ"}]
+    },
+    {
+      "id": "appautoscaling-predictive",
+      "page": "application-auto-scaling",
+      "text": "Predictive scaling is not available",
+      "types": ["AWS::ApplicationAutoScaling::ScalingPolicy", "aws_appautoscaling_policy"],
+      "when": [{"path": "PredictiveScalingPolicyConfiguration"}, {"path": "PolicyType", "equals": "PredictiveScaling"}, {"path": "policy_type", "equals": "PredictiveScaling"}]
+    },
+    {
+      "id": "appautoscaling-unsupported-target",
+      "page": "application-auto-scaling",
+      "text": "Only the following resources are supported",
+      "types": ["AWS::ApplicationAutoScaling::ScalableTarget", "aws_appautoscaling_target"],
+      "when": [{"path": "ServiceNamespace", "equals": "appstream"}, {"path": "service_namespace", "equals": "appstream"}, {"path": "ServiceNamespace", "equals": "cassandra"}, {"path": "service_namespace", "equals": "cassandra"}, {"path": "ServiceNamespace", "equals": "comprehend"}, {"path": "service_namespace", "equals": "comprehend"}, {"path": "ServiceNamespace", "equals": "kafka"}, {"path": "service_namespace", "equals": "kafka"}, {"path": "ServiceNamespace", "equals": "neptune"}, {"path": "service_namespace", "equals": "neptune"}, {"path": "ServiceNamespace", "equals": "sagemaker"}, {"path": "service_namespace", "equals": "sagemaker"}, {"path": "ServiceNamespace", "equals": "workspaces"}, {"path": "service_namespace", "equals": "workspaces"}]
+    },
+    {
+      "id": "athena-capacity-reservation",
+      "page": "athena",
+      "text": "Capacity reservations is not available",
+      "types": ["AWS::Athena::CapacityReservation", "aws_athena_capacity_reservation"]
+    },
+    {
+      "id": "backup-audit-manager",
+      "page": "aws-backup",
+      "text": "Backup Audit Manager is not available",
+      "types": ["AWS::Backup::Framework", "AWS::Backup::ReportPlan", "aws_backup_framework", "aws_backup_report_plan"]
+    },
+    {
+      "id": "backup-air-gapped-vault",
+      "page": "aws-backup",
+      "text": "Logically air-gapped vault is not available",
+      "types": ["AWS::Backup::LogicallyAirGappedBackupVault", "aws_backup_logically_air_gapped_vault"]
+    },
+    {
+      "id": "backup-restore-testing",
+      "page": "aws-backup",
+      "text": "Restore testing is not available",
+      "types": ["AWS::Backup::RestoreTestingPlan", "AWS::Backup::RestoreTestingSelection", "aws_backup_restore_testing_plan", "aws_backup_restore_testing_selection"]
+    },
+    {
+      "id": "logs-data-protection",
+      "page": "cloudwatch-logs",
+      "text": "Data protection with masking is not available",
+      "types": ["AWS::Logs::LogGroup", "AWS::Logs::AccountPolicy", "aws_cloudwatch_log_account_policy"],
+      "when": [{"path": "DataProtectionPolicy"}, {"path": "PolicyType", "equals": "DATA_PROTECTION_POLICY"}, {"path": "policy_type", "equals": "DATA_PROTECTION_POLICY"}]
+    },
+    {
+      "id": "logs-data-protection-policy",
+      "page": "cloudwatch-logs",
+      "text": "Data protection with masking is not available",
+      "types": ["aws_cloudwatch_log_data_protection_policy"]
+    },
+    {
+      "id": "logs-field-indexing",
+      "page": "cloudwatch-logs",
+      "text": "Field indexing is not available",
+      "types": ["AWS::Logs::LogGroup", "AWS::Logs::AccountPolicy", "aws_cloudwatch_log_account_policy"],
+      "when": [{"path": "FieldIndexPolicies"}, {"path": "PolicyType", "equals": "FIELD_INDEX_POLICY"}, {"path": "policy_type", "equals": "FIELD_INDEX_POLICY"}]
+    },
+    {
+      "id": "logs-index-policy",
+      "page": "cloudwatch-logs",
+      "text": "Field indexing is not available",
+      "types": ["aws_cloudwatch_log_index_policy"]
+    },
+    {
+      "id": "logs-transformation",
+      "page": "cloudwatch-logs",
+      "text": "Log transformation is not available",
+      "types": ["AWS::Logs::Transformer", "AWS::Logs::AccountPolicy", "aws_cloudwatch_log_account_policy"],
+      "when": [{"path": "TransformerConfig"}, {"path": "PolicyType", "equals": "TRANSFORMER_POLICY"}, {"path": "policy_type", "equals": "TRANSFORMER_POLICY"}]
+    },
+    {
+      "id": "codepipeline-source-actions",
+      "page": "codepipeline",
+      "text": "The following source actions are not available",
+      "also": ["AWS CodeCommit", "AWS CodeConnections"],
+      "types": ["AWS::CodePipeline::Pipeline", "aws_codepipeline"],
+      "when": [{"path": "Stages.Actions.ActionTypeId.Provider", "equals": "CodeCommit"}, {"path": "stage.action.provider", "equals": "CodeCommit"}, {"path": "Stages.Actions.ActionTypeId.Provider", "equals": "CodeStarSourceConnection"}, {"path": "stage.action.provider", "equals": "CodeStarSourceConnection"}]
+    },
+    {
+      "id": "codepipeline-build-actions",
+      "page": "codepipeline",
+      "text": "The following build and test actions are not available",
+      "also": ["ECRBuildAndPublish", "AWS Device Farm"],
+      "types": ["AWS::CodePipeline::Pipeline", "aws_codepipeline"],
+      "when": [{"path": "Stages.Actions.ActionTypeId.Provider", "equals": "ECRBuildAndPublish"}, {"path": "stage.action.provider", "equals": "ECRBuildAndPublish"}, {"path": "Stages.Actions.ActionTypeId.Provider", "equals": "DeviceFarm"}, {"path": "stage.action.provider", "equals": "DeviceFarm"}]
+    },
+    {
+      "id": "codepipeline-commands",
+      "page": "codepipeline",
+      "text": "The Commands action and the Commands rule are not available",
+      "types": ["AWS::CodePipeline::Pipeline", "aws_codepipeline"],
+      "when": [{"path": "Stages.Actions.ActionTypeId.Provider", "equals": "Commands"}, {"path": "stage.action.provider", "equals": "Commands"}]
+    },
+    {
+      "id": "codepipeline-deploy-actions",
+      "page": "codepipeline",
+      "text": "The following deploy actions are not available",
+      "also": ["Alexa Skills Kit", "Amazon EC2", "Amazon EKS", "AWS AppConfig", "AWS CloudFormation StackInstances", "AWS CloudFormation StackSets", "AWS Elastic Beanstalk", "AWS OpsWorks", "AWS Service Catalog"],
+      "types": ["AWS::CodePipeline::Pipeline", "aws_codepipeline"],
+      "when": [{"path": "Stages.Actions.ActionTypeId.Provider", "equals": "AlexaSkillsKit"}, {"path": "stage.action.provider", "equals": "AlexaSkillsKit"}, {"path": "Stages.Actions.ActionTypeId.Provider", "equals": "EC2"}, {"path": "stage.action.provider", "equals": "EC2"}, {"path": "Stages.Actions.ActionTypeId.Provider", "equals": "EKS"}, {"path": "stage.action.provider", "equals": "EKS"}, {"path": "Stages.Actions.ActionTypeId.Provider", "equals": "AppConfig"}, {"path": "stage.action.provider", "equals": "AppConfig"}, {"path": "Stages.Actions.ActionTypeId.Provider", "equals": "CloudFormationStackInstances"}, {"path": "stage.action.provider", "equals": "CloudFormationStackInstances"}, {"path": "Stages.Actions.ActionTypeId.Provider", "equals": "CloudFormationStackSet"}, {"path": "stage.action.provider", "equals": "CloudFormationStackSet"}, {"path": "Stages.Actions.ActionTypeId.Provider", "equals": "ElasticBeanstalk"}, {"path": "stage.action.provider", "equals": "ElasticBeanstalk"}, {"path": "Stages.Actions.ActionTypeId.Provider", "equals": "OpsWorks"}, {"path": "stage.action.provider", "equals": "OpsWorks"}, {"path": "Stages.Actions.ActionTypeId.Provider", "equals": "ServiceCatalog"}, {"path": "stage.action.provider", "equals": "ServiceCatalog"}]
+    },
+    {
+      "id": "codepipeline-invoke-actions",
+      "page": "codepipeline",
+      "text": "The following invoke actions are not available",
+      "also": ["InspectorScan", "AWS Step Functions"],
+      "types": ["AWS::CodePipeline::Pipeline", "aws_codepipeline"],
+      "when": [{"path": "Stages.Actions.ActionTypeId.Provider", "equals": "InspectorScan"}, {"path": "stage.action.provider", "equals": "InspectorScan"}, {"path": "Stages.Actions.ActionTypeId.Provider", "equals": "StepFunctions"}, {"path": "stage.action.provider", "equals": "StepFunctions"}]
+    },
+    {
+      "id": "config-proactive-evaluation",
+      "page": "config",
+      "text": "AWS Config Rules support for Proactive Evaluation mode is not available",
+      "types": ["AWS::Config::ConfigRule", "aws_config_config_rule"],
+      "when": [{"path": "EvaluationModes.Mode", "equals": "PROACTIVE"}, {"path": "evaluation_mode.mode", "equals": "PROACTIVE"}]
+    },
+    {
+      "id": "config-privatelink",
+      "page": "config",
+      "text": "PrivateLink Support is not available",
+      "types": ["AWS::EC2::VPCEndpoint", "aws_vpc_endpoint"],
+      "when": [{"path": "ServiceName", "contains": ".config"}, {"path": "service_name", "contains": ".config"}]
+    },
+    {
+      "id": "dms-serverless",
+      "page": "dms",
+      "text": "AWS DMS Serverless is not available",
+      "types": ["AWS::DMS::ReplicationConfig", "aws_dms_replication_config"]
+    },
+    {
+      "id": "documentdb-global-clusters",
+      "page": "documentdb",
+      "text": "Amazon DocumentDB global clusters are not available",
+      "types": ["AWS::DocDB::GlobalCluster", "aws_docdb_global_cluster"]
+    },
+    {
+      "id": "documentdb-serverless",
+      "page": "documentdb",
+      "text": "Amazon DocumentDB serverless is not available",
+      "types": ["AWS::DocDB::DBCluster", "AWS::DocDB::DBInstance", "aws_docdb_cluster", "aws_docdb_cluster_instance"],
+      "when": [{"path": "ServerlessV2ScalingConfiguration"}, {"path": "serverless_v2_scaling_configuration"}, {"path": "DBInstanceClass", "equals": "db.serverless"}, {"path": "instance_class", "equals": "db.serverless"}]
+    },
+    {
+      "id": "documentdb-engine-versions",
+      "page": "documentdb",
+      "text": "Engine versions 3.6 and 8.0 are not available",
+      "types": ["AWS::DocDB::DBCluster", "aws_docdb_cluster"],
+      "when": [{"path": "EngineVersion", "prefix": "3.6"}, {"path": "engine_version", "prefix": "3.6"}, {"path": "EngineVersion", "prefix": "8.0"}, {"path": "engine_version", "prefix": "8.0"}]
+    },
+    {
+      "id": "documentdb-instance-classes",
+      "page": "documentdb",
+      "text": "instance classes are not available",
+      "also": ["db.r4", "db.r5", "db.r8g", "db.r6gd", "db.t3"],
+      "types": ["AWS::DocDB::DBInstance", "aws_docdb_cluster_instance"],
+      "when": [{"path": "DBInstanceClass", "prefix": "db.r4."}, {"path": "instance_class", "prefix": "db.r4."}, {"path": "DBInstanceClass", "prefix": "db.r5."}, {"path": "instance_class", "prefix": "db.r5."}, {"path": "DBInstanceClass", "prefix": "db.r8g."}, {"path": "instance_class", "prefix": "db.r8g."}, {"path": "DBInstanceClass", "prefix": "db.r6gd."}, {"path": "instance_class", "prefix": "db.r6gd."}, {"path": "DBInstanceClass", "prefix": "db.t3."}, {"path": "instance_class", "prefix": "db.t3."}]
+    },
+    {
+      "id": "ec2-nitro-enclaves",
+      "page": "ec2",
+      "text": "Nitro enclaves are not available",
+      "types": ["AWS::EC2::Instance", "AWS::EC2::LaunchTemplate", "aws_instance", "aws_launch_template"],
+      "when": [{"path": "EnclaveOptions.Enabled"}, {"path": "LaunchTemplateData.EnclaveOptions.Enabled"}, {"path": "enclave_options.enabled"}]
+    },
+    {
+      "id": "ec2-sev-snp",
+      "page": "ec2",
+      "text": "(SEV-SNP) is not available",
+      "types": ["AWS::EC2::LaunchTemplate", "aws_instance", "aws_launch_template"],
+      "when": [{"path": "LaunchTemplateData.CpuOptions.AmdSevSnp", "equals": "enabled"}, {"path": "cpu_options.amd_sev_snp", "equals": "enabled"}]
+    },
+    {
+      "id": "ec2-nitro-tpm",
+      "page": "ec2",
+      "text": "Nitro Trusted Platform Module (NitroTPM) is not available",
+      "types": ["aws_ami"],
+      "when": [{"path": "tpm_support", "equals": "v2.0"}]
+    },
+    {
+      "id": "ec2-instance-connect",
+      "page": "ec2",
+      "text": "EC2 Instance Connect is not available",
+      "types": ["AWS::EC2::InstanceConnectEndpoint", "aws_ec2_instance_connect_endpoint"]
+    },
+    {
+      "id": "ec2-serial-console",
+      "page": "ec2",
+      "text": "EC2 Serial Console is not available",
+      "types": ["aws_ec2_serial_console_access"],
+      "when": [{"path": "enabled"}]
+    },
+    {
+      "id": "ec2-imds-ipv6",
+      "page": "ec2",
+      "text": "The IPv6 endpoint for the instance metadata service (IMDS) is not available",
+      "types": ["AWS::EC2::Instance", "AWS::EC2::LaunchTemplate", "aws_instance", "aws_launch_template"],
+      "when": [{"path": "MetadataOptions.HttpProtocolIpv6", "equals": "enabled"}, {"path": "LaunchTemplateData.MetadataOptions.HttpProtocolIpv6", "equals": "enabled"}, {"path": "metadata_options.http_protocol_ipv6", "equals": "enabled"}]
+    },
+    {
+      "id": "autoscaling-capacity-reservation",
+      "page": "autoscaling",
+      "text": "Capacity Reservation preference is not available",
+      "types": ["AWS::AutoScaling::AutoScalingGroup", "aws_autoscaling_group"],
+      "when": [{"path": "CapacityReservationSpecification"}, {"path": "capacity_reservation_specification"}]
+    },
+    {
+      "id": "ecr-enhanced-scanning",
+      "page": "ecr",
+      "text": "Amazon ECR Enhanced scanning is not available",
+      "types": ["AWS::ECR::RegistryScanningConfiguration", "aws_ecr_registry_scanning_configuration"],
+      "when": [{"path": "ScanType", "equals": "ENHANCED"}, {"path": "scan_type", "equals": "ENHANCED"}]
+    },
+    {
+      "id": "ecs-deployment-strategy",
+      "page": "ecs",
+      "text": "Only Rolling or External Deployments are supported for ECS services",
+      "types": ["AWS::ECS::Service", "aws_ecs_service"],
+      "when": [{"path": "DeploymentController.Type", "equals": "CODE_DEPLOY"}, {"path": "deployment_controller.type", "equals": "CODE_DEPLOY"}, {"path": "DeploymentConfiguration.Strategy", "equals": "BLUE_GREEN"}, {"path": "deployment_configuration.strategy", "equals": "BLUE_GREEN"}, {"path": "DeploymentConfiguration.Strategy", "equals": "LINEAR"}, {"path": "deployment_configuration.strategy", "equals": "LINEAR"}, {"path": "DeploymentConfiguration.Strategy", "equals": "CANARY"}, {"path": "deployment_configuration.strategy", "equals": "CANARY"}]
+    },
+    {
+      "id": "ecs-windows-fargate",
+      "page": "ecs",
+      "text": "Windows containers are not available on Fargate",
+      "types": ["AWS::ECS::TaskDefinition", "aws_ecs_task_definition"],
+      "when": [{"all": [{"path": "RuntimePlatform.OperatingSystemFamily", "prefix": "WINDOWS"}, {"path": "RequiresCompatibilities", "equals": "FARGATE"}]}, {"all": [{"path": "runtime_platform.operating_system_family", "prefix": "WINDOWS"}, {"path": "requires_compatibilities", "equals": "FARGATE"}]}]
+    },
+    {
+      "id": "elb-mtls",
+      "page": "elasticloadbalancing",
+      "text": "ALB Trust Store, ALB mTLS are not available",
+      "types": ["AWS::ElasticLoadBalancingV2::Listener", "aws_lb_listener", "aws_alb_listener"],
+      "when": [{"path": "MutualAuthentication.Mode", "equals": "verify"}, {"path": "mutual_authentication.mode", "equals": "verify"}, {"path": "MutualAuthentication.Mode", "equals": "passthrough"}, {"path": "mutual_authentication.mode", "equals": "passthrough"}]
+    },
+    {
+      "id": "elasticache-global-datastore",
+      "page": "elasticache",
+      "text": "The following ElastiCache features are not available",
+      "also": ["Global Datastore"],
+      "types": ["AWS::ElastiCache::GlobalReplicationGroup", "aws_elasticache_global_replication_group"]
+    },
+    {
+      "id": "elasticache-data-tiering",
+      "page": "elasticache",
+      "text": "The following ElastiCache features are not available",
+      "also": ["Data tiering"],
+      "types": ["AWS::ElastiCache::ReplicationGroup", "aws_elasticache_replication_group"],
+      "when": [{"path": "DataTieringEnabled"}, {"path": "data_tiering_enabled"}]
+    },
+    {
+      "id": "emr-managed-scaling",
+      "page": "emr",
+      "text": "Managed scaling is not available",
+      "types": ["AWS::EMR::Cluster"],
+      "when": [{"path": "ManagedScalingPolicy"}]
+    },
+    {
+      "id": "emr-managed-scaling-policy",
+      "page": "emr",
+      "text": "Managed scaling is not available",
+      "types": ["aws_emr_managed_scaling_policy"]
+    },
+    {
+      "id": "events-private-api-destinations",
+      "page": "eventbridge",
+      "text": "The Private APIs feature for Amazon EventBridge API Destinations is not available",
+      "types": ["AWS::Events::Connection", "aws_cloudwatch_event_connection"],
+      "when": [{"path": "InvocationConnectivityParameters"}, {"path": "invocation_connectivity_parameters"}]
+    },
+    {
+      "id": "events-schema-discovery",
+      "page": "eventbridge",
+      "text": "The Schema Discovery feature for Amazon EventBridge Schemas is not available",
+      "types": ["AWS::EventSchemas::Discoverer", "aws_schemas_discoverer"]
+    },
+    {
+      "id": "firehose-msk-source",
+      "page": "firehose",
+      "text": "Amazon MSK is not available as a source",
+      "types": ["AWS::KinesisFirehose::DeliveryStream", "aws_kinesis_firehose_delivery_stream"],
+      "when": [{"path": "MSKSourceConfiguration"}, {"path": "msk_source_configuration"}]
+    },
+    {
+      "id": "firehose-opensearch-serverless",
+      "page": "firehose",
+      "text": "Amazon OpenSearch Serverless is not available as a destination",
+      "types": ["AWS::KinesisFirehose::DeliveryStream", "aws_kinesis_firehose_delivery_stream"],
+      "when": [{"path": "AmazonOpenSearchServerlessDestinationConfiguration"}, {"path": "destination", "equals": "opensearchserverless"}]
+    },
+    {
+      "id": "firehose-snowflake",
+      "page": "firehose",
+      "text": "Snowflake is not available as a destination",
+      "types": ["AWS::KinesisFirehose::DeliveryStream", "aws_kinesis_firehose_delivery_stream"],
+      "when": [{"path": "SnowflakeDestinationConfiguration"}, {"path": "destination", "equals": "snowflake"}]
+    },
+    {
+      "id": "iam-signin-privatelink",
+      "page": "iam",
+      "text": "PrivateLink for AWS Sign-In is not available",
+      "types": ["AWS::EC2::VPCEndpoint", "aws_vpc_endpoint"],
+      "when": [{"path": "ServiceName", "contains": ".signin"}, {"path": "service_name", "contains": ".signin"}]
+    },
+    {
+      "id": "kms-cloudhsm-key-store",
+      "page": "kms",
+      "text": "The AWS CloudHSM key stores feature is not available",
+      "types": ["aws_kms_custom_key_store"],
+      "when": [{"path": "cloud_hsm_cluster_id"}]
+    },
+    {
+      "id": "kms-ml-kem",
+      "page": "kms",
+      "text": "The ML-KEM post-quantum key encapsulation mechanism is not available",
+      "types": ["AWS::KMS::Key", "aws_kms_key"],
+      "when": [{"path": "KeySpec", "prefix": "ML_KEM"}, {"path": "customer_master_key_spec", "prefix": "ML_KEM"}]
+    },
+    {
+      "id": "lakeformation-privatelink",
+      "page": "lake-formation",
+      "text": "Support for AWS PrivateLink is not available",
+      "types": ["AWS::EC2::VPCEndpoint", "aws_vpc_endpoint"],
+      "when": [{"path": "ServiceName", "contains": ".lakeformation"}, {"path": "service_name", "contains": ".lakeformation"}]
+    },
+    {
+      "id": "lambda-privatelink",
+      "page": "lambda",
+      "text": "Lambda support for AWS PrivateLink is not available",
+      "types": ["AWS::EC2::VPCEndpoint", "aws_vpc_endpoint"],
+      "when": [{"path": "ServiceName", "contains": ".lambda"}, {"path": "service_name", "contains": ".lambda"}]
+    },
+    {
+      "id": "lambda-xray",
+      "page": "lambda",
+      "text": "X-Ray Integration is not available",
+      "types": ["AWS::Lambda::Function", "aws_lambda_function"],
+      "when": [{"path": "TracingConfig.Mode", "equals": "Active"}, {"path": "tracing_config.mode", "equals": "Active"}]
+    },
+    {
+      "id": "lambda-kafka-event-source",
+      "page": "lambda",
+      "text": "The following event sources are not available",
+      "also": ["Apache Kafka"],
+      "types": ["AWS::Lambda::EventSourceMapping", "aws_lambda_event_source_mapping"],
+      "when": [{"path": "Topics"}, {"path": "SelfManagedEventSource"}, {"path": "topics"}, {"path": "self_managed_event_source"}]
+    },
+    {
+      "id": "lambda-mq-event-source",
+      "page": "lambda",
+      "text": "The following event sources are not available",
+      "also": ["Amazon MQ for ActiveMQ and Rabbit MQ"],
+      "types": ["AWS::Lambda::EventSourceMapping", "aws_lambda_event_source_mapping"],
+      "when": [{"path": "Queues"}, {"path": "queues"}]
+    },
+    {
+      "id": "lambda-documentdb-event-source",
+      "page": "lambda",
+      "text": "The following event sources are not available",
+      "also": ["Amazon DocumentDB"],
+      "types": ["AWS::Lambda::EventSourceMapping", "aws_lambda_event_source_mapping"],
+      "when": [{"path": "DocumentDBEventSourceConfig"}, {"path": "document_db_event_source_config"}]
+    },
+    {
+      "id": "lambda-snapstart-runtime",
+      "page": "lambda",
+      "text": "Python and .NET runtimes are not available when using Lambda SnapStart",
+      "types": ["AWS::Lambda::Function", "aws_lambda_function"],
+      "when": [{"all": [{"path": "SnapStart.ApplyOn", "equals": "PublishedVersions"}, {"path": "Runtime", "prefix": "python"}]}, {"all": [{"path": "SnapStart.ApplyOn", "equals": "PublishedVersions"}, {"path": "Runtime", "prefix": "dotnet"}]}, {"all": [{"path": "snap_start.apply_on", "equals": "PublishedVersions"}, {"path": "runtime", "prefix": "python"}]}, {"all": [{"path": "snap_start.apply_on", "equals": "PublishedVersions"}, {"path": "runtime", "prefix": "dotnet"}]}]
+    },
+    {
+      "id": "msk-express-brokers",
+      "page": "msk",
+      "text": "MSK Provisioned Express Brokers is not available",
+      "types": ["AWS::MSK::Cluster", "aws_msk_cluster"],
+      "when": [{"path": "BrokerNodeGroupInfo.InstanceType", "prefix": "express."}, {"path": "broker_node_group_info.instance_type", "prefix": "express."}]
+    },
+    {
+      "id": "msk-replicator",
+      "page": "msk",
+      "text": "MSK Replicator is not available",
+      "types": ["AWS::MSK::Replicator", "aws_msk_replicator"]
+    },
+    {
+      "id": "neptune-global-databases",
+      "page": "neptune",
+      "text": "Global databases are not available",
+      "types": ["aws_neptune_global_cluster"]
+    },
+    {
+      "id": "opensearch-cognito-auth",
+      "page": "opensearch-service",
+      "text": "Kibana Authentication with Amazon Cognito is not available",
+      "types": ["AWS::OpenSearchService::Domain", "AWS::Elasticsearch::Domain", "aws_opensearch_domain", "aws_elasticsearch_domain"],
+      "when": [{"path": "CognitoOptions.Enabled"}, {"path": "cognito_options.enabled"}]
+    },
+    {
+      "id": "opensearch-coordinator-nodes",
+      "page": "opensearch-service",
+      "text": "Dedicated Coordinator nodes are not available",
+      "types": ["AWS::OpenSearchService::Domain", "aws_opensearch_domain"],
+      "when": [{"path": "ClusterConfig.NodeOptions.NodeType", "equals": "coordinator"}, {"path": "cluster_config.node_options.node_type", "equals": "coordinator"}]
+    },
+    {
+      "id": "opensearch-ingestion",
+      "page": "opensearch-service",
+      "text": "OpenSearch Ingestion is not available",
+      "types": ["AWS::OSIS::Pipeline", "aws_osis_pipeline"]
+    },
+    {
+      "id": "organizations-policy-types",
+      "page": "organizations",
+      "text": "Tag policies, AI services opt-out policies, and chat applications policies are not available",
+      "types": ["AWS::Organizations::Policy", "aws_organizations_policy"],
+      "when": [{"path": "Type", "equals": "TAG_POLICY"}, {"path": "type", "equals": "TAG_POLICY"}, {"path": "Type", "equals": "AISERVICES_OPT_OUT_POLICY"}, {"path": "type", "equals": "AISERVICES_OPT_OUT_POLICY"}, {"path": "Type", "equals": "CHATBOT_POLICY"}, {"path": "type", "equals": "CHATBOT_POLICY"}]
+    },
+    {
+      "id": "rds-cross-region-backup",
+      "page": "rds",
+      "text": "RDS Snapshot cross-Region auto backup is not available",
+      "types": ["AWS::RDS::DBInstance"],
+      "when": [{"path": "AutomaticBackupReplicationRegion"}],
+      "remediation": {"change": "Remove AutomaticBackupReplicationRegion from the DB instance.", "consequence": "Automated backups stay in the deployment Region.", "doc": "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-rds-dbinstance.html"}
+    },
+    {
+      "id": "rds-cross-region-backup-replication",
+      "page": "rds",
+      "text": "RDS Snapshot cross-Region auto backup is not available",
+      "types": ["aws_db_instance_automated_backups_replication"],
+      "remediation": {"change": "Remove the aws_db_instance_automated_backups_replication resource.", "consequence": "Automated backups stay in the deployment Region.", "doc": "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-rds-dbinstance.html"}
+    },
+    {
+      "id": "rds-cross-region-replica",
+      "page": "rds",
+      "text": "RDS Cross Region Read Replicas are not available",
+      "types": ["AWS::RDS::DBInstance", "aws_db_instance"],
+      "when": [{"path": "SourceRegion"}, {"path": "SourceDBInstanceIdentifier", "prefix": "arn:"}, {"path": "replicate_source_db", "prefix": "arn:"}]
+    },
+    {
+      "id": "rds-dedicated-log-volume",
+      "page": "rds",
+      "text": "Dedicated Log Volume is not available",
+      "types": ["AWS::RDS::DBInstance", "aws_db_instance"],
+      "when": [{"path": "DedicatedLogVolume"}, {"path": "dedicated_log_volume"}]
+    },
+    {
+      "id": "rds-dual-stack",
+      "page": "rds",
+      "text": "Dual-stack mode (IPv4 and IPv6) is not available",
+      "types": ["AWS::RDS::DBInstance", "AWS::RDS::DBCluster", "aws_db_instance", "aws_rds_cluster"],
+      "when": [{"path": "NetworkType", "equals": "DUAL"}, {"path": "network_type", "equals": "DUAL"}]
+    },
+    {
+      "id": "rds-custom-sqlserver",
+      "page": "rds",
+      "text": "Amazon RDS Custom for SQL Server is not available",
+      "types": ["AWS::RDS::DBInstance", "aws_db_instance"],
+      "when": [{"path": "Engine", "prefix": "custom-sqlserver"}, {"path": "engine", "prefix": "custom-sqlserver"}]
+    },
+    {
+      "id": "rds-custom-oracle",
+      "page": "rds",
+      "text": "Amazon RDS Custom for Oracle is not available",
+      "types": ["AWS::RDS::DBInstance", "aws_db_instance"],
+      "when": [{"path": "Engine", "prefix": "custom-oracle"}, {"path": "engine", "prefix": "custom-oracle"}]
+    },
+    {
+      "id": "rds-db2",
+      "page": "rds",
+      "text": "Amazon Relational Database Service for Db2 is not available",
+      "types": ["AWS::RDS::DBInstance", "aws_db_instance"],
+      "when": [{"path": "Engine", "prefix": "db2"}, {"path": "engine", "prefix": "db2"}]
+    },
+    {
+      "id": "rds-activity-stream",
+      "page": "rds",
+      "text": "Database Activity Stream is not available",
+      "types": ["aws_rds_cluster_activity_stream"]
+    },
+    {
+      "id": "rds-zero-etl",
+      "page": "rds",
+      "text": "Zero-ETL is not available",
+      "types": ["AWS::RDS::Integration", "aws_rds_integration"]
+    },
+    {
+      "id": "rds-postgres-extended-support",
+      "page": "rds",
+      "text": "Amazon RDS for PostgreSQL - RDS Extended Support is not available",
+      "types": ["AWS::RDS::DBInstance", "aws_db_instance"],
+      "when": [{"all": [{"path": "EngineLifecycleSupport", "equals": "open-source-rds-extended-support"}, {"path": "Engine", "equals": "postgres"}]}, {"all": [{"path": "engine_lifecycle_support", "equals": "open-source-rds-extended-support"}, {"path": "engine", "equals": "postgres"}]}]
+    },
+    {
+      "id": "aurora-global-databases",
+      "page": "rds",
+      "text": "Global Databases (eusc-de-east-1 is in a single region partition)",
+      "types": ["AWS::RDS::GlobalCluster", "aws_rds_global_cluster"]
+    },
+    {
+      "id": "aurora-io-optimized",
+      "page": "rds",
+      "text": "I/O-Optimized cluster storage configuration",
+      "types": ["AWS::RDS::DBCluster", "aws_rds_cluster"],
+      "when": [{"path": "StorageType", "equals": "aurora-iopt1"}, {"path": "storage_type", "equals": "aurora-iopt1"}]
+    },
+    {
+      "id": "aurora-secrets-manager",
+      "page": "rds",
+      "text": "AWS Secrets Manager Integration",
+      "types": ["AWS::RDS::DBCluster", "aws_rds_cluster"],
+      "when": [{"all": [{"path": "ManageMasterUserPassword"}, {"path": "Engine", "prefix": "aurora"}]}, {"all": [{"path": "manage_master_user_password"}, {"path": "engine", "prefix": "aurora"}]}]
+    },
+    {
+      "id": "aurora-kerberos",
+      "page": "rds",
+      "text": "Kerberos/Active Directory integration",
+      "types": ["AWS::RDS::DBCluster", "aws_rds_cluster"],
+      "when": [{"all": [{"path": "Domain"}, {"path": "Engine", "prefix": "aurora"}]}, {"all": [{"path": "domain"}, {"path": "engine", "prefix": "aurora"}]}]
+    },
+    {
+      "id": "aurora-postgresql-extended-support",
+      "page": "rds",
+      "text": "Aurora PostgreSQL - RDS Extended Support",
+      "types": ["AWS::RDS::DBCluster", "aws_rds_cluster"],
+      "when": [{"all": [{"path": "EngineLifecycleSupport", "equals": "open-source-rds-extended-support"}, {"path": "Engine", "equals": "aurora-postgresql"}]}, {"all": [{"path": "engine_lifecycle_support", "equals": "open-source-rds-extended-support"}, {"path": "engine", "equals": "aurora-postgresql"}]}]
+    },
+    {
+      "id": "aurora-mysql-extended-support",
+      "page": "rds",
+      "text": "Aurora MySQL - RDS Extended Support",
+      "types": ["AWS::RDS::DBCluster", "aws_rds_cluster"],
+      "when": [{"all": [{"path": "EngineLifecycleSupport", "equals": "open-source-rds-extended-support"}, {"path": "Engine", "equals": "aurora-mysql"}]}, {"all": [{"path": "engine_lifecycle_support", "equals": "open-source-rds-extended-support"}, {"path": "engine", "equals": "aurora-mysql"}]}]
+    },
+    {
+      "id": "route53-traffic-flow",
+      "page": "route53",
+      "text": "Traffic flow is not available",
+      "types": ["aws_route53_traffic_policy", "aws_route53_traffic_policy_instance"]
+    },
+    {
+      "id": "route53-domain-registration",
+      "page": "route53",
+      "text": "Registering domain names is not available",
+      "types": ["aws_route53domains_registered_domain", "aws_route53domains_domain"]
+    },
+    {
+      "id": "s3-metadata",
+      "page": "s3",
+      "text": "S3 Metadata is not available",
+      "types": ["AWS::S3::Bucket"],
+      "when": [{"path": "MetadataTableConfiguration"}, {"path": "MetadataConfiguration"}]
+    },
+    {
+      "id": "s3-metadata-configuration",
+      "page": "s3",
+      "text": "S3 Metadata is not available",
+      "types": ["aws_s3_bucket_metadata_configuration"]
+    },
+    {
+      "id": "servicequotas-privatelink",
+      "page": "servicequotas",
+      "text": "PrivateLink Support is not available",
+      "types": ["AWS::EC2::VPCEndpoint", "aws_vpc_endpoint"],
+      "when": [{"path": "ServiceName", "contains": ".servicequotas"}, {"path": "service_name", "contains": ".servicequotas"}]
+    },
+    {
+      "id": "sns-mobile-push",
+      "page": "sns",
+      "text": "Mobile push notifications are not available for Amazon SNS",
+      "types": ["aws_sns_platform_application"]
+    },
+    {
+      "id": "sfn-bedrock",
+      "page": "step-functions",
+      "text": "Integration with the following AWS services or service features is not available",
+      "also": ["Amazon Bedrock"],
+      "types": ["AWS::StepFunctions::StateMachine", "aws_sfn_state_machine"],
+      "when": [{"path": "DefinitionString", "contains": "states:::bedrock:"}, {"path": "Definition", "contains": "states:::bedrock:"}, {"path": "definition", "contains": "states:::bedrock:"}]
+    },
+    {
+      "id": "sfn-emr-serverless",
+      "page": "step-functions",
+      "text": "Integration with the following AWS services or service features is not available",
+      "also": ["EMR Serverless"],
+      "types": ["AWS::StepFunctions::StateMachine", "aws_sfn_state_machine"],
+      "when": [{"path": "DefinitionString", "contains": "states:::emr-serverless:"}, {"path": "Definition", "contains": "states:::emr-serverless:"}, {"path": "definition", "contains": "states:::emr-serverless:"}]
+    },
+    {
+      "id": "sfn-emr-on-eks",
+      "page": "step-functions",
+      "text": "Integration with the following AWS services or service features is not available",
+      "also": ["EMR on EKS"],
+      "types": ["AWS::StepFunctions::StateMachine", "aws_sfn_state_machine"],
+      "when": [{"path": "DefinitionString", "contains": "states:::emr-containers:"}, {"path": "Definition", "contains": "states:::emr-containers:"}, {"path": "definition", "contains": "states:::emr-containers:"}]
+    },
+    {
+      "id": "sfn-mediaconvert",
+      "page": "step-functions",
+      "text": "Integration with the following AWS services or service features is not available",
+      "also": ["AWS Elemental MediaConvert"],
+      "types": ["AWS::StepFunctions::StateMachine", "aws_sfn_state_machine"],
+      "when": [{"path": "DefinitionString", "contains": "states:::mediaconvert:"}, {"path": "Definition", "contains": "states:::mediaconvert:"}, {"path": "definition", "contains": "states:::mediaconvert:"}]
+    },
+    {
+      "id": "ssm-session-manager",
+      "page": "systems-manager",
+      "text": "Session Manager is not available",
+      "types": ["AWS::SSM::Document", "aws_ssm_document"],
+      "when": [{"path": "DocumentType", "equals": "Session"}, {"path": "document_type", "equals": "Session"}]
+    },
+    {
+      "id": "transfer-vpc-endpoint-type",
+      "page": "transfer",
+      "text": "VPC_ENDPOINT endpoint type is not available",
+      "types": ["AWS::Transfer::Server", "aws_transfer_server"],
+      "when": [{"path": "EndpointType", "equals": "VPC_ENDPOINT"}, {"path": "endpoint_type", "equals": "VPC_ENDPOINT"}]
+    },
+    {
+      "id": "vpc-route-server",
+      "page": "vpc",
+      "text": "VPC Route Server is not available",
+      "types": ["AWS::EC2::RouteServer", "AWS::EC2::RouteServerEndpoint", "AWS::EC2::RouteServerPeer", "AWS::EC2::RouteServerAssociation", "AWS::EC2::RouteServerPropagation", "aws_vpc_route_server", "aws_vpc_route_server_endpoint", "aws_vpc_route_server_peer", "aws_vpc_route_server_vpc_association", "aws_vpc_route_server_propagation"]
+    },
+    {
+      "id": "vpc-reachability-analyzer",
+      "page": "vpc",
+      "text": "Reachability Analyzer is not available",
+      "types": ["AWS::EC2::NetworkInsightsPath", "AWS::EC2::NetworkInsightsAnalysis", "aws_ec2_network_insights_path", "aws_ec2_network_insights_analysis"]
+    },
+    {
+      "id": "vpc-network-access-analyzer",
+      "page": "vpc",
+      "text": "Network Access Analyzer is not available",
+      "types": ["AWS::EC2::NetworkInsightsAccessScope", "AWS::EC2::NetworkInsightsAccessScopeAnalysis"]
+    },
+    {
+      "id": "vpn-accelerated",
+      "page": "vpn",
+      "text": "Accelerated VPN is not available",
+      "types": ["AWS::EC2::VPNConnection", "aws_vpn_connection"],
+      "when": [{"path": "EnableAcceleration"}, {"path": "enable_acceleration"}]
+    },
+    {
+      "id": "vpn-certificate-based",
+      "page": "vpn",
+      "text": "Certificated-Based VPN is not available",
+      "types": ["AWS::EC2::CustomerGateway", "aws_customer_gateway"],
+      "when": [{"path": "CertificateArn"}, {"path": "certificate_arn"}]
+    },
+    {
+      "id": "vpn-psk-secrets-manager",
+      "page": "vpn",
+      "text": "S2S VPN integration with Secrets Manager for PSK is not available",
+      "types": ["AWS::EC2::VPNConnection", "aws_vpn_connection"],
+      "when": [{"path": "PreSharedKeyStorage", "equals": "SecretsManager"}, {"path": "preshared_key_storage", "equals": "SecretsManager"}]
+    },
+    {
+      "id": "waf-cloudfront-scope",
+      "page": "waf",
+      "text": "AWS WAF web ACL association with AWS App Runner, AWS AppSync, AWS Verified Access, Amazon CloudFront, and AWS Amplify is not available",
+      "types": ["AWS::WAFv2::WebACL", "aws_wafv2_web_acl"],
+      "when": [{"path": "Scope", "equals": "CLOUDFRONT"}, {"path": "scope", "equals": "CLOUDFRONT"}]
+    },
+    {
+      "id": "waf-association",
+      "page": "waf",
+      "text": "AWS WAF web ACL association with AWS App Runner, AWS AppSync, AWS Verified Access, Amazon CloudFront, and AWS Amplify is not available",
+      "types": ["AWS::WAFv2::WebACLAssociation", "aws_wafv2_web_acl_association"],
+      "when": [{"path": "ResourceArn", "contains": ":apprunner:"}, {"path": "resource_arn", "contains": ":apprunner:"}, {"path": "ResourceArn", "contains": ":appsync:"}, {"path": "resource_arn", "contains": ":appsync:"}, {"path": "ResourceArn", "contains": ":amplify:"}, {"path": "resource_arn", "contains": ":amplify:"}, {"path": "ResourceArn", "contains": "verified-access-instance"}, {"path": "resource_arn", "contains": "verified-access-instance"}]
+    },
+    {
+      "id": "xray-transaction-search",
+      "page": "xray",
+      "text": "Transaction Search is not available",
+      "types": ["AWS::XRay::TransactionSearchConfig"]
+    }
+  ]
+}

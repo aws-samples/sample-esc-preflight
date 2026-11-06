@@ -1,0 +1,47 @@
+{
+  "Resources": {
+    "Bucket": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "BucketName": "app-assets-111122223333-eu-central-1"
+      }
+    },
+    "Fn": {
+      "Type": "AWS::Lambda::Function",
+      "Properties": {
+        "Code": {
+          "S3Bucket": "cdk-hnb659fds-assets-111122223333-eu-central-1",
+          "S3Key": "a.zip"
+        },
+        "Environment": {
+          "Variables": {
+            "SECRET": "arn:aws:secretsmanager:us-east-1:444455556666:secret:db"
+          }
+        }
+      }
+    },
+    "AutoDelete": {
+      "Type": "Custom::S3AutoDeleteObjects",
+      "Properties": {
+        "ServiceToken": {
+          "Fn::GetAtt": [
+            "Provider",
+            "Arn"
+          ]
+        },
+        "BucketName": {
+          "Ref": "Bucket"
+        }
+      }
+    },
+    "Data": {
+      "Type": "AWS::CloudFormation::Stack",
+      "Properties": {
+        "TemplateURL": "https://example.com/nested.json"
+      },
+      "Metadata": {
+        "aws:asset:path": "AppStackData.nested.template.json"
+      }
+    }
+  }
+}

@@ -1,0 +1,4973 @@
+{
+ "botocore_version": "1.43.121",
+ "services": [
+  {
+   "api_version": "2015-12-08",
+   "endpoint_prefix": "acm",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListCertificates",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "ACM",
+   "signing_name": "acm",
+   "target_prefix": "CertificateManager"
+  },
+  {
+   "api_version": "2017-08-22",
+   "endpoint_prefix": "acm-pca",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListCertificateAuthorities",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "ACM PCA",
+   "signing_name": "acm-pca",
+   "target_prefix": "ACMPrivateCA"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "aiops",
+   "probe": {
+    "method": "GET",
+    "op": "ListInvestigationGroups",
+    "uri": "/investigationGroups"
+   },
+   "protocol": "rest-json",
+   "service_id": "AIOps",
+   "signing_name": "aiops"
+  },
+  {
+   "api_version": "2015-07-09",
+   "endpoint_prefix": "apigateway",
+   "probe": {
+    "method": "GET",
+    "op": "GetAccount",
+    "uri": "/account"
+   },
+   "protocol": "rest-json",
+   "service_id": "API Gateway",
+   "signing_name": "apigateway"
+  },
+  {
+   "api_version": "2022-07-26",
+   "endpoint_prefix": "arc-region-switch",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListPlanExecutionEvents",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "ARC Region switch",
+   "signing_name": "arc-region-switch",
+   "target_prefix": "ArcRegionSwitch"
+  },
+  {
+   "api_version": "2022-10-30",
+   "endpoint_prefix": "arc-zonal-shift",
+   "probe": {
+    "method": "GET",
+    "op": "ListZonalShifts",
+    "uri": "/zonalshifts"
+   },
+   "protocol": "rest-json",
+   "service_id": "ARC Zonal Shift",
+   "signing_name": "arc-zonal-shift"
+  },
+  {
+   "api_version": "2019-11-01",
+   "endpoint_prefix": "access-analyzer",
+   "probe": {
+    "method": "GET",
+    "op": "ListAnalyzers",
+    "uri": "/analyzer"
+   },
+   "protocol": "rest-json",
+   "service_id": "AccessAnalyzer",
+   "signing_name": "access-analyzer"
+  },
+  {
+   "api_version": "2021-02-01",
+   "endpoint_prefix": "account",
+   "protocol": "rest-json",
+   "service_id": "Account",
+   "signing_name": "account"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "account-access",
+   "protocol": "rest-json",
+   "service_id": "Account Access",
+   "signing_name": "account-access"
+  },
+  {
+   "api_version": "2025-12-01",
+   "endpoint_prefix": "agent-registry",
+   "protocol": "rest-json",
+   "service_id": "Agent Registry",
+   "signing_name": "agent-registry"
+  },
+  {
+   "api_version": "2025-12-01",
+   "endpoint_prefix": "agent-registry-control",
+   "protocol": "rest-json",
+   "service_id": "Agent Registry Control",
+   "signing_name": "agent-registry"
+  },
+  {
+   "api_version": "2017-07-25",
+   "endpoint_prefix": "amplify",
+   "probe": {
+    "method": "GET",
+    "op": "ListApps",
+    "uri": "/apps"
+   },
+   "protocol": "rest-json",
+   "service_id": "Amplify",
+   "signing_name": "amplify"
+  },
+  {
+   "api_version": "2020-08-11",
+   "endpoint_prefix": "amplifybackend",
+   "protocol": "rest-json",
+   "service_id": "AmplifyBackend",
+   "signing_name": "amplifybackend"
+  },
+  {
+   "api_version": "2021-08-11",
+   "endpoint_prefix": "amplifyuibuilder",
+   "protocol": "rest-json",
+   "service_id": "AmplifyUIBuilder",
+   "signing_name": "amplifyuibuilder"
+  },
+  {
+   "api_version": "2018-11-29",
+   "endpoint_prefix": "execute-api",
+   "protocol": "rest-json",
+   "service_id": "ApiGatewayManagementApi",
+   "signing_name": "execute-api"
+  },
+  {
+   "api_version": "2018-11-29",
+   "endpoint_prefix": "apigateway",
+   "probe": {
+    "method": "GET",
+    "op": "GetApis",
+    "uri": "/v2/apis"
+   },
+   "protocol": "rest-json",
+   "service_id": "ApiGatewayV2",
+   "signing_name": "apigateway"
+  },
+  {
+   "api_version": "2019-01-25",
+   "endpoint_prefix": "appmesh",
+   "probe": {
+    "method": "GET",
+    "op": "ListMeshes",
+    "uri": "/v20190125/meshes"
+   },
+   "protocol": "rest-json",
+   "service_id": "App Mesh",
+   "signing_name": "appmesh"
+  },
+  {
+   "api_version": "2019-10-09",
+   "endpoint_prefix": "appconfig",
+   "probe": {
+    "method": "GET",
+    "op": "ListApplications",
+    "uri": "/applications"
+   },
+   "protocol": "rest-json",
+   "service_id": "AppConfig",
+   "signing_name": "appconfig"
+  },
+  {
+   "api_version": "2021-11-11",
+   "endpoint_prefix": "appconfigdata",
+   "protocol": "rest-json",
+   "service_id": "AppConfigData",
+   "signing_name": "appconfig"
+  },
+  {
+   "api_version": "2023-05-19",
+   "endpoint_prefix": "appfabric",
+   "probe": {
+    "method": "GET",
+    "op": "ListAppBundles",
+    "uri": "/appbundles"
+   },
+   "protocol": "rest-json",
+   "service_id": "AppFabric",
+   "signing_name": "appfabric"
+  },
+  {
+   "api_version": "2020-07-29",
+   "endpoint_prefix": "app-integrations",
+   "probe": {
+    "method": "GET",
+    "op": "ListApplications",
+    "uri": "/applications"
+   },
+   "protocol": "rest-json",
+   "service_id": "AppIntegrations",
+   "signing_name": "app-integrations"
+  },
+  {
+   "api_version": "2020-05-15",
+   "endpoint_prefix": "apprunner",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListConnections",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "AppRunner",
+   "signing_name": "apprunner",
+   "target_prefix": "AppRunner"
+  },
+  {
+   "api_version": "2016-12-01",
+   "endpoint_prefix": "appstream2",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListAssociatedFleets",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "AppStream",
+   "signing_name": "appstream",
+   "target_prefix": "PhotonAdminProxyService"
+  },
+  {
+   "api_version": "2017-07-25",
+   "endpoint_prefix": "appsync",
+   "probe": {
+    "method": "GET",
+    "op": "ListDomainNames",
+    "uri": "/v1/domainnames"
+   },
+   "protocol": "rest-json",
+   "service_id": "AppSync",
+   "signing_name": "appsync"
+  },
+  {
+   "api_version": "2020-08-23",
+   "endpoint_prefix": "appflow",
+   "protocol": "rest-json",
+   "service_id": "Appflow",
+   "signing_name": "appflow"
+  },
+  {
+   "api_version": "2016-02-06",
+   "endpoint_prefix": "application-autoscaling",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeScalableTargets",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Application Auto Scaling",
+   "signing_name": "application-autoscaling",
+   "target_prefix": "AnyScaleFrontendService"
+  },
+  {
+   "api_version": "2015-11-01",
+   "endpoint_prefix": "discovery",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeAgents",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Application Discovery Service",
+   "signing_name": "discovery",
+   "target_prefix": "AWSPoseidonService_V2015_11_01"
+  },
+  {
+   "api_version": "2018-11-25",
+   "endpoint_prefix": "applicationinsights",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeApplication",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Application Insights",
+   "signing_name": "applicationinsights",
+   "target_prefix": "EC2WindowsBarleyService"
+  },
+  {
+   "api_version": "2024-04-15",
+   "endpoint_prefix": "application-signals",
+   "probe": {
+    "method": "GET",
+    "op": "ListServices",
+    "uri": "/services"
+   },
+   "protocol": "rest-json",
+   "service_id": "Application Signals",
+   "signing_name": "application-signals"
+  },
+  {
+   "api_version": "2020-09-10",
+   "endpoint_prefix": "application-cost-profiler",
+   "probe": {
+    "method": "GET",
+    "op": "ListReportDefinitions",
+    "uri": "/reportDefinition"
+   },
+   "protocol": "rest-json",
+   "service_id": "ApplicationCostProfiler",
+   "signing_name": "application-cost-profiler"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "artifact",
+   "probe": {
+    "method": "GET",
+    "op": "ListComplianceInquiries",
+    "uri": "/v1/compliance-inquiry/list"
+   },
+   "protocol": "rest-json",
+   "service_id": "Artifact",
+   "signing_name": "artifact"
+  },
+  {
+   "api_version": "2017-05-18",
+   "endpoint_prefix": "athena",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListDataCatalogs",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Athena",
+   "signing_name": "athena",
+   "target_prefix": "AmazonAthena"
+  },
+  {
+   "api_version": "2017-07-25",
+   "endpoint_prefix": "auditmanager",
+   "probe": {
+    "method": "GET",
+    "op": "GetAccountStatus",
+    "uri": "/account/status"
+   },
+   "protocol": "rest-json",
+   "service_id": "AuditManager",
+   "signing_name": "auditmanager"
+  },
+  {
+   "api_version": "2011-01-01",
+   "endpoint_prefix": "autoscaling",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeAutoScalingGroups",
+    "uri": "/"
+   },
+   "protocol": "query",
+   "service_id": "Auto Scaling",
+   "signing_name": "autoscaling"
+  },
+  {
+   "api_version": "2018-01-06",
+   "endpoint_prefix": "autoscaling-plans",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeScalingPlans",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Auto Scaling Plans",
+   "signing_name": "autoscaling-plans",
+   "target_prefix": "AnyScaleScalingPlannerFrontendService"
+  },
+  {
+   "api_version": "2025-08-18",
+   "endpoint_prefix": "bcm-dashboards",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListDashboards",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "BCM Dashboards",
+   "signing_name": "bcm-dashboards",
+   "target_prefix": "AWSBCMDashboardsService"
+  },
+  {
+   "api_version": "2023-11-26",
+   "endpoint_prefix": "bcm-data-exports",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListExports",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "BCM Data Exports",
+   "signing_name": "bcm-data-exports",
+   "target_prefix": "AWSBillingAndCostManagementDataExports"
+  },
+  {
+   "api_version": "2024-06-19",
+   "endpoint_prefix": "bcm-pricing-calculator",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListBillEstimateCommitments",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "BCM Pricing Calculator",
+   "signing_name": "bcm-pricing-calculator",
+   "target_prefix": "AWSBCMPricingCalculator"
+  },
+  {
+   "api_version": "2024-11-14",
+   "endpoint_prefix": "bcm-recommended-actions",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListRecommendedActions",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "BCM Recommended Actions",
+   "signing_name": "bcm-recommended-actions",
+   "target_prefix": "AWSBillingAndCostManagementRecommendedActions"
+  },
+  {
+   "api_version": "2018-11-15",
+   "endpoint_prefix": "backup",
+   "probe": {
+    "method": "GET",
+    "op": "ListBackupPlans",
+    "uri": "/backup/plans/"
+   },
+   "protocol": "rest-json",
+   "service_id": "Backup",
+   "signing_name": "backup"
+  },
+  {
+   "api_version": "2021-01-01",
+   "endpoint_prefix": "backup-gateway",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListGateways",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Backup Gateway",
+   "signing_name": "backup-gateway",
+   "target_prefix": "BackupOnPremises_v20210101"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "backup-search",
+   "probe": {
+    "method": "GET",
+    "op": "ListSearchJobs",
+    "uri": "/search-jobs"
+   },
+   "protocol": "rest-json",
+   "service_id": "BackupSearch",
+   "signing_name": "backup-search"
+  },
+  {
+   "api_version": "2016-08-10",
+   "endpoint_prefix": "batch",
+   "protocol": "rest-json",
+   "service_id": "Batch",
+   "signing_name": "batch"
+  },
+  {
+   "api_version": "2023-04-20",
+   "endpoint_prefix": "bedrock",
+   "probe": {
+    "method": "GET",
+    "op": "ListFoundationModels",
+    "uri": "/foundation-models"
+   },
+   "protocol": "rest-json",
+   "service_id": "Bedrock",
+   "signing_name": "bedrock"
+  },
+  {
+   "api_version": "2023-06-05",
+   "endpoint_prefix": "bedrock-agent",
+   "probe": {
+    "method": "GET",
+    "op": "ListFlows",
+    "uri": "/flows/"
+   },
+   "protocol": "rest-json",
+   "service_id": "Bedrock Agent",
+   "signing_name": "bedrock"
+  },
+  {
+   "api_version": "2023-07-26",
+   "endpoint_prefix": "bedrock-agent-runtime",
+   "protocol": "rest-json",
+   "service_id": "Bedrock Agent Runtime",
+   "signing_name": "bedrock"
+  },
+  {
+   "api_version": "2024-02-28",
+   "endpoint_prefix": "bedrock-agentcore",
+   "probe": {
+    "method": "GET",
+    "op": "ListABTests",
+    "uri": "/ab-tests"
+   },
+   "protocol": "rest-json",
+   "service_id": "Bedrock AgentCore",
+   "signing_name": "bedrock-agentcore"
+  },
+  {
+   "api_version": "2023-06-05",
+   "endpoint_prefix": "bedrock-agentcore-control",
+   "probe": {
+    "method": "GET",
+    "op": "ListDatasets",
+    "uri": "/datasets"
+   },
+   "protocol": "rest-json",
+   "service_id": "Bedrock AgentCore Control",
+   "signing_name": "bedrock-agentcore"
+  },
+  {
+   "api_version": "2023-07-26",
+   "endpoint_prefix": "bedrock-data-automation",
+   "protocol": "rest-json",
+   "service_id": "Bedrock Data Automation",
+   "signing_name": "bedrock"
+  },
+  {
+   "api_version": "2024-06-13",
+   "endpoint_prefix": "bedrock-data-automation-runtime",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListTagsForResource",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Bedrock Data Automation Runtime",
+   "signing_name": "bedrock",
+   "target_prefix": "AmazonBedrockKeystoneRuntimeService"
+  },
+  {
+   "api_version": "2023-09-30",
+   "endpoint_prefix": "bedrock-runtime",
+   "probe": {
+    "method": "GET",
+    "op": "ListAsyncInvokes",
+    "uri": "/async-invoke"
+   },
+   "protocol": "rest-json",
+   "service_id": "Bedrock Runtime",
+   "signing_name": "bedrock"
+  },
+  {
+   "api_version": "2023-09-07",
+   "endpoint_prefix": "billing",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListBillingViews",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Billing",
+   "signing_name": "billing",
+   "target_prefix": "AWSBilling"
+  },
+  {
+   "api_version": "2019-09-01",
+   "endpoint_prefix": "braket",
+   "protocol": "rest-json",
+   "service_id": "Braket",
+   "signing_name": "braket"
+  },
+  {
+   "api_version": "2016-10-20",
+   "endpoint_prefix": "budgets",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeBudgets",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Budgets",
+   "signing_name": "budgets",
+   "target_prefix": "AWSBudgetServiceGateway"
+  },
+  {
+   "api_version": "2018-05-01",
+   "endpoint_prefix": "chime",
+   "probe": {
+    "method": "GET",
+    "op": "ListAccounts",
+    "uri": "/accounts"
+   },
+   "protocol": "rest-json",
+   "service_id": "Chime",
+   "signing_name": "chime"
+  },
+  {
+   "api_version": "2021-04-20",
+   "endpoint_prefix": "identity-chime",
+   "probe": {
+    "method": "GET",
+    "op": "ListAppInstanceBots",
+    "uri": "/app-instance-bots"
+   },
+   "protocol": "rest-json",
+   "service_id": "Chime SDK Identity",
+   "signing_name": "chime"
+  },
+  {
+   "api_version": "2021-07-15",
+   "endpoint_prefix": "media-pipelines-chime",
+   "probe": {
+    "method": "GET",
+    "op": "ListMediaPipelines",
+    "uri": "/sdk-media-pipelines"
+   },
+   "protocol": "rest-json",
+   "service_id": "Chime SDK Media Pipelines",
+   "signing_name": "chime"
+  },
+  {
+   "api_version": "2021-07-15",
+   "endpoint_prefix": "meetings-chime",
+   "probe": {
+    "method": "GET",
+    "op": "ListTagsForResource",
+    "uri": "/tags"
+   },
+   "protocol": "rest-json",
+   "service_id": "Chime SDK Meetings",
+   "signing_name": "chime"
+  },
+  {
+   "api_version": "2021-05-15",
+   "endpoint_prefix": "messaging-chime",
+   "probe": {
+    "method": "GET",
+    "op": "ListChannelFlows",
+    "uri": "/channel-flows"
+   },
+   "protocol": "rest-json",
+   "service_id": "Chime SDK Messaging",
+   "signing_name": "chime"
+  },
+  {
+   "api_version": "2022-08-03",
+   "endpoint_prefix": "voice-chime",
+   "probe": {
+    "method": "GET",
+    "op": "ListPhoneNumbers",
+    "uri": "/phone-numbers"
+   },
+   "protocol": "rest-json",
+   "service_id": "Chime SDK Voice",
+   "signing_name": "chime"
+  },
+  {
+   "api_version": "2022-02-17",
+   "endpoint_prefix": "cleanrooms",
+   "probe": {
+    "method": "GET",
+    "op": "ListCollaborations",
+    "uri": "/collaborations"
+   },
+   "protocol": "rest-json",
+   "service_id": "CleanRooms",
+   "signing_name": "cleanrooms"
+  },
+  {
+   "api_version": "2023-09-06",
+   "endpoint_prefix": "cleanrooms-ml",
+   "probe": {
+    "method": "GET",
+    "op": "ListAudienceExportJobs",
+    "uri": "/audience-export-job"
+   },
+   "protocol": "rest-json",
+   "service_id": "CleanRoomsML",
+   "signing_name": "cleanrooms-ml"
+  },
+  {
+   "api_version": "2017-09-23",
+   "endpoint_prefix": "cloud9",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListEnvironments",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Cloud9",
+   "signing_name": "cloud9",
+   "target_prefix": "AWSCloud9WorkspaceManagementService"
+  },
+  {
+   "api_version": "2021-09-30",
+   "endpoint_prefix": "cloudcontrolapi",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListResourceRequests",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "CloudControl",
+   "signing_name": "cloudcontrolapi",
+   "target_prefix": "CloudApiService"
+  },
+  {
+   "api_version": "2017-01-11",
+   "endpoint_prefix": "clouddirectory",
+   "protocol": "rest-json",
+   "service_id": "CloudDirectory",
+   "signing_name": "clouddirectory"
+  },
+  {
+   "api_version": "2010-05-15",
+   "endpoint_prefix": "cloudformation",
+   "probe": {
+    "method": "POST",
+    "op": "ListStackInstances",
+    "uri": "/"
+   },
+   "protocol": "query",
+   "service_id": "CloudFormation",
+   "signing_name": "cloudformation"
+  },
+  {
+   "api_version": "2020-05-31",
+   "endpoint_prefix": "cloudfront",
+   "probe": {
+    "method": "GET",
+    "op": "ListDistributions",
+    "uri": "/2020-05-31/distribution"
+   },
+   "protocol": "rest-xml",
+   "service_id": "CloudFront",
+   "signing_name": "cloudfront"
+  },
+  {
+   "api_version": "2022-07-26",
+   "endpoint_prefix": "cloudfront-keyvaluestore",
+   "protocol": "rest-json",
+   "service_id": "CloudFront KeyValueStore",
+   "signing_name": "cloudfront-keyvaluestore"
+  },
+  {
+   "api_version": "2014-05-30",
+   "endpoint_prefix": "cloudhsm",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeHapg",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "CloudHSM",
+   "signing_name": "cloudhsm",
+   "target_prefix": "CloudHsmFrontendService"
+  },
+  {
+   "api_version": "2017-04-28",
+   "endpoint_prefix": "cloudhsmv2",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeClusters",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "CloudHSM V2",
+   "signing_name": "cloudhsm",
+   "target_prefix": "BaldrApiService"
+  },
+  {
+   "api_version": "2013-01-01",
+   "endpoint_prefix": "cloudsearch",
+   "probe": {
+    "method": "POST",
+    "op": "ListDomainNames",
+    "uri": "/"
+   },
+   "protocol": "query",
+   "service_id": "CloudSearch",
+   "signing_name": "cloudsearch"
+  },
+  {
+   "api_version": "2013-01-01",
+   "endpoint_prefix": "cloudsearchdomain",
+   "protocol": "rest-json",
+   "service_id": "CloudSearch Domain",
+   "signing_name": "cloudsearch"
+  },
+  {
+   "api_version": "2013-11-01",
+   "endpoint_prefix": "cloudtrail",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListChannels",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "CloudTrail",
+   "signing_name": "cloudtrail",
+   "target_prefix": "com.amazonaws.cloudtrail.v20131101.CloudTrail_20131101"
+  },
+  {
+   "api_version": "2021-08-11",
+   "endpoint_prefix": "cloudtrail-data",
+   "protocol": "rest-json",
+   "service_id": "CloudTrail Data",
+   "signing_name": "cloudtrail-data"
+  },
+  {
+   "api_version": "2010-08-01",
+   "endpoint_prefix": "monitoring",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListDashboards",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "CloudWatch",
+   "signing_name": "monitoring",
+   "target_prefix": "GraniteServiceVersion20100801"
+  },
+  {
+   "api_version": "2014-03-28",
+   "endpoint_prefix": "logs",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListAnomalies",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "CloudWatch Logs",
+   "signing_name": "logs",
+   "target_prefix": "Logs_20140328"
+  },
+  {
+   "api_version": "2016-10-06",
+   "endpoint_prefix": "codebuild",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListBuildBatches",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "CodeBuild",
+   "signing_name": "codebuild",
+   "target_prefix": "CodeBuild_20161006"
+  },
+  {
+   "api_version": "2022-09-28",
+   "endpoint_prefix": "codecatalyst",
+   "protocol": "rest-json",
+   "service_id": "CodeCatalyst",
+   "signing_name": "codecatalyst"
+  },
+  {
+   "api_version": "2015-04-13",
+   "endpoint_prefix": "codecommit",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListRepositories",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "CodeCommit",
+   "signing_name": "codecommit",
+   "target_prefix": "CodeCommit_20150413"
+  },
+  {
+   "api_version": "2023-12-01",
+   "endpoint_prefix": "codeconnections",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListConnections",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "CodeConnections",
+   "signing_name": "codeconnections",
+   "target_prefix": "com.amazonaws.codeconnections.CodeConnections_20231201"
+  },
+  {
+   "api_version": "2014-10-06",
+   "endpoint_prefix": "codedeploy",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListApplications",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "CodeDeploy",
+   "signing_name": "codedeploy",
+   "target_prefix": "CodeDeploy_20141006"
+  },
+  {
+   "api_version": "2019-09-19",
+   "endpoint_prefix": "codeguru-reviewer",
+   "probe": {
+    "method": "GET",
+    "op": "ListCodeReviews",
+    "uri": "/codereviews"
+   },
+   "protocol": "rest-json",
+   "service_id": "CodeGuru Reviewer",
+   "signing_name": "codeguru-reviewer"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "codeguru-security",
+   "probe": {
+    "method": "GET",
+    "op": "ListFindingsMetrics",
+    "uri": "/metrics/findings"
+   },
+   "protocol": "rest-json",
+   "service_id": "CodeGuru Security",
+   "signing_name": "codeguru-security"
+  },
+  {
+   "api_version": "2019-07-18",
+   "endpoint_prefix": "codeguru-profiler",
+   "probe": {
+    "method": "GET",
+    "op": "ListProfilingGroups",
+    "uri": "/profilingGroups"
+   },
+   "protocol": "rest-json",
+   "service_id": "CodeGuruProfiler",
+   "signing_name": "codeguru-profiler"
+  },
+  {
+   "api_version": "2015-07-09",
+   "endpoint_prefix": "codepipeline",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListPipelines",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "CodePipeline",
+   "signing_name": "codepipeline",
+   "target_prefix": "CodePipeline_20150709"
+  },
+  {
+   "api_version": "2019-12-01",
+   "endpoint_prefix": "codestar-connections",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListConnections",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "CodeStar connections",
+   "signing_name": "codestar-connections",
+   "target_prefix": "com.amazonaws.codestar.connections.CodeStar_connections_20191201"
+  },
+  {
+   "api_version": "2014-06-30",
+   "endpoint_prefix": "cognito-identity",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListIdentityPools",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Cognito Identity",
+   "signing_name": "cognito-identity",
+   "target_prefix": "AWSCognitoIdentityService"
+  },
+  {
+   "api_version": "2016-04-18",
+   "endpoint_prefix": "cognito-idp",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListUserPools",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Cognito Identity Provider",
+   "signing_name": "cognito-idp",
+   "target_prefix": "AWSCognitoIdentityProviderService"
+  },
+  {
+   "api_version": "2014-06-30",
+   "endpoint_prefix": "cognito-sync",
+   "probe": {
+    "method": "GET",
+    "op": "ListIdentityPoolUsage",
+    "uri": "/identitypools"
+   },
+   "protocol": "rest-json",
+   "service_id": "Cognito Sync",
+   "signing_name": "cognito-sync"
+  },
+  {
+   "api_version": "2017-11-27",
+   "endpoint_prefix": "comprehend",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListDocumentClassifiers",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Comprehend",
+   "signing_name": "comprehend",
+   "target_prefix": "Comprehend_20171127"
+  },
+  {
+   "api_version": "2018-10-30",
+   "endpoint_prefix": "comprehendmedical",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeEntitiesDetectionV2Job",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "ComprehendMedical",
+   "signing_name": "comprehendmedical",
+   "target_prefix": "ComprehendMedical_20181030"
+  },
+  {
+   "api_version": "2019-11-01",
+   "endpoint_prefix": "compute-optimizer",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "GetEnrollmentStatus",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Compute Optimizer",
+   "signing_name": "compute-optimizer",
+   "target_prefix": "ComputeOptimizerService"
+  },
+  {
+   "api_version": "2025-09-22",
+   "endpoint_prefix": "aco-automation",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListAccounts",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Compute Optimizer Automation",
+   "signing_name": "aco-automation",
+   "target_prefix": "ComputeOptimizerAutomationService"
+  },
+  {
+   "api_version": "2014-11-12",
+   "endpoint_prefix": "config",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListStoredQueries",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Config Service",
+   "signing_name": "config",
+   "target_prefix": "StarlingDoveService"
+  },
+  {
+   "api_version": "2017-08-08",
+   "endpoint_prefix": "connect",
+   "probe": {
+    "method": "GET",
+    "op": "ListInstances",
+    "uri": "/instance"
+   },
+   "protocol": "rest-json",
+   "service_id": "Connect",
+   "signing_name": "connect"
+  },
+  {
+   "api_version": "2020-08-21",
+   "endpoint_prefix": "contact-lens",
+   "protocol": "rest-json",
+   "service_id": "Connect Contact Lens",
+   "signing_name": "connect"
+  },
+  {
+   "api_version": "2021-01-30",
+   "endpoint_prefix": "connect-campaigns",
+   "protocol": "rest-json",
+   "service_id": "ConnectCampaigns",
+   "signing_name": "connect-campaigns"
+  },
+  {
+   "api_version": "2024-04-23",
+   "endpoint_prefix": "connect-campaigns",
+   "protocol": "rest-json",
+   "service_id": "ConnectCampaignsV2",
+   "signing_name": "connect-campaigns"
+  },
+  {
+   "api_version": "2022-10-03",
+   "endpoint_prefix": "cases",
+   "protocol": "rest-json",
+   "service_id": "ConnectCases",
+   "signing_name": "cases"
+  },
+  {
+   "api_version": "2025-01-29",
+   "endpoint_prefix": "health-agent",
+   "probe": {
+    "method": "GET",
+    "op": "ListDomains",
+    "uri": "/domain"
+   },
+   "protocol": "rest-json",
+   "service_id": "ConnectHealth",
+   "signing_name": "health-agent"
+  },
+  {
+   "api_version": "2018-09-07",
+   "endpoint_prefix": "participant.connect",
+   "protocol": "rest-json",
+   "service_id": "ConnectParticipant",
+   "signing_name": "execute-api"
+  },
+  {
+   "api_version": "2022-07-26",
+   "endpoint_prefix": "continuum",
+   "probe": {
+    "method": "GET",
+    "op": "ListCollectors",
+    "uri": "/collectors"
+   },
+   "protocol": "rest-json",
+   "service_id": "Continuum",
+   "signing_name": "continuum"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "controlcatalog",
+   "protocol": "rest-json",
+   "service_id": "ControlCatalog",
+   "signing_name": "controlcatalog"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "controltower",
+   "protocol": "rest-json",
+   "service_id": "ControlTower",
+   "signing_name": "controltower"
+  },
+  {
+   "api_version": "2017-10-25",
+   "endpoint_prefix": "ce",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListCostCategoryDefinitions",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Cost Explorer",
+   "signing_name": "ce",
+   "target_prefix": "AWSInsightsIndexService"
+  },
+  {
+   "api_version": "2022-07-26",
+   "endpoint_prefix": "cost-optimization-hub",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "GetPreferences",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Cost Optimization Hub",
+   "signing_name": "cost-optimization-hub",
+   "target_prefix": "CostOptimizationHubService"
+  },
+  {
+   "api_version": "2017-01-06",
+   "endpoint_prefix": "cur",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeReportDefinitions",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Cost and Usage Report Service",
+   "signing_name": "cur",
+   "target_prefix": "AWSOrigamiServiceGatewayService"
+  },
+  {
+   "api_version": "2020-08-15",
+   "endpoint_prefix": "profile",
+   "probe": {
+    "method": "GET",
+    "op": "ListDomains",
+    "uri": "/domains"
+   },
+   "protocol": "rest-json",
+   "service_id": "Customer Profiles",
+   "signing_name": "profile"
+  },
+  {
+   "api_version": "2017-04-19",
+   "endpoint_prefix": "dax",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeClusters",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "DAX",
+   "signing_name": "dax",
+   "target_prefix": "AmazonDAXV3"
+  },
+  {
+   "api_version": "2018-01-12",
+   "endpoint_prefix": "dlm",
+   "probe": {
+    "method": "GET",
+    "op": "GetLifecyclePolicies",
+    "uri": "/policies"
+   },
+   "protocol": "rest-json",
+   "service_id": "DLM",
+   "signing_name": "dlm"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "dsql",
+   "probe": {
+    "method": "GET",
+    "op": "ListClusters",
+    "uri": "/cluster"
+   },
+   "protocol": "rest-json",
+   "service_id": "DSQL",
+   "signing_name": "dsql"
+  },
+  {
+   "api_version": "2012-10-29",
+   "endpoint_prefix": "datapipeline",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListPipelines",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Data Pipeline",
+   "signing_name": "datapipeline",
+   "target_prefix": "DataPipeline"
+  },
+  {
+   "api_version": "2017-07-25",
+   "endpoint_prefix": "databrew",
+   "probe": {
+    "method": "GET",
+    "op": "ListProjects",
+    "uri": "/projects"
+   },
+   "protocol": "rest-json",
+   "service_id": "DataBrew",
+   "signing_name": "databrew"
+  },
+  {
+   "api_version": "2017-07-25",
+   "endpoint_prefix": "dataexchange",
+   "probe": {
+    "method": "GET",
+    "op": "ListDataSets",
+    "uri": "/v1/data-sets"
+   },
+   "protocol": "rest-json",
+   "service_id": "DataExchange",
+   "signing_name": "dataexchange"
+  },
+  {
+   "api_version": "2018-11-09",
+   "endpoint_prefix": "datasync",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListAgents",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "DataSync",
+   "signing_name": "datasync",
+   "target_prefix": "FmrsService"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "datazone",
+   "probe": {
+    "method": "GET",
+    "op": "ListDomains",
+    "uri": "/v2/domains"
+   },
+   "protocol": "rest-json",
+   "service_id": "DataZone",
+   "signing_name": "datazone"
+  },
+  {
+   "api_version": "2016-01-01",
+   "endpoint_prefix": "dms",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeCertificates",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Database Migration Service",
+   "signing_name": "dms",
+   "target_prefix": "AmazonDMSv20160101"
+  },
+  {
+   "api_version": "2018-10-26",
+   "endpoint_prefix": "api.detective",
+   "protocol": "rest-json",
+   "service_id": "Detective",
+   "signing_name": "detective"
+  },
+  {
+   "api_version": "2026-01-01",
+   "endpoint_prefix": "aidevops",
+   "probe": {
+    "method": "GET",
+    "op": "ListAssetTypes",
+    "uri": "/asset/types"
+   },
+   "protocol": "rest-json",
+   "service_id": "DevOps Agent",
+   "signing_name": "aidevops"
+  },
+  {
+   "api_version": "2020-12-01",
+   "endpoint_prefix": "devops-guru",
+   "probe": {
+    "method": "GET",
+    "op": "DescribeAccountHealth",
+    "uri": "/accounts/health"
+   },
+   "protocol": "rest-json",
+   "service_id": "DevOps Guru",
+   "signing_name": "devops-guru"
+  },
+  {
+   "api_version": "2015-06-23",
+   "endpoint_prefix": "devicefarm",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListDeviceInstances",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Device Farm",
+   "signing_name": "devicefarm",
+   "target_prefix": "DeviceFarm_20150623"
+  },
+  {
+   "api_version": "2012-10-25",
+   "endpoint_prefix": "directconnect",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeConnections",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Direct Connect",
+   "signing_name": "directconnect",
+   "target_prefix": "OvertureService"
+  },
+  {
+   "api_version": "2015-04-16",
+   "endpoint_prefix": "ds",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeDirectories",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Directory Service",
+   "signing_name": "ds",
+   "target_prefix": "DirectoryService_20150416"
+  },
+  {
+   "api_version": "2023-05-31",
+   "endpoint_prefix": "ds-data",
+   "protocol": "rest-json",
+   "service_id": "Directory Service Data",
+   "signing_name": "ds-data"
+  },
+  {
+   "api_version": "2014-10-31",
+   "endpoint_prefix": "rds",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeDBClusters",
+    "uri": "/"
+   },
+   "protocol": "query",
+   "service_id": "DocDB",
+   "signing_name": "rds"
+  },
+  {
+   "api_version": "2022-11-28",
+   "endpoint_prefix": "docdb-elastic",
+   "probe": {
+    "method": "GET",
+    "op": "ListClusters",
+    "uri": "/clusters"
+   },
+   "protocol": "rest-json",
+   "service_id": "DocDB Elastic",
+   "signing_name": "docdb-elastic"
+  },
+  {
+   "api_version": "2012-08-10",
+   "endpoint_prefix": "dynamodb",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListTables",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "DynamoDB",
+   "signing_name": "dynamodb",
+   "target_prefix": "DynamoDB_20120810"
+  },
+  {
+   "api_version": "2012-08-10",
+   "endpoint_prefix": "streams.dynamodb",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeStream",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "DynamoDB Streams",
+   "signing_name": "dynamodb",
+   "target_prefix": "DynamoDBStreams_20120810"
+  },
+  {
+   "api_version": "2019-11-02",
+   "endpoint_prefix": "ebs",
+   "protocol": "rest-json",
+   "service_id": "EBS",
+   "signing_name": "ebs"
+  },
+  {
+   "api_version": "2016-11-15",
+   "endpoint_prefix": "ec2",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeVpcs",
+    "uri": "/"
+   },
+   "protocol": "ec2",
+   "service_id": "EC2",
+   "signing_name": "ec2"
+  },
+  {
+   "api_version": "2018-04-02",
+   "endpoint_prefix": "ec2-instance-connect",
+   "json_version": "1.1",
+   "protocol": "json",
+   "service_id": "EC2 Instance Connect",
+   "signing_name": "ec2-instance-connect",
+   "target_prefix": "AWSEC2InstanceConnectService"
+  },
+  {
+   "api_version": "2015-09-21",
+   "endpoint_prefix": "api.ecr",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeRepositories",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "ECR",
+   "signing_name": "ecr",
+   "target_prefix": "AmazonEC2ContainerRegistry_V20150921"
+  },
+  {
+   "api_version": "2020-10-30",
+   "endpoint_prefix": "api.ecr-public",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeRepositories",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "ECR PUBLIC",
+   "signing_name": "ecr-public",
+   "target_prefix": "SpencerFrontendService"
+  },
+  {
+   "api_version": "2014-11-13",
+   "endpoint_prefix": "ecs",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListClusters",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "ECS",
+   "signing_name": "ecs",
+   "target_prefix": "AmazonEC2ContainerServiceV20141113"
+  },
+  {
+   "api_version": "2015-02-01",
+   "endpoint_prefix": "elasticfilesystem",
+   "probe": {
+    "method": "GET",
+    "op": "DescribeFileSystems",
+    "uri": "/2015-02-01/file-systems"
+   },
+   "protocol": "rest-json",
+   "service_id": "EFS",
+   "signing_name": "elasticfilesystem"
+  },
+  {
+   "api_version": "2017-11-01",
+   "endpoint_prefix": "eks",
+   "probe": {
+    "method": "GET",
+    "op": "ListClusters",
+    "uri": "/clusters"
+   },
+   "protocol": "rest-json",
+   "service_id": "EKS",
+   "signing_name": "eks"
+  },
+  {
+   "api_version": "2023-11-26",
+   "endpoint_prefix": "eks-auth",
+   "protocol": "rest-json",
+   "service_id": "EKS Auth",
+   "signing_name": "eks-auth"
+  },
+  {
+   "api_version": "2009-03-31",
+   "endpoint_prefix": "elasticmapreduce",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListClusters",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "EMR",
+   "signing_name": "elasticmapreduce",
+   "target_prefix": "ElasticMapReduce"
+  },
+  {
+   "api_version": "2021-07-13",
+   "endpoint_prefix": "emr-serverless",
+   "probe": {
+    "method": "GET",
+    "op": "ListApplications",
+    "uri": "/applications"
+   },
+   "protocol": "rest-json",
+   "service_id": "EMR Serverless",
+   "signing_name": "emr-serverless"
+  },
+  {
+   "api_version": "2020-10-01",
+   "endpoint_prefix": "emr-containers",
+   "probe": {
+    "method": "GET",
+    "op": "ListVirtualClusters",
+    "uri": "/virtualclusters"
+   },
+   "protocol": "rest-json",
+   "service_id": "EMR containers",
+   "signing_name": "emr-containers"
+  },
+  {
+   "api_version": "2015-02-02",
+   "endpoint_prefix": "elasticache",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeCacheClusters",
+    "uri": "/"
+   },
+   "protocol": "query",
+   "service_id": "ElastiCache",
+   "signing_name": "elasticache"
+  },
+  {
+   "api_version": "2010-12-01",
+   "endpoint_prefix": "elasticbeanstalk",
+   "probe": {
+    "method": "POST",
+    "op": "ListAvailableSolutionStacks",
+    "uri": "/"
+   },
+   "protocol": "query",
+   "service_id": "Elastic Beanstalk",
+   "signing_name": "elasticbeanstalk"
+  },
+  {
+   "api_version": "2012-06-01",
+   "endpoint_prefix": "elasticloadbalancing",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeLoadBalancers",
+    "uri": "/"
+   },
+   "protocol": "query",
+   "service_id": "Elastic Load Balancing",
+   "signing_name": "elasticloadbalancing"
+  },
+  {
+   "api_version": "2015-12-01",
+   "endpoint_prefix": "elasticloadbalancing",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeLoadBalancers",
+    "uri": "/"
+   },
+   "protocol": "query",
+   "service_id": "Elastic Load Balancing v2",
+   "signing_name": "elasticloadbalancing"
+  },
+  {
+   "api_version": "2015-01-01",
+   "endpoint_prefix": "es",
+   "probe": {
+    "method": "GET",
+    "op": "ListDomainNames",
+    "uri": "/2015-01-01/domain"
+   },
+   "protocol": "rest-json",
+   "service_id": "Elasticsearch Service",
+   "signing_name": "es"
+  },
+  {
+   "api_version": "2018-11-14",
+   "endpoint_prefix": "elemental-inference",
+   "probe": {
+    "method": "GET",
+    "op": "ListDictionaries",
+    "uri": "/v1/dictionaries"
+   },
+   "protocol": "rest-json",
+   "service_id": "ElementalInference",
+   "signing_name": "elemental-inference"
+  },
+  {
+   "api_version": "2026-09-21",
+   "endpoint_prefix": "end-user-messaging",
+   "probe": {
+    "method": "GET",
+    "op": "ListBrandProfiles",
+    "uri": "/v1/brand-profiles"
+   },
+   "protocol": "rest-json",
+   "service_id": "EndUserMessaging",
+   "signing_name": "end-user-messaging"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "entityresolution",
+   "probe": {
+    "method": "GET",
+    "op": "ListIdMappingWorkflows",
+    "uri": "/idmappingworkflows"
+   },
+   "protocol": "rest-json",
+   "service_id": "EntityResolution",
+   "signing_name": "entityresolution"
+  },
+  {
+   "api_version": "2015-10-07",
+   "endpoint_prefix": "events",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListEventBuses",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "EventBridge",
+   "signing_name": "events",
+   "target_prefix": "AWSEvents"
+  },
+  {
+   "api_version": "2018-01-01",
+   "endpoint_prefix": "fms",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListAppsLists",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "FMS",
+   "signing_name": "fms",
+   "target_prefix": "AWSFMS_20180101"
+  },
+  {
+   "api_version": "2018-03-01",
+   "endpoint_prefix": "fsx",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeFileSystems",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "FSx",
+   "signing_name": "fsx",
+   "target_prefix": "AWSSimbaAPIService_v20180301"
+  },
+  {
+   "api_version": "2015-08-04",
+   "endpoint_prefix": "firehose",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListDeliveryStreams",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Firehose",
+   "signing_name": "firehose",
+   "target_prefix": "Firehose_20150804"
+  },
+  {
+   "api_version": "2019-11-15",
+   "endpoint_prefix": "frauddetector",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeDetector",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "FraudDetector",
+   "signing_name": "frauddetector",
+   "target_prefix": "AWSHawksNestServiceFacade"
+  },
+  {
+   "api_version": "2023-09-07",
+   "endpoint_prefix": "freetier",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListAccountActivities",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "FreeTier",
+   "signing_name": "freetier",
+   "target_prefix": "AWSFreeTierService"
+  },
+  {
+   "api_version": "2015-10-01",
+   "endpoint_prefix": "gamelift",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListGameServerGroups",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "GameLift",
+   "signing_name": "gamelift",
+   "target_prefix": "GameLift"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "gameliftstreams",
+   "probe": {
+    "method": "GET",
+    "op": "ListApplications",
+    "uri": "/applications"
+   },
+   "protocol": "rest-json",
+   "service_id": "GameLiftStreams",
+   "signing_name": "gameliftstreams"
+  },
+  {
+   "api_version": "2020-11-19",
+   "endpoint_prefix": "geo-maps",
+   "protocol": "rest-json",
+   "service_id": "Geo Maps",
+   "signing_name": "geo-maps"
+  },
+  {
+   "api_version": "2020-11-19",
+   "endpoint_prefix": "geo-places",
+   "protocol": "rest-json",
+   "service_id": "Geo Places",
+   "signing_name": "geo-places"
+  },
+  {
+   "api_version": "2020-11-19",
+   "endpoint_prefix": "geo-routes",
+   "protocol": "rest-json",
+   "service_id": "Geo Routes",
+   "signing_name": "geo-routes"
+  },
+  {
+   "api_version": "2012-06-01",
+   "endpoint_prefix": "glacier",
+   "protocol": "rest-json",
+   "service_id": "Glacier",
+   "signing_name": "glacier"
+  },
+  {
+   "api_version": "2018-08-08",
+   "endpoint_prefix": "globalaccelerator",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListAccelerators",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Global Accelerator",
+   "signing_name": "globalaccelerator",
+   "target_prefix": "GlobalAccelerator_V20180706"
+  },
+  {
+   "api_version": "2017-03-31",
+   "endpoint_prefix": "glue",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListRegistries",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Glue",
+   "signing_name": "glue",
+   "target_prefix": "AWSGlue"
+  },
+  {
+   "api_version": "2017-06-07",
+   "endpoint_prefix": "greengrass",
+   "probe": {
+    "method": "GET",
+    "op": "ListGroups",
+    "uri": "/greengrass/groups"
+   },
+   "protocol": "rest-json",
+   "service_id": "Greengrass",
+   "signing_name": "greengrass"
+  },
+  {
+   "api_version": "2020-11-30",
+   "endpoint_prefix": "greengrass",
+   "probe": {
+    "method": "GET",
+    "op": "ListComponents",
+    "uri": "/greengrass/v2/components"
+   },
+   "protocol": "rest-json",
+   "service_id": "GreengrassV2",
+   "signing_name": "greengrass"
+  },
+  {
+   "api_version": "2019-05-23",
+   "endpoint_prefix": "groundstation",
+   "probe": {
+    "method": "GET",
+    "op": "ListConfigs",
+    "uri": "/config"
+   },
+   "protocol": "rest-json",
+   "service_id": "GroundStation",
+   "signing_name": "groundstation"
+  },
+  {
+   "api_version": "2017-11-28",
+   "endpoint_prefix": "guardduty",
+   "probe": {
+    "method": "GET",
+    "op": "ListDetectors",
+    "uri": "/detector"
+   },
+   "protocol": "rest-json",
+   "service_id": "GuardDuty",
+   "signing_name": "guardduty"
+  },
+  {
+   "api_version": "2016-08-04",
+   "endpoint_prefix": "health",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeAffectedAccountsForOrganization",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Health",
+   "signing_name": "health",
+   "target_prefix": "AWSHealth_20160804"
+  },
+  {
+   "api_version": "2017-07-01",
+   "endpoint_prefix": "healthlake",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListFHIRDatastores",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "HealthLake",
+   "signing_name": "healthlake",
+   "target_prefix": "HealthLake"
+  },
+  {
+   "api_version": "2010-05-08",
+   "endpoint_prefix": "iam",
+   "probe": {
+    "method": "POST",
+    "op": "ListRoles",
+    "uri": "/"
+   },
+   "protocol": "query",
+   "service_id": "IAM",
+   "signing_name": "iam"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "iam-toolbox",
+   "protocol": "rest-json",
+   "service_id": "IAM Toolbox",
+   "signing_name": "iam"
+  },
+  {
+   "api_version": "2020-07-14",
+   "endpoint_prefix": "ivsrealtime",
+   "protocol": "rest-json",
+   "service_id": "IVS RealTime",
+   "signing_name": "ivs"
+  },
+  {
+   "api_version": "2010-06-01",
+   "endpoint_prefix": "importexport",
+   "probe": {
+    "method": "POST",
+    "op": "ListJobs",
+    "uri": "/?Operation=ListJobs"
+   },
+   "protocol": "query",
+   "service_id": "ImportExport",
+   "signing_name": "importexport"
+  },
+  {
+   "api_version": "2016-02-16",
+   "endpoint_prefix": "inspector",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListRulesPackages",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Inspector",
+   "signing_name": "inspector",
+   "target_prefix": "InspectorService"
+  },
+  {
+   "api_version": "2023-08-08",
+   "endpoint_prefix": "inspector-scan",
+   "protocol": "rest-json",
+   "service_id": "Inspector Scan",
+   "signing_name": "inspector-scan"
+  },
+  {
+   "api_version": "2020-06-08",
+   "endpoint_prefix": "inspector2",
+   "protocol": "rest-json",
+   "service_id": "Inspector2",
+   "signing_name": "inspector2"
+  },
+  {
+   "api_version": "2022-07-26",
+   "endpoint_prefix": "interconnect",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListConnections",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Interconnect",
+   "signing_name": "interconnect",
+   "target_prefix": "Interconnect"
+  },
+  {
+   "api_version": "2021-06-03",
+   "endpoint_prefix": "internetmonitor",
+   "probe": {
+    "method": "GET",
+    "op": "ListMonitors",
+    "uri": "/v20210603/Monitors"
+   },
+   "protocol": "rest-json",
+   "service_id": "InternetMonitor",
+   "signing_name": "internetmonitor"
+  },
+  {
+   "api_version": "2024-12-01",
+   "endpoint_prefix": "invoicing",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListInvoiceUnits",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Invoicing",
+   "signing_name": "invoicing",
+   "target_prefix": "Invoicing"
+  },
+  {
+   "api_version": "2015-05-28",
+   "endpoint_prefix": "iot",
+   "probe": {
+    "method": "GET",
+    "op": "DescribeDefaultAuthorizer",
+    "uri": "/default-authorizer"
+   },
+   "protocol": "rest-json",
+   "service_id": "IoT",
+   "signing_name": "iot"
+  },
+  {
+   "api_version": "2015-05-28",
+   "endpoint_prefix": "data-ats.iot",
+   "probe": {
+    "method": "GET",
+    "op": "ListRetainedMessages",
+    "uri": "/retainedMessage"
+   },
+   "protocol": "rest-json",
+   "service_id": "IoT Data Plane",
+   "signing_name": "iotdata"
+  },
+  {
+   "api_version": "2017-09-29",
+   "endpoint_prefix": "data.jobs.iot",
+   "protocol": "rest-json",
+   "service_id": "IoT Jobs Data Plane",
+   "signing_name": "iot-jobs-data"
+  },
+  {
+   "api_version": "2025-03-03",
+   "endpoint_prefix": "api.iotmanagedintegrations",
+   "probe": {
+    "method": "GET",
+    "op": "ListAccountAssociations",
+    "uri": "/account-associations"
+   },
+   "protocol": "rest-json",
+   "service_id": "IoT Managed Integrations",
+   "signing_name": "iotmanagedintegrations"
+  },
+  {
+   "api_version": "2020-11-22",
+   "endpoint_prefix": "api.iotwireless",
+   "probe": {
+    "method": "GET",
+    "op": "ListDestinations",
+    "uri": "/destinations"
+   },
+   "protocol": "rest-json",
+   "service_id": "IoT Wireless",
+   "signing_name": "iotwireless"
+  },
+  {
+   "api_version": "2021-06-17",
+   "endpoint_prefix": "iotfleetwise",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListCampaigns",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "IoTFleetWise",
+   "signing_name": "iotfleetwise",
+   "target_prefix": "IoTAutobahnControlPlane"
+  },
+  {
+   "api_version": "2018-10-05",
+   "endpoint_prefix": "api.tunneling.iot",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeTunnel",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "IoTSecureTunneling",
+   "signing_name": "IoTSecuredTunneling",
+   "target_prefix": "IoTSecuredTunneling"
+  },
+  {
+   "api_version": "2019-12-02",
+   "endpoint_prefix": "iotsitewise",
+   "probe": {
+    "method": "GET",
+    "op": "DescribeDefaultEncryptionConfiguration",
+    "uri": "/configuration/account/encryption"
+   },
+   "protocol": "rest-json",
+   "service_id": "IoTSiteWise",
+   "signing_name": "iotsitewise"
+  },
+  {
+   "api_version": "2018-09-06",
+   "endpoint_prefix": "iotthingsgraph",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeNamespace",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "IoTThingsGraph",
+   "signing_name": "iotthingsgraph",
+   "target_prefix": "IotThingsGraphFrontEndService"
+  },
+  {
+   "api_version": "2021-11-29",
+   "endpoint_prefix": "iottwinmaker",
+   "protocol": "rest-json",
+   "service_id": "IoTTwinMaker",
+   "signing_name": "iottwinmaker"
+  },
+  {
+   "api_version": "2020-09-18",
+   "endpoint_prefix": "api.iotdeviceadvisor",
+   "probe": {
+    "method": "GET",
+    "op": "ListSuiteDefinitions",
+    "uri": "/suiteDefinitions"
+   },
+   "protocol": "rest-json",
+   "service_id": "IotDeviceAdvisor",
+   "signing_name": "iotdeviceadvisor"
+  },
+  {
+   "api_version": "2014-11-01",
+   "endpoint_prefix": "kms",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListKeys",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "KMS",
+   "signing_name": "kms",
+   "target_prefix": "TrentService"
+  },
+  {
+   "api_version": "2018-11-14",
+   "endpoint_prefix": "kafka",
+   "probe": {
+    "method": "GET",
+    "op": "ListClusters",
+    "uri": "/v1/clusters"
+   },
+   "protocol": "rest-json",
+   "service_id": "Kafka",
+   "signing_name": "kafka"
+  },
+  {
+   "api_version": "2021-09-14",
+   "endpoint_prefix": "kafkaconnect",
+   "probe": {
+    "method": "GET",
+    "op": "ListConnectors",
+    "uri": "/v1/connectors"
+   },
+   "protocol": "rest-json",
+   "service_id": "KafkaConnect",
+   "signing_name": "kafkaconnect"
+  },
+  {
+   "api_version": "2022-10-19",
+   "endpoint_prefix": "kendra-ranking",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeRescoreExecutionPlan",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Kendra Ranking",
+   "signing_name": "kendra-ranking",
+   "target_prefix": "AWSKendraRerankingFrontendService"
+  },
+  {
+   "api_version": "2022-02-10",
+   "endpoint_prefix": "cassandra",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListKeyspaces",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Keyspaces",
+   "signing_name": "cassandra",
+   "target_prefix": "KeyspacesService"
+  },
+  {
+   "api_version": "2024-09-09",
+   "endpoint_prefix": "cassandra-streams",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListStreams",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "KeyspacesStreams",
+   "signing_name": "cassandra",
+   "target_prefix": "KeyspacesStreams"
+  },
+  {
+   "api_version": "2013-12-02",
+   "endpoint_prefix": "kinesis",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListStreams",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Kinesis",
+   "signing_name": "kinesis",
+   "target_prefix": "Kinesis_20131202"
+  },
+  {
+   "api_version": "2015-08-14",
+   "endpoint_prefix": "kinesisanalytics",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListApplications",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Kinesis Analytics",
+   "signing_name": "kinesisanalytics",
+   "target_prefix": "KinesisAnalytics_20150814"
+  },
+  {
+   "api_version": "2018-05-23",
+   "endpoint_prefix": "kinesisanalytics",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListApplications",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Kinesis Analytics V2",
+   "signing_name": "kinesisanalytics",
+   "target_prefix": "KinesisAnalytics_20180523"
+  },
+  {
+   "api_version": "2017-09-30",
+   "endpoint_prefix": "kinesisvideo",
+   "protocol": "rest-json",
+   "service_id": "Kinesis Video",
+   "signing_name": "kinesisvideo"
+  },
+  {
+   "api_version": "2017-09-30",
+   "endpoint_prefix": "kinesisvideo",
+   "protocol": "rest-json",
+   "service_id": "Kinesis Video Archived Media",
+   "signing_name": "kinesisvideo"
+  },
+  {
+   "api_version": "2017-09-30",
+   "endpoint_prefix": "kinesisvideo",
+   "protocol": "rest-json",
+   "service_id": "Kinesis Video Media",
+   "signing_name": "kinesisvideo"
+  },
+  {
+   "api_version": "2019-12-04",
+   "endpoint_prefix": "kinesisvideo",
+   "protocol": "rest-json",
+   "service_id": "Kinesis Video Signaling",
+   "signing_name": "kinesisvideo"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "kinesisvideo",
+   "protocol": "rest-json",
+   "service_id": "Kinesis Video WebRTC Storage",
+   "signing_name": "kinesisvideo"
+  },
+  {
+   "api_version": "2017-03-31",
+   "endpoint_prefix": "lakeformation",
+   "protocol": "rest-json",
+   "service_id": "LakeFormation",
+   "signing_name": "lakeformation"
+  },
+  {
+   "api_version": "2015-03-31",
+   "endpoint_prefix": "lambda",
+   "probe": {
+    "method": "GET",
+    "op": "ListFunctions",
+    "uri": "/2015-03-31/functions"
+   },
+   "protocol": "rest-json",
+   "service_id": "Lambda",
+   "signing_name": "lambda"
+  },
+  {
+   "api_version": "2026-04-30",
+   "endpoint_prefix": "lambda",
+   "probe": {
+    "method": "GET",
+    "op": "ListNetworkConnectors",
+    "uri": "/2026-04-04/network-connectors"
+   },
+   "protocol": "rest-json",
+   "service_id": "Lambda Core",
+   "signing_name": "lambda"
+  },
+  {
+   "api_version": "2025-09-09",
+   "endpoint_prefix": "lambda",
+   "probe": {
+    "method": "GET",
+    "op": "ListMicrovms",
+    "uri": "/2025-09-09/microvms"
+   },
+   "protocol": "rest-json",
+   "service_id": "Lambda Microvms",
+   "signing_name": "lambda"
+  },
+  {
+   "api_version": "2025-03-07",
+   "endpoint_prefix": "lambda",
+   "probe": {
+    "method": "GET",
+    "op": "GetWebAccountSettings",
+    "uri": "/2025-03-07/web-account-settings"
+   },
+   "protocol": "rest-json",
+   "service_id": "Lambda Web",
+   "signing_name": "lambda"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "launchwizard",
+   "protocol": "rest-json",
+   "service_id": "Launch Wizard",
+   "signing_name": "launchwizard"
+  },
+  {
+   "api_version": "2017-04-19",
+   "endpoint_prefix": "models.lex",
+   "probe": {
+    "method": "GET",
+    "op": "GetBots",
+    "uri": "/bots/"
+   },
+   "protocol": "rest-json",
+   "service_id": "Lex Model Building Service",
+   "signing_name": "lex"
+  },
+  {
+   "api_version": "2020-08-07",
+   "endpoint_prefix": "models-v2-lex",
+   "protocol": "rest-json",
+   "service_id": "Lex Models V2",
+   "signing_name": "lex"
+  },
+  {
+   "api_version": "2016-11-28",
+   "endpoint_prefix": "runtime.lex",
+   "protocol": "rest-json",
+   "service_id": "Lex Runtime Service",
+   "signing_name": "lex"
+  },
+  {
+   "api_version": "2020-08-07",
+   "endpoint_prefix": "runtime-v2-lex",
+   "protocol": "rest-json",
+   "service_id": "Lex Runtime V2",
+   "signing_name": "lex"
+  },
+  {
+   "api_version": "2018-08-01",
+   "endpoint_prefix": "license-manager",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListLicenseConfigurations",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "License Manager",
+   "signing_name": "license-manager",
+   "target_prefix": "AWSLicenseManager"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "license-manager-linux-subscriptions",
+   "protocol": "rest-json",
+   "service_id": "License Manager Linux Subscriptions",
+   "signing_name": "license-manager-linux-subscriptions"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "license-manager-user-subscriptions",
+   "protocol": "rest-json",
+   "service_id": "License Manager User Subscriptions",
+   "signing_name": "license-manager-user-subscriptions"
+  },
+  {
+   "api_version": "2016-11-28",
+   "endpoint_prefix": "lightsail",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "GetInstances",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Lightsail",
+   "signing_name": "lightsail",
+   "target_prefix": "Lightsail_20161128"
+  },
+  {
+   "api_version": "2020-11-19",
+   "endpoint_prefix": "geo",
+   "protocol": "rest-json",
+   "service_id": "Location",
+   "signing_name": "geo"
+  },
+  {
+   "api_version": "2020-12-15",
+   "endpoint_prefix": "lookoutequipment",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeDataIngestionJob",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "LookoutEquipment",
+   "signing_name": "lookoutequipment",
+   "target_prefix": "AWSLookoutEquipmentFrontendService"
+  },
+  {
+   "api_version": "2022-07-26",
+   "endpoint_prefix": "mpa",
+   "protocol": "rest-json",
+   "service_id": "MPA",
+   "signing_name": "mpa"
+  },
+  {
+   "api_version": "2017-01-17",
+   "endpoint_prefix": "mturk-requester",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListAssignmentsForHIT",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "MTurk",
+   "signing_name": "mturk-requester",
+   "target_prefix": "MTurkRequesterServiceV20170117"
+  },
+  {
+   "api_version": "2020-07-01",
+   "endpoint_prefix": "airflow",
+   "probe": {
+    "method": "GET",
+    "op": "ListEnvironments",
+    "uri": "/environments"
+   },
+   "protocol": "rest-json",
+   "service_id": "MWAA",
+   "signing_name": "airflow"
+  },
+  {
+   "api_version": "2024-07-26",
+   "endpoint_prefix": "airflow-serverless",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListWorkflows",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "MWAA Serverless",
+   "signing_name": "airflow-serverless",
+   "target_prefix": "AmazonMWAAServerless"
+  },
+  {
+   "api_version": "2014-12-12",
+   "endpoint_prefix": "machinelearning",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeBatchPredictions",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Machine Learning",
+   "signing_name": "machinelearning",
+   "target_prefix": "AmazonML_20141212"
+  },
+  {
+   "api_version": "2020-01-01",
+   "endpoint_prefix": "macie2",
+   "probe": {
+    "method": "GET",
+    "op": "DescribeOrganizationConfiguration",
+    "uri": "/admin/configuration"
+   },
+   "protocol": "rest-json",
+   "service_id": "Macie2",
+   "signing_name": "macie2"
+  },
+  {
+   "api_version": "2023-10-17",
+   "endpoint_prefix": "mail-manager",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListIngressPoints",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "MailManager",
+   "signing_name": "ses",
+   "target_prefix": "MailManagerSvc"
+  },
+  {
+   "api_version": "2018-09-24",
+   "endpoint_prefix": "managedblockchain",
+   "probe": {
+    "method": "GET",
+    "op": "ListAccessors",
+    "uri": "/accessors"
+   },
+   "protocol": "rest-json",
+   "service_id": "ManagedBlockchain",
+   "signing_name": "managedblockchain"
+  },
+  {
+   "api_version": "2023-05-04",
+   "endpoint_prefix": "managedblockchain-query",
+   "protocol": "rest-json",
+   "service_id": "ManagedBlockchain Query",
+   "signing_name": "managedblockchain-query"
+  },
+  {
+   "api_version": "2020-03-01",
+   "endpoint_prefix": "agreement-marketplace",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeAgreement",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Marketplace Agreement",
+   "signing_name": "aws-marketplace",
+   "target_prefix": "AWSMPCommerceService_v20200301"
+  },
+  {
+   "api_version": "2018-09-17",
+   "endpoint_prefix": "catalog.marketplace",
+   "probe": {
+    "method": "GET",
+    "op": "DescribeChangeSet",
+    "uri": "/DescribeChangeSet"
+   },
+   "protocol": "rest-json",
+   "service_id": "Marketplace Catalog",
+   "signing_name": "aws-marketplace"
+  },
+  {
+   "api_version": "2015-07-01",
+   "endpoint_prefix": "marketplacecommerceanalytics",
+   "json_version": "1.1",
+   "protocol": "json",
+   "service_id": "Marketplace Commerce Analytics",
+   "signing_name": "marketplacecommerceanalytics",
+   "target_prefix": "MarketplaceCommerceAnalytics20150701"
+  },
+  {
+   "api_version": "2023-01-25",
+   "endpoint_prefix": "deployment-marketplace",
+   "protocol": "rest-json",
+   "service_id": "Marketplace Deployment",
+   "signing_name": "aws-marketplace"
+  },
+  {
+   "api_version": "2026-02-05",
+   "endpoint_prefix": "discovery-marketplace",
+   "protocol": "rest-json",
+   "service_id": "Marketplace Discovery",
+   "signing_name": "aws-marketplace"
+  },
+  {
+   "api_version": "2017-01-11",
+   "endpoint_prefix": "entitlement.marketplace",
+   "json_version": "1.1",
+   "protocol": "json",
+   "service_id": "Marketplace Entitlement Service",
+   "signing_name": "aws-marketplace",
+   "target_prefix": "AWSMPEntitlementService"
+  },
+  {
+   "api_version": "2016-01-14",
+   "endpoint_prefix": "metering.marketplace",
+   "json_version": "1.1",
+   "protocol": "json",
+   "service_id": "Marketplace Metering",
+   "signing_name": "aws-marketplace",
+   "target_prefix": "AWSMPMeteringService"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "reporting-marketplace",
+   "protocol": "rest-json",
+   "service_id": "Marketplace Reporting",
+   "signing_name": "aws-marketplace"
+  },
+  {
+   "api_version": "2018-11-14",
+   "endpoint_prefix": "mediaconnect",
+   "probe": {
+    "method": "GET",
+    "op": "ListBridges",
+    "uri": "/v1/bridges"
+   },
+   "protocol": "rest-json",
+   "service_id": "MediaConnect",
+   "signing_name": "mediaconnect"
+  },
+  {
+   "api_version": "2017-08-29",
+   "endpoint_prefix": "mediaconvert",
+   "probe": {
+    "method": "GET",
+    "op": "ListJobs",
+    "uri": "/2017-08-29/jobs"
+   },
+   "protocol": "rest-json",
+   "service_id": "MediaConvert",
+   "signing_name": "mediaconvert"
+  },
+  {
+   "api_version": "2017-10-14",
+   "endpoint_prefix": "medialive",
+   "probe": {
+    "method": "GET",
+    "op": "ListOfferings",
+    "uri": "/prod/offerings"
+   },
+   "protocol": "rest-json",
+   "service_id": "MediaLive",
+   "signing_name": "medialive"
+  },
+  {
+   "api_version": "2017-10-12",
+   "endpoint_prefix": "mediapackage",
+   "probe": {
+    "method": "GET",
+    "op": "ListChannels",
+    "uri": "/channels"
+   },
+   "protocol": "rest-json",
+   "service_id": "MediaPackage",
+   "signing_name": "mediapackage"
+  },
+  {
+   "api_version": "2018-11-07",
+   "endpoint_prefix": "mediapackage-vod",
+   "probe": {
+    "method": "GET",
+    "op": "ListPackagingGroups",
+    "uri": "/packaging_groups"
+   },
+   "protocol": "rest-json",
+   "service_id": "MediaPackage Vod",
+   "signing_name": "mediapackage-vod"
+  },
+  {
+   "api_version": "2022-12-25",
+   "endpoint_prefix": "mediapackagev2",
+   "probe": {
+    "method": "GET",
+    "op": "ListChannelGroups",
+    "uri": "/channelGroup"
+   },
+   "protocol": "rest-json",
+   "service_id": "MediaPackageV2",
+   "signing_name": "mediapackagev2"
+  },
+  {
+   "api_version": "2017-09-01",
+   "endpoint_prefix": "mediastore",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListContainers",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "MediaStore",
+   "signing_name": "mediastore",
+   "target_prefix": "MediaStore_20170901"
+  },
+  {
+   "api_version": "2017-09-01",
+   "endpoint_prefix": "data.mediastore",
+   "probe": {
+    "method": "GET",
+    "op": "ListItems",
+    "uri": "/"
+   },
+   "protocol": "rest-json",
+   "service_id": "MediaStore Data",
+   "signing_name": "mediastore"
+  },
+  {
+   "api_version": "2018-04-23",
+   "endpoint_prefix": "api.mediatailor",
+   "probe": {
+    "method": "GET",
+    "op": "ListAlerts",
+    "uri": "/alerts"
+   },
+   "protocol": "rest-json",
+   "service_id": "MediaTailor",
+   "signing_name": "mediatailor"
+  },
+  {
+   "api_version": "2023-07-19",
+   "endpoint_prefix": "medical-imaging",
+   "probe": {
+    "method": "GET",
+    "op": "ListDatastores",
+    "uri": "/datastore"
+   },
+   "protocol": "rest-json",
+   "service_id": "Medical Imaging",
+   "signing_name": "medical-imaging"
+  },
+  {
+   "api_version": "2021-01-01",
+   "endpoint_prefix": "memory-db",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeClusters",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "MemoryDB",
+   "signing_name": "memorydb",
+   "target_prefix": "AmazonMemoryDB"
+  },
+  {
+   "api_version": "2017-05-31",
+   "endpoint_prefix": "mgh",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeApplicationState",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Migration Hub",
+   "signing_name": "mgh",
+   "target_prefix": "AWSMigrationHub"
+  },
+  {
+   "api_version": "2021-10-26",
+   "endpoint_prefix": "refactor-spaces",
+   "probe": {
+    "method": "GET",
+    "op": "ListEnvironments",
+    "uri": "/environments"
+   },
+   "protocol": "rest-json",
+   "service_id": "Migration Hub Refactor Spaces",
+   "signing_name": "refactor-spaces"
+  },
+  {
+   "api_version": "2019-06-30",
+   "endpoint_prefix": "migrationhub-config",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeHomeRegionControls",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "MigrationHub Config",
+   "signing_name": "mgh",
+   "target_prefix": "AWSMigrationHubMultiAccountService"
+  },
+  {
+   "api_version": "2021-08-28",
+   "endpoint_prefix": "migrationhub-orchestrator",
+   "probe": {
+    "method": "GET",
+    "op": "ListPlugins",
+    "uri": "/plugins"
+   },
+   "protocol": "rest-json",
+   "service_id": "MigrationHubOrchestrator",
+   "signing_name": "migrationhub-orchestrator"
+  },
+  {
+   "api_version": "2020-02-19",
+   "endpoint_prefix": "migrationhub-strategy",
+   "probe": {
+    "method": "GET",
+    "op": "ListCollectors",
+    "uri": "/list-collectors"
+   },
+   "protocol": "rest-json",
+   "service_id": "MigrationHubStrategy",
+   "signing_name": "migrationhub-strategy"
+  },
+  {
+   "api_version": "2014-10-31",
+   "endpoint_prefix": "rds",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeDBClusters",
+    "uri": "/"
+   },
+   "protocol": "query",
+   "service_id": "Neptune",
+   "signing_name": "rds"
+  },
+  {
+   "api_version": "2023-11-29",
+   "endpoint_prefix": "neptune-graph",
+   "probe": {
+    "method": "GET",
+    "op": "ListGraphs",
+    "uri": "/graphs"
+   },
+   "protocol": "rest-json",
+   "service_id": "Neptune Graph",
+   "signing_name": "neptune-graph"
+  },
+  {
+   "api_version": "2020-11-12",
+   "endpoint_prefix": "network-firewall",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListFirewalls",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Network Firewall",
+   "signing_name": "network-firewall",
+   "target_prefix": "NetworkFirewall_20201112"
+  },
+  {
+   "api_version": "2025-10-30",
+   "endpoint_prefix": "network-security-manager",
+   "probe": {
+    "method": "GET",
+    "op": "ListScopes",
+    "uri": "/scopes"
+   },
+   "protocol": "rest-json",
+   "service_id": "Network Security Manager",
+   "signing_name": "network-security-manager"
+  },
+  {
+   "api_version": "2023-04-19",
+   "endpoint_prefix": "networkflowmonitor",
+   "probe": {
+    "method": "GET",
+    "op": "ListMonitors",
+    "uri": "/monitors"
+   },
+   "protocol": "rest-json",
+   "service_id": "NetworkFlowMonitor",
+   "signing_name": "networkflowmonitor"
+  },
+  {
+   "api_version": "2019-07-05",
+   "endpoint_prefix": "networkmanager",
+   "probe": {
+    "method": "GET",
+    "op": "ListCoreNetworks",
+    "uri": "/core-networks"
+   },
+   "protocol": "rest-json",
+   "service_id": "NetworkManager",
+   "signing_name": "networkmanager"
+  },
+  {
+   "api_version": "2023-08-01",
+   "endpoint_prefix": "networkmonitor",
+   "probe": {
+    "method": "GET",
+    "op": "ListMonitors",
+    "uri": "/monitors"
+   },
+   "protocol": "rest-json",
+   "service_id": "NetworkMonitor",
+   "signing_name": "networkmonitor"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "notifications",
+   "probe": {
+    "method": "GET",
+    "op": "ListChannels",
+    "uri": "/channels"
+   },
+   "protocol": "rest-json",
+   "service_id": "Notifications",
+   "signing_name": "notifications"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "notifications-contacts",
+   "probe": {
+    "method": "GET",
+    "op": "ListEmailContacts",
+    "uri": "/emailcontacts"
+   },
+   "protocol": "rest-json",
+   "service_id": "NotificationsContacts",
+   "signing_name": "notifications-contacts"
+  },
+  {
+   "api_version": "2025-08-22",
+   "endpoint_prefix": "nova-act",
+   "protocol": "rest-json",
+   "service_id": "Nova Act",
+   "signing_name": "nova-act"
+  },
+  {
+   "api_version": "2022-06-10",
+   "endpoint_prefix": "oam",
+   "protocol": "rest-json",
+   "service_id": "OAM",
+   "signing_name": "oam"
+  },
+  {
+   "api_version": "2022-01-01",
+   "endpoint_prefix": "osis",
+   "probe": {
+    "method": "GET",
+    "op": "ListPipelines",
+    "uri": "/2022-01-01/osis/listPipelines"
+   },
+   "protocol": "rest-json",
+   "service_id": "OSIS",
+   "signing_name": "osis"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "observabilityadmin",
+   "protocol": "rest-json",
+   "service_id": "ObservabilityAdmin",
+   "signing_name": "observabilityadmin"
+  },
+  {
+   "api_version": "2022-11-28",
+   "endpoint_prefix": "omics",
+   "probe": {
+    "method": "GET",
+    "op": "ListBatch",
+    "uri": "/runBatch"
+   },
+   "protocol": "rest-json",
+   "service_id": "Omics",
+   "signing_name": "omics"
+  },
+  {
+   "api_version": "2021-01-01",
+   "endpoint_prefix": "es",
+   "probe": {
+    "method": "GET",
+    "op": "ListDomainNames",
+    "uri": "/2021-01-01/domain"
+   },
+   "protocol": "rest-json",
+   "service_id": "OpenSearch",
+   "signing_name": "es"
+  },
+  {
+   "api_version": "2021-11-01",
+   "endpoint_prefix": "aoss",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListCollections",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "OpenSearchServerless",
+   "signing_name": "aoss",
+   "target_prefix": "OpenSearchServerless"
+  },
+  {
+   "api_version": "2016-11-28",
+   "endpoint_prefix": "organizations",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListAccounts",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Organizations",
+   "signing_name": "organizations",
+   "target_prefix": "AWSOrganizationsV20161128"
+  },
+  {
+   "api_version": "2019-12-03",
+   "endpoint_prefix": "outposts",
+   "probe": {
+    "method": "GET",
+    "op": "ListSites",
+    "uri": "/sites"
+   },
+   "protocol": "rest-json",
+   "service_id": "Outposts",
+   "signing_name": "outposts"
+  },
+  {
+   "api_version": "2023-02-10",
+   "endpoint_prefix": "pcs",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListClusters",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "PCS",
+   "signing_name": "pcs",
+   "target_prefix": "AWSParallelComputingService"
+  },
+  {
+   "api_version": "2018-02-27",
+   "endpoint_prefix": "pi",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeDimensionKeys",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "PI",
+   "signing_name": "pi",
+   "target_prefix": "PerformanceInsightsv20180227"
+  },
+  {
+   "api_version": "2025-04-04",
+   "endpoint_prefix": "partnercentral-account",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListConnectionInvitations",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "PartnerCentral Account",
+   "signing_name": "partnercentral-account",
+   "target_prefix": "PartnerCentralAccount"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "partnercentral-benefits",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListBenefitAllocations",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "PartnerCentral Benefits",
+   "signing_name": "partnercentral-benefits",
+   "target_prefix": "PartnerCentralBenefitsService"
+  },
+  {
+   "api_version": "2024-03-18",
+   "endpoint_prefix": "partnercentral-channel",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListChannelHandshakes",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "PartnerCentral Channel",
+   "signing_name": "partnercentral-channel",
+   "target_prefix": "PartnerCentralChannel"
+  },
+  {
+   "api_version": "2022-07-26",
+   "endpoint_prefix": "partnercentral-selling",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListEngagementByAcceptingInvitationTasks",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "PartnerCentral Selling",
+   "signing_name": "partnercentral-selling",
+   "target_prefix": "AWSPartnerCentralSelling"
+  },
+  {
+   "api_version": "2021-09-14",
+   "endpoint_prefix": "controlplane.payment-cryptography",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListAliases",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Payment Cryptography",
+   "signing_name": "payment-cryptography",
+   "target_prefix": "PaymentCryptographyControlPlane"
+  },
+  {
+   "api_version": "2022-02-03",
+   "endpoint_prefix": "dataplane.payment-cryptography",
+   "protocol": "rest-json",
+   "service_id": "Payment Cryptography Data",
+   "signing_name": "payment-cryptography"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "pca-connector-ad",
+   "probe": {
+    "method": "GET",
+    "op": "ListConnectors",
+    "uri": "/connectors"
+   },
+   "protocol": "rest-json",
+   "service_id": "Pca Connector Ad",
+   "signing_name": "pca-connector-ad"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "pca-connector-scep",
+   "probe": {
+    "method": "GET",
+    "op": "ListChallengeMetadata",
+    "uri": "/challengeMetadata"
+   },
+   "protocol": "rest-json",
+   "service_id": "Pca Connector Scep",
+   "signing_name": "pca-connector-scep"
+  },
+  {
+   "api_version": "2018-05-22",
+   "endpoint_prefix": "personalize",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeAlgorithm",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Personalize",
+   "signing_name": "personalize",
+   "target_prefix": "AmazonPersonalize"
+  },
+  {
+   "api_version": "2018-03-22",
+   "endpoint_prefix": "personalize-events",
+   "protocol": "rest-json",
+   "service_id": "Personalize Events",
+   "signing_name": "personalize"
+  },
+  {
+   "api_version": "2018-05-22",
+   "endpoint_prefix": "personalize-runtime",
+   "protocol": "rest-json",
+   "service_id": "Personalize Runtime",
+   "signing_name": "personalize"
+  },
+  {
+   "api_version": "2016-12-01",
+   "endpoint_prefix": "pinpoint",
+   "probe": {
+    "method": "GET",
+    "op": "GetApps",
+    "uri": "/v1/apps"
+   },
+   "protocol": "rest-json",
+   "service_id": "Pinpoint",
+   "signing_name": "mobiletargeting"
+  },
+  {
+   "api_version": "2018-07-26",
+   "endpoint_prefix": "email",
+   "probe": {
+    "method": "GET",
+    "op": "ListConfigurationSets",
+    "uri": "/v1/email/configuration-sets"
+   },
+   "protocol": "rest-json",
+   "service_id": "Pinpoint Email",
+   "signing_name": "ses"
+  },
+  {
+   "api_version": "2018-09-05",
+   "endpoint_prefix": "sms-voice.pinpoint",
+   "probe": {
+    "method": "GET",
+    "op": "ListConfigurationSets",
+    "uri": "/v1/sms-voice/configuration-sets"
+   },
+   "protocol": "rest-json",
+   "service_id": "Pinpoint SMS Voice",
+   "signing_name": "sms-voice"
+  },
+  {
+   "api_version": "2018-09-05",
+   "endpoint_prefix": "sms-voice.pinpoint",
+   "probe": {
+    "method": "GET",
+    "op": "ListConfigurationSets",
+    "uri": "/v1/sms-voice/configuration-sets"
+   },
+   "protocol": "rest-json",
+   "service_id": "Pinpoint SMS Voice",
+   "signing_name": "sms-voice"
+  },
+  {
+   "api_version": "2022-03-31",
+   "endpoint_prefix": "sms-voice",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeAccountAttributes",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Pinpoint SMS Voice V2",
+   "signing_name": "sms-voice",
+   "target_prefix": "PinpointSMSVoiceV2"
+  },
+  {
+   "api_version": "2015-10-07",
+   "endpoint_prefix": "pipes",
+   "probe": {
+    "method": "GET",
+    "op": "ListPipes",
+    "uri": "/v1/pipes"
+   },
+   "protocol": "rest-json",
+   "service_id": "Pipes",
+   "signing_name": "pipes"
+  },
+  {
+   "api_version": "2016-06-10",
+   "endpoint_prefix": "polly",
+   "probe": {
+    "method": "GET",
+    "op": "ListLexicons",
+    "uri": "/v1/lexicons"
+   },
+   "protocol": "rest-json",
+   "service_id": "Polly",
+   "signing_name": "polly"
+  },
+  {
+   "api_version": "2017-10-15",
+   "endpoint_prefix": "api.pricing",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeServices",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Pricing",
+   "signing_name": "pricing",
+   "target_prefix": "AWSPriceListService"
+  },
+  {
+   "api_version": "2025-08-05",
+   "endpoint_prefix": "pricingplanmanager",
+   "protocol": "rest-json",
+   "service_id": "Pricing Plan Manager",
+   "signing_name": "pricingplanmanager"
+  },
+  {
+   "api_version": "2020-07-20",
+   "endpoint_prefix": "proton",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListComponentOutputs",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Proton",
+   "signing_name": "proton",
+   "target_prefix": "AwsProton20200720"
+  },
+  {
+   "api_version": "2023-11-27",
+   "endpoint_prefix": "data.qapps",
+   "probe": {
+    "method": "GET",
+    "op": "DescribeQAppPermissions",
+    "uri": "/apps.describeQAppPermissions"
+   },
+   "protocol": "rest-json",
+   "service_id": "QApps",
+   "signing_name": "qapps"
+  },
+  {
+   "api_version": "2023-11-27",
+   "endpoint_prefix": "qbusiness",
+   "probe": {
+    "method": "GET",
+    "op": "ListApplications",
+    "uri": "/applications"
+   },
+   "protocol": "rest-json",
+   "service_id": "QBusiness",
+   "signing_name": "qbusiness"
+  },
+  {
+   "api_version": "2020-10-19",
+   "endpoint_prefix": "wisdom",
+   "probe": {
+    "method": "GET",
+    "op": "ListAssistants",
+    "uri": "/assistants"
+   },
+   "protocol": "rest-json",
+   "service_id": "QConnect",
+   "signing_name": "wisdom"
+  },
+  {
+   "api_version": "2018-04-01",
+   "endpoint_prefix": "quicksight",
+   "probe": {
+    "method": "GET",
+    "op": "ListApprovalPolicies",
+    "uri": "/governance/approvalworkflows/policies"
+   },
+   "protocol": "rest-json",
+   "service_id": "QuickSight",
+   "signing_name": "quicksight"
+  },
+  {
+   "api_version": "2018-01-04",
+   "endpoint_prefix": "ram",
+   "protocol": "rest-json",
+   "service_id": "RAM",
+   "signing_name": "ram"
+  },
+  {
+   "api_version": "2014-10-31",
+   "endpoint_prefix": "rds",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeDBInstances",
+    "uri": "/"
+   },
+   "protocol": "query",
+   "service_id": "RDS",
+   "signing_name": "rds"
+  },
+  {
+   "api_version": "2018-08-01",
+   "endpoint_prefix": "rds-data",
+   "protocol": "rest-json",
+   "service_id": "RDS Data",
+   "signing_name": "rds-data"
+  },
+  {
+   "api_version": "2023-05-15",
+   "endpoint_prefix": "rtbfabric",
+   "probe": {
+    "method": "GET",
+    "op": "ListRequesterGateways",
+    "uri": "/requester-gateways"
+   },
+   "protocol": "rest-json",
+   "service_id": "RTBFabric",
+   "signing_name": "rtbfabric"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "rum",
+   "protocol": "rest-json",
+   "service_id": "RUM",
+   "signing_name": "rum"
+  },
+  {
+   "api_version": "2012-12-01",
+   "endpoint_prefix": "redshift",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeClusters",
+    "uri": "/"
+   },
+   "protocol": "query",
+   "service_id": "Redshift",
+   "signing_name": "redshift"
+  },
+  {
+   "api_version": "2019-12-20",
+   "endpoint_prefix": "redshift-data",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListDatabases",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Redshift Data",
+   "signing_name": "redshift-data",
+   "target_prefix": "RedshiftData"
+  },
+  {
+   "api_version": "2021-04-21",
+   "endpoint_prefix": "redshift-serverless",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListNamespaces",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Redshift Serverless",
+   "signing_name": "redshift-serverless",
+   "target_prefix": "RedshiftServerless"
+  },
+  {
+   "api_version": "2016-06-27",
+   "endpoint_prefix": "rekognition",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListCollections",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Rekognition",
+   "signing_name": "rekognition",
+   "target_prefix": "RekognitionService"
+  },
+  {
+   "api_version": "2022-07-28",
+   "endpoint_prefix": "resource-explorer-2",
+   "protocol": "rest-json",
+   "service_id": "Resource Explorer 2",
+   "signing_name": "resource-explorer-2"
+  },
+  {
+   "api_version": "2017-11-27",
+   "endpoint_prefix": "resource-groups",
+   "protocol": "rest-json",
+   "service_id": "Resource Groups",
+   "signing_name": "resource-groups"
+  },
+  {
+   "api_version": "2017-01-26",
+   "endpoint_prefix": "tagging",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "GetResources",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Resource Groups Tagging API",
+   "signing_name": "tagging",
+   "target_prefix": "ResourceGroupsTaggingAPI_20170126"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "rolesanywhere",
+   "probe": {
+    "method": "GET",
+    "op": "ListProfiles",
+    "uri": "/profiles"
+   },
+   "protocol": "rest-json",
+   "service_id": "RolesAnywhere",
+   "signing_name": "rolesanywhere"
+  },
+  {
+   "api_version": "2013-04-01",
+   "endpoint_prefix": "route53",
+   "probe": {
+    "method": "GET",
+    "op": "ListHostedZones",
+    "uri": "/2013-04-01/hostedzone"
+   },
+   "protocol": "rest-xml",
+   "service_id": "Route 53",
+   "signing_name": "route53"
+  },
+  {
+   "api_version": "2014-05-15",
+   "endpoint_prefix": "route53domains",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListDomains",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Route 53 Domains",
+   "signing_name": "route53domains",
+   "target_prefix": "Route53Domains_v20140515"
+  },
+  {
+   "api_version": "2019-12-02",
+   "endpoint_prefix": "route53-recovery-cluster",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListRoutingControls",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Route53 Recovery Cluster",
+   "signing_name": "route53-recovery-cluster",
+   "target_prefix": "ToggleCustomerAPI"
+  },
+  {
+   "api_version": "2020-11-02",
+   "endpoint_prefix": "route53-recovery-control-config",
+   "probe": {
+    "method": "GET",
+    "op": "ListClusters",
+    "uri": "/cluster"
+   },
+   "protocol": "rest-json",
+   "service_id": "Route53 Recovery Control Config",
+   "signing_name": "route53-recovery-control-config"
+  },
+  {
+   "api_version": "2019-12-02",
+   "endpoint_prefix": "route53-recovery-readiness",
+   "probe": {
+    "method": "GET",
+    "op": "ListCells",
+    "uri": "/cells"
+   },
+   "protocol": "rest-json",
+   "service_id": "Route53 Recovery Readiness",
+   "signing_name": "route53-recovery-readiness"
+  },
+  {
+   "api_version": "2022-09-27",
+   "endpoint_prefix": "route53globalresolver",
+   "probe": {
+    "method": "GET",
+    "op": "ListAccessSources",
+    "uri": "/access-sources"
+   },
+   "protocol": "rest-json",
+   "service_id": "Route53GlobalResolver",
+   "signing_name": "route53globalresolver"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "route53profiles",
+   "probe": {
+    "method": "GET",
+    "op": "ListProfileAssociations",
+    "uri": "/profileassociations"
+   },
+   "protocol": "rest-json",
+   "service_id": "Route53Profiles",
+   "signing_name": "route53profiles"
+  },
+  {
+   "api_version": "2018-04-01",
+   "endpoint_prefix": "route53resolver",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListFirewallDomainLists",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Route53Resolver",
+   "signing_name": "route53resolver",
+   "target_prefix": "Route53Resolver"
+  },
+  {
+   "api_version": "2006-03-01",
+   "endpoint_prefix": "s3",
+   "probe": {
+    "method": "GET",
+    "op": "ListBuckets",
+    "uri": "/"
+   },
+   "protocol": "rest-xml",
+   "service_id": "S3",
+   "signing_name": "s3"
+  },
+  {
+   "api_version": "2018-08-20",
+   "endpoint_prefix": "s3-control",
+   "probe": {
+    "method": "GET",
+    "op": "ListJobs",
+    "uri": "/v20180820/jobs"
+   },
+   "protocol": "rest-xml",
+   "service_id": "S3 Control",
+   "signing_name": "s3"
+  },
+  {
+   "api_version": "2025-05-05",
+   "endpoint_prefix": "s3files",
+   "probe": {
+    "method": "GET",
+    "op": "ListFileSystems",
+    "uri": "/file-systems"
+   },
+   "protocol": "rest-json",
+   "service_id": "S3Files",
+   "signing_name": "s3files"
+  },
+  {
+   "api_version": "2017-07-25",
+   "endpoint_prefix": "s3-outposts",
+   "probe": {
+    "method": "GET",
+    "op": "ListEndpoints",
+    "uri": "/S3Outposts/ListEndpoints"
+   },
+   "protocol": "rest-json",
+   "service_id": "S3Outposts",
+   "signing_name": "s3-outposts"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "s3tables",
+   "probe": {
+    "method": "GET",
+    "op": "ListTableBuckets",
+    "uri": "/buckets"
+   },
+   "protocol": "rest-json",
+   "service_id": "S3Tables",
+   "signing_name": "s3tables"
+  },
+  {
+   "api_version": "2025-07-15",
+   "endpoint_prefix": "s3vectors",
+   "protocol": "rest-json",
+   "service_id": "S3Vectors",
+   "signing_name": "s3vectors"
+  },
+  {
+   "api_version": "2010-12-01",
+   "endpoint_prefix": "email",
+   "probe": {
+    "method": "POST",
+    "op": "ListIdentities",
+    "uri": "/"
+   },
+   "protocol": "query",
+   "service_id": "SES",
+   "signing_name": "ses"
+  },
+  {
+   "api_version": "2019-09-27",
+   "endpoint_prefix": "email",
+   "probe": {
+    "method": "GET",
+    "op": "ListContactLists",
+    "uri": "/v2/email/contact-lists"
+   },
+   "protocol": "rest-json",
+   "service_id": "SESv2",
+   "signing_name": "ses"
+  },
+  {
+   "api_version": "2016-11-23",
+   "endpoint_prefix": "states",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListActivities",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "SFN",
+   "signing_name": "states",
+   "target_prefix": "AWSStepFunctions"
+  },
+  {
+   "api_version": "2010-03-31",
+   "endpoint_prefix": "sns",
+   "probe": {
+    "method": "POST",
+    "op": "ListSubscriptions",
+    "uri": "/"
+   },
+   "protocol": "query",
+   "service_id": "SNS",
+   "signing_name": "sns"
+  },
+  {
+   "api_version": "2012-11-05",
+   "endpoint_prefix": "sqs",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListQueues",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "SQS",
+   "signing_name": "sqs",
+   "target_prefix": "AmazonSQS"
+  },
+  {
+   "api_version": "2014-11-06",
+   "endpoint_prefix": "ssm",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListDocuments",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "SSM",
+   "signing_name": "ssm",
+   "target_prefix": "AmazonSSM"
+  },
+  {
+   "api_version": "2021-05-03",
+   "endpoint_prefix": "ssm-contacts",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListContacts",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "SSM Contacts",
+   "signing_name": "ssm-contacts",
+   "target_prefix": "SSMContacts"
+  },
+  {
+   "api_version": "2021-05-01",
+   "endpoint_prefix": "ssm-guiconnect",
+   "protocol": "rest-json",
+   "service_id": "SSM GuiConnect",
+   "signing_name": "ssm-guiconnect"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "ssm-incidents",
+   "protocol": "rest-json",
+   "service_id": "SSM Incidents",
+   "signing_name": "ssm-incidents"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "ssm-quicksetup",
+   "probe": {
+    "method": "GET",
+    "op": "ListQuickSetupTypes",
+    "uri": "/listQuickSetupTypes"
+   },
+   "protocol": "rest-json",
+   "service_id": "SSM QuickSetup",
+   "signing_name": "ssm-quicksetup"
+  },
+  {
+   "api_version": "2019-06-10",
+   "endpoint_prefix": "portal.sso",
+   "probe": {
+    "method": "GET",
+    "op": "ListAccounts",
+    "uri": "/assignment/accounts"
+   },
+   "protocol": "rest-json",
+   "service_id": "SSO",
+   "signing_name": "awsssoportal"
+  },
+  {
+   "api_version": "2020-07-20",
+   "endpoint_prefix": "sso",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListInstances",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "SSO Admin",
+   "signing_name": "sso",
+   "target_prefix": "SWBExternalService"
+  },
+  {
+   "api_version": "2019-06-10",
+   "endpoint_prefix": "oidc",
+   "protocol": "rest-json",
+   "service_id": "SSO OIDC",
+   "signing_name": "sso-oauth"
+  },
+  {
+   "api_version": "2011-06-15",
+   "endpoint_prefix": "sts",
+   "probe": {
+    "method": "POST",
+    "op": "GetCallerIdentity",
+    "uri": "/"
+   },
+   "protocol": "query",
+   "service_id": "STS",
+   "signing_name": "sts"
+  },
+  {
+   "api_version": "2012-01-25",
+   "endpoint_prefix": "swf",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListDomains",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "SWF",
+   "signing_name": "swf",
+   "target_prefix": "SimpleWorkflowService"
+  },
+  {
+   "api_version": "2017-07-24",
+   "endpoint_prefix": "api.sagemaker",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListClusters",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "SageMaker",
+   "signing_name": "sagemaker",
+   "target_prefix": "SageMaker"
+  },
+  {
+   "api_version": "2019-11-07",
+   "endpoint_prefix": "a2i-runtime.sagemaker",
+   "probe": {
+    "method": "GET",
+    "op": "ListHumanLoops",
+    "uri": "/human-loops"
+   },
+   "protocol": "rest-json",
+   "service_id": "SageMaker A2I Runtime",
+   "signing_name": "sagemaker"
+  },
+  {
+   "api_version": "2020-07-01",
+   "endpoint_prefix": "featurestore-runtime.sagemaker",
+   "protocol": "rest-json",
+   "service_id": "SageMaker FeatureStore Runtime",
+   "signing_name": "sagemaker"
+  },
+  {
+   "api_version": "2020-05-27",
+   "endpoint_prefix": "sagemaker-geospatial",
+   "probe": {
+    "method": "GET",
+    "op": "ListRasterDataCollections",
+    "uri": "/raster-data-collections"
+   },
+   "protocol": "rest-json",
+   "service_id": "SageMaker Geospatial",
+   "signing_name": "sagemaker-geospatial"
+  },
+  {
+   "api_version": "2022-09-30",
+   "endpoint_prefix": "metrics.sagemaker",
+   "protocol": "rest-json",
+   "service_id": "SageMaker Metrics",
+   "signing_name": "sagemaker"
+  },
+  {
+   "api_version": "2017-05-13",
+   "endpoint_prefix": "runtime.sagemaker",
+   "protocol": "rest-json",
+   "service_id": "SageMaker Runtime",
+   "signing_name": "sagemaker"
+  },
+  {
+   "api_version": "2025-02-10",
+   "endpoint_prefix": "training-session-runtime.sagemaker",
+   "protocol": "rest-json",
+   "service_id": "SageMakerTrainingSessionRuntime",
+   "signing_name": "sagemaker"
+  },
+  {
+   "api_version": "2020-09-23",
+   "endpoint_prefix": "edge.sagemaker",
+   "protocol": "rest-json",
+   "service_id": "Sagemaker Edge",
+   "signing_name": "sagemaker"
+  },
+  {
+   "api_version": "2026-02-01",
+   "endpoint_prefix": "job-runtime.sagemaker",
+   "protocol": "rest-json",
+   "service_id": "SagemakerJobRuntime",
+   "signing_name": "sagemaker"
+  },
+  {
+   "api_version": "2021-06-30",
+   "endpoint_prefix": "scheduler",
+   "probe": {
+    "method": "GET",
+    "op": "ListSchedules",
+    "uri": "/schedules"
+   },
+   "protocol": "rest-json",
+   "service_id": "Scheduler",
+   "signing_name": "scheduler"
+  },
+  {
+   "api_version": "2017-10-17",
+   "endpoint_prefix": "secretsmanager",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListSecrets",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Secrets Manager",
+   "signing_name": "secretsmanager",
+   "target_prefix": "secretsmanager"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "security-ir",
+   "protocol": "rest-json",
+   "service_id": "Security IR",
+   "signing_name": "security-ir"
+  },
+  {
+   "api_version": "2025-09-06",
+   "endpoint_prefix": "securityagent",
+   "protocol": "rest-json",
+   "service_id": "SecurityAgent",
+   "signing_name": "securityagent"
+  },
+  {
+   "api_version": "2018-10-26",
+   "endpoint_prefix": "securityhub",
+   "probe": {
+    "method": "GET",
+    "op": "ListAutomationRules",
+    "uri": "/automationrules/list"
+   },
+   "protocol": "rest-json",
+   "service_id": "SecurityHub",
+   "signing_name": "securityhub"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "securitylake",
+   "probe": {
+    "method": "GET",
+    "op": "ListDataLakes",
+    "uri": "/v1/datalakes"
+   },
+   "protocol": "rest-json",
+   "service_id": "SecurityLake",
+   "signing_name": "securitylake"
+  },
+  {
+   "api_version": "2017-09-08",
+   "endpoint_prefix": "serverlessrepo",
+   "probe": {
+    "method": "GET",
+    "op": "ListApplications",
+    "uri": "/applications"
+   },
+   "protocol": "rest-json",
+   "service_id": "ServerlessApplicationRepository",
+   "signing_name": "serverlessrepo"
+  },
+  {
+   "api_version": "2015-12-10",
+   "endpoint_prefix": "servicecatalog",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListPortfolios",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Service Catalog",
+   "signing_name": "servicecatalog",
+   "target_prefix": "AWS242ServiceCatalogService"
+  },
+  {
+   "api_version": "2020-06-24",
+   "endpoint_prefix": "servicecatalog-appregistry",
+   "probe": {
+    "method": "GET",
+    "op": "ListApplications",
+    "uri": "/applications"
+   },
+   "protocol": "rest-json",
+   "service_id": "Service Catalog AppRegistry",
+   "signing_name": "servicecatalog"
+  },
+  {
+   "api_version": "2019-06-24",
+   "endpoint_prefix": "servicequotas",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListServices",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Service Quotas",
+   "signing_name": "servicequotas",
+   "target_prefix": "ServiceQuotasV20190624"
+  },
+  {
+   "api_version": "2017-03-14",
+   "endpoint_prefix": "servicediscovery",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListNamespaces",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "ServiceDiscovery",
+   "signing_name": "servicediscovery",
+   "target_prefix": "Route53AutoNaming_v20170314"
+  },
+  {
+   "api_version": "2016-06-02",
+   "endpoint_prefix": "shield",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListProtectionGroups",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Shield",
+   "signing_name": "shield",
+   "target_prefix": "AWSShield_20160616"
+  },
+  {
+   "api_version": "2017-08-25",
+   "endpoint_prefix": "data-signer",
+   "protocol": "rest-json",
+   "service_id": "Signer Data",
+   "signing_name": "signer"
+  },
+  {
+   "api_version": "2023-01-01",
+   "endpoint_prefix": "signin",
+   "protocol": "rest-json",
+   "service_id": "Signin",
+   "signing_name": "signin"
+  },
+  {
+   "api_version": "2009-04-15",
+   "endpoint_prefix": "sdb",
+   "probe": {
+    "method": "POST",
+    "op": "ListDomains",
+    "uri": "/"
+   },
+   "protocol": "query",
+   "service_id": "SimpleDB",
+   "signing_name": "sdb"
+  },
+  {
+   "api_version": "2025-09-26",
+   "endpoint_prefix": "sdb",
+   "protocol": "rest-json",
+   "service_id": "SimpleDBv2",
+   "signing_name": "sdb"
+  },
+  {
+   "api_version": "2021-08-04",
+   "endpoint_prefix": "snow-device-management",
+   "probe": {
+    "method": "GET",
+    "op": "ListDevices",
+    "uri": "/managed-devices"
+   },
+   "protocol": "rest-json",
+   "service_id": "Snow Device Management",
+   "signing_name": "snow-device-management"
+  },
+  {
+   "api_version": "2016-06-30",
+   "endpoint_prefix": "snowball",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeAddress",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Snowball",
+   "signing_name": "snowball",
+   "target_prefix": "AWSIESnowballJobManagementService"
+  },
+  {
+   "api_version": "2024-01-01",
+   "endpoint_prefix": "social-messaging",
+   "probe": {
+    "method": "GET",
+    "op": "ListLinkedWhatsAppBusinessAccounts",
+    "uri": "/v1/whatsapp/waba/list"
+   },
+   "protocol": "rest-json",
+   "service_id": "SocialMessaging",
+   "signing_name": "social-messaging"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "ssm-sap",
+   "protocol": "rest-json",
+   "service_id": "Ssm Sap",
+   "signing_name": "ssm-sap"
+  },
+  {
+   "api_version": "2013-06-30",
+   "endpoint_prefix": "storagegateway",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListGateways",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Storage Gateway",
+   "signing_name": "storagegateway",
+   "target_prefix": "StorageGateway_20130630"
+  },
+  {
+   "api_version": "2024-01-01",
+   "endpoint_prefix": "scn",
+   "probe": {
+    "method": "GET",
+    "op": "ListInstances",
+    "uri": "/api/instance"
+   },
+   "protocol": "rest-json",
+   "service_id": "SupplyChain",
+   "signing_name": "scn"
+  },
+  {
+   "api_version": "2013-04-15",
+   "endpoint_prefix": "support",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeAttachment",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Support",
+   "signing_name": "support",
+   "target_prefix": "AWSSupport_20130415"
+  },
+  {
+   "api_version": "2021-08-20",
+   "endpoint_prefix": "supportapp",
+   "protocol": "rest-json",
+   "service_id": "Support App",
+   "signing_name": "supportapp"
+  },
+  {
+   "api_version": "2026-06-30",
+   "endpoint_prefix": "supportauthz",
+   "probe": {
+    "method": "GET",
+    "op": "ListActions",
+    "uri": "/actions"
+   },
+   "protocol": "rest-json",
+   "service_id": "SupportAuthZ",
+   "signing_name": "supportauthz"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "sustainability",
+   "protocol": "rest-json",
+   "service_id": "Sustainability",
+   "signing_name": "sustainability"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "tax",
+   "protocol": "rest-json",
+   "service_id": "TaxSettings",
+   "signing_name": "tax"
+  },
+  {
+   "api_version": "2018-06-27",
+   "endpoint_prefix": "textract",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListAdapterVersions",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Textract",
+   "signing_name": "textract",
+   "target_prefix": "Textract"
+  },
+  {
+   "api_version": "2023-01-27",
+   "endpoint_prefix": "timestream-influxdb",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListDbInstances",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Timestream InfluxDB",
+   "signing_name": "timestream-influxdb",
+   "target_prefix": "AmazonTimestreamInfluxDB"
+  },
+  {
+   "api_version": "2018-11-01",
+   "endpoint_prefix": "query.timestream",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeEndpoints",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Timestream Query",
+   "signing_name": "timestream",
+   "target_prefix": "Timestream_20181101"
+  },
+  {
+   "api_version": "2018-11-01",
+   "endpoint_prefix": "ingest.timestream",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListDatabases",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Timestream Write",
+   "signing_name": "timestream",
+   "target_prefix": "Timestream_20181101"
+  },
+  {
+   "api_version": "2017-10-26",
+   "endpoint_prefix": "transcribe",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListLanguageModels",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Transcribe",
+   "signing_name": "transcribe",
+   "target_prefix": "Transcribe"
+  },
+  {
+   "api_version": "2018-11-05",
+   "endpoint_prefix": "transfer",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListConnectors",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Transfer",
+   "signing_name": "transfer",
+   "target_prefix": "TransferService"
+  },
+  {
+   "api_version": "2017-07-01",
+   "endpoint_prefix": "translate",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeTextTranslationJob",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Translate",
+   "signing_name": "translate",
+   "target_prefix": "AWSShineFrontendService_20170701"
+  },
+  {
+   "api_version": "2022-09-15",
+   "endpoint_prefix": "trustedadvisor",
+   "probe": {
+    "method": "GET",
+    "op": "ListChecks",
+    "uri": "/v1/checks"
+   },
+   "protocol": "rest-json",
+   "service_id": "TrustedAdvisor",
+   "signing_name": "trustedadvisor"
+  },
+  {
+   "api_version": "2022-11-30",
+   "endpoint_prefix": "vpc-lattice",
+   "probe": {
+    "method": "GET",
+    "op": "ListServices",
+    "uri": "/services"
+   },
+   "protocol": "rest-json",
+   "service_id": "VPC Lattice",
+   "signing_name": "vpc-lattice"
+  },
+  {
+   "api_version": "2021-12-01",
+   "endpoint_prefix": "verifiedpermissions",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListPolicyStores",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "VerifiedPermissions",
+   "signing_name": "verifiedpermissions",
+   "target_prefix": "VerifiedPermissions"
+  },
+  {
+   "api_version": "2021-09-27",
+   "endpoint_prefix": "voiceid",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeDomain",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Voice ID",
+   "signing_name": "voiceid",
+   "target_prefix": "VoiceID"
+  },
+  {
+   "api_version": "2015-08-24",
+   "endpoint_prefix": "waf",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListRules",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "WAF",
+   "signing_name": "waf",
+   "target_prefix": "AWSWAF_20150824"
+  },
+  {
+   "api_version": "2016-11-28",
+   "endpoint_prefix": "waf-regional",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListRules",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "WAF Regional",
+   "signing_name": "waf-regional",
+   "target_prefix": "AWSWAF_Regional_20161128"
+  },
+  {
+   "api_version": "2019-07-29",
+   "endpoint_prefix": "wafv2",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListRuleGroups",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "WAFV2",
+   "signing_name": "wafv2",
+   "target_prefix": "AWSWAF_20190729"
+  },
+  {
+   "api_version": "2020-03-31",
+   "endpoint_prefix": "wellarchitected",
+   "probe": {
+    "method": "GET",
+    "op": "ListProfiles",
+    "uri": "/profileSummaries"
+   },
+   "protocol": "rest-json",
+   "service_id": "WellArchitected",
+   "signing_name": "wellarchitected"
+  },
+  {
+   "api_version": "2024-02-01",
+   "endpoint_prefix": "admin.wickr",
+   "probe": {
+    "method": "GET",
+    "op": "ListNetworks",
+    "uri": "/networks"
+   },
+   "protocol": "rest-json",
+   "service_id": "Wickr",
+   "signing_name": "wickr"
+  },
+  {
+   "api_version": "2020-10-19",
+   "endpoint_prefix": "wisdom",
+   "probe": {
+    "method": "GET",
+    "op": "ListAssistants",
+    "uri": "/assistants"
+   },
+   "protocol": "rest-json",
+   "service_id": "Wisdom",
+   "signing_name": "wisdom"
+  },
+  {
+   "api_version": "2016-05-01",
+   "endpoint_prefix": "workdocs",
+   "probe": {
+    "method": "GET",
+    "op": "DescribeActivities",
+    "uri": "/api/v1/activities"
+   },
+   "protocol": "rest-json",
+   "service_id": "WorkDocs",
+   "signing_name": "workdocs"
+  },
+  {
+   "api_version": "2017-10-01",
+   "endpoint_prefix": "workmail",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListResources",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "WorkMail",
+   "signing_name": "workmail",
+   "target_prefix": "WorkMailService"
+  },
+  {
+   "api_version": "2019-05-01",
+   "endpoint_prefix": "workmailmessageflow",
+   "protocol": "rest-json",
+   "service_id": "WorkMailMessageFlow",
+   "signing_name": "workmailmessageflow"
+  },
+  {
+   "api_version": "2015-04-08",
+   "endpoint_prefix": "workspaces",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeWorkspaces",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "WorkSpaces",
+   "signing_name": "workspaces",
+   "target_prefix": "WorkspacesService"
+  },
+  {
+   "api_version": "2023-08-22",
+   "endpoint_prefix": "thinclient",
+   "probe": {
+    "method": "GET",
+    "op": "ListDevices",
+    "uri": "/devices"
+   },
+   "protocol": "rest-json",
+   "service_id": "WorkSpaces Thin Client",
+   "signing_name": "thinclient"
+  },
+  {
+   "api_version": "2020-07-08",
+   "endpoint_prefix": "workspaces-web",
+   "probe": {
+    "method": "GET",
+    "op": "ListPortals",
+    "uri": "/portals"
+   },
+   "protocol": "rest-json",
+   "service_id": "WorkSpaces Web",
+   "signing_name": "workspaces-web"
+  },
+  {
+   "api_version": "2022-07-26",
+   "endpoint_prefix": "workspaces-instances",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListInstanceTypes",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "Workspaces Instances",
+   "signing_name": "workspaces-instances",
+   "target_prefix": "EUCMIFrontendAPIService"
+  },
+  {
+   "api_version": "2016-04-12",
+   "endpoint_prefix": "xray",
+   "protocol": "rest-json",
+   "service_id": "XRay",
+   "signing_name": "xray"
+  },
+  {
+   "api_version": "2020-08-01",
+   "endpoint_prefix": "aps",
+   "probe": {
+    "method": "GET",
+    "op": "ListScrapers",
+    "uri": "/scrapers"
+   },
+   "protocol": "rest-json",
+   "service_id": "amp",
+   "signing_name": "aps"
+  },
+  {
+   "api_version": "2022-06-23",
+   "endpoint_prefix": "b2bi",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListCapabilities",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "b2bi",
+   "signing_name": "b2bi",
+   "target_prefix": "B2BI"
+  },
+  {
+   "api_version": "2021-07-30",
+   "endpoint_prefix": "billingconductor",
+   "protocol": "rest-json",
+   "service_id": "billingconductor",
+   "signing_name": "billingconductor"
+  },
+  {
+   "api_version": "2017-10-11",
+   "endpoint_prefix": "chatbot",
+   "protocol": "rest-json",
+   "service_id": "chatbot",
+   "signing_name": "chatbot"
+  },
+  {
+   "api_version": "2018-09-22",
+   "endpoint_prefix": "codeartifact",
+   "probe": {
+    "method": "GET",
+    "op": "DescribeDomain",
+    "uri": "/v1/domain"
+   },
+   "protocol": "rest-json",
+   "service_id": "codeartifact",
+   "signing_name": "codeartifact"
+  },
+  {
+   "api_version": "2019-10-15",
+   "endpoint_prefix": "codestar-notifications",
+   "protocol": "rest-json",
+   "service_id": "codestar notifications",
+   "signing_name": "codestar-notifications"
+  },
+  {
+   "api_version": "2023-10-12",
+   "endpoint_prefix": "deadline",
+   "probe": {
+    "method": "GET",
+    "op": "ListAvailableMeteredProducts",
+    "uri": "/2023-10-12/metered-products"
+   },
+   "protocol": "rest-json",
+   "service_id": "deadline",
+   "signing_name": "deadline"
+  },
+  {
+   "api_version": "2020-02-26",
+   "endpoint_prefix": "drs",
+   "probe": {
+    "method": "GET",
+    "op": "ListStagingAccounts",
+    "uri": "/ListStagingAccounts"
+   },
+   "protocol": "rest-json",
+   "service_id": "drs",
+   "signing_name": "drs"
+  },
+  {
+   "api_version": "2023-07-27",
+   "endpoint_prefix": "evs",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListEnvironmentConnectors",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "evs",
+   "signing_name": "evs",
+   "target_prefix": "AmazonElasticVMwareService"
+  },
+  {
+   "api_version": "2020-12-01",
+   "endpoint_prefix": "fis",
+   "probe": {
+    "method": "GET",
+    "op": "ListExperiments",
+    "uri": "/experiments"
+   },
+   "protocol": "rest-json",
+   "service_id": "fis",
+   "signing_name": "fis"
+  },
+  {
+   "api_version": "2018-06-26",
+   "endpoint_prefix": "forecast",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "DescribeAutoPredictor",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "forecast",
+   "signing_name": "forecast",
+   "target_prefix": "AmazonForecast"
+  },
+  {
+   "api_version": "2018-06-26",
+   "endpoint_prefix": "forecastquery",
+   "json_version": "1.1",
+   "protocol": "json",
+   "service_id": "forecastquery",
+   "signing_name": "forecast",
+   "target_prefix": "AmazonForecastRuntime"
+  },
+  {
+   "api_version": "2020-08-18",
+   "endpoint_prefix": "grafana",
+   "probe": {
+    "method": "GET",
+    "op": "ListWorkspaces",
+    "uri": "/workspaces"
+   },
+   "protocol": "rest-json",
+   "service_id": "grafana",
+   "signing_name": "grafana"
+  },
+  {
+   "api_version": "2020-06-15",
+   "endpoint_prefix": "identitystore",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListUsers",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "identitystore",
+   "signing_name": "identitystore",
+   "target_prefix": "AWSIdentityStore"
+  },
+  {
+   "api_version": "2019-12-02",
+   "endpoint_prefix": "imagebuilder",
+   "protocol": "rest-json",
+   "service_id": "imagebuilder",
+   "signing_name": "imagebuilder"
+  },
+  {
+   "api_version": "2020-07-14",
+   "endpoint_prefix": "ivs",
+   "protocol": "rest-json",
+   "service_id": "ivs",
+   "signing_name": "ivs"
+  },
+  {
+   "api_version": "2020-07-14",
+   "endpoint_prefix": "ivschat",
+   "protocol": "rest-json",
+   "service_id": "ivschat",
+   "signing_name": "ivschat"
+  },
+  {
+   "api_version": "2019-02-03",
+   "endpoint_prefix": "kendra",
+   "json_version": "1.1",
+   "probe": {
+    "method": "POST",
+    "op": "ListIndices",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "kendra",
+   "signing_name": "kendra",
+   "target_prefix": "AWSKendraFrontendService"
+  },
+  {
+   "api_version": "2021-04-28",
+   "endpoint_prefix": "m2",
+   "probe": {
+    "method": "GET",
+    "op": "ListApplications",
+    "uri": "/applications"
+   },
+   "protocol": "rest-json",
+   "service_id": "m2",
+   "signing_name": "m2"
+  },
+  {
+   "api_version": "2020-02-26",
+   "endpoint_prefix": "mgn",
+   "probe": {
+    "method": "GET",
+    "op": "DescribeVcenterClients",
+    "uri": "/DescribeVcenterClients"
+   },
+   "protocol": "rest-json",
+   "service_id": "mgn",
+   "signing_name": "mgn"
+  },
+  {
+   "api_version": "2017-11-27",
+   "endpoint_prefix": "mq",
+   "probe": {
+    "method": "GET",
+    "op": "ListBrokers",
+    "uri": "/v1/brokers"
+   },
+   "protocol": "rest-json",
+   "service_id": "mq",
+   "signing_name": "mq"
+  },
+  {
+   "api_version": "2023-08-01",
+   "endpoint_prefix": "neptune-db",
+   "probe": {
+    "method": "GET",
+    "op": "ListGremlinQueries",
+    "uri": "/gremlin/status"
+   },
+   "protocol": "rest-json",
+   "service_id": "neptunedata",
+   "signing_name": "neptune-db"
+  },
+  {
+   "api_version": "2024-08-20",
+   "endpoint_prefix": "odb",
+   "json_version": "1.0",
+   "probe": {
+    "method": "POST",
+    "op": "ListAutonomousDatabaseBackups",
+    "uri": "/"
+   },
+   "protocol": "json",
+   "service_id": "odb",
+   "signing_name": "odb",
+   "target_prefix": "Odb"
+  },
+  {
+   "api_version": "2021-06-15",
+   "endpoint_prefix": "rbin",
+   "protocol": "rest-json",
+   "service_id": "rbin",
+   "signing_name": "rbin"
+  },
+  {
+   "api_version": "2022-05-13",
+   "endpoint_prefix": "repostspace",
+   "probe": {
+    "method": "GET",
+    "op": "ListSpaces",
+    "uri": "/spaces"
+   },
+   "protocol": "rest-json",
+   "service_id": "repostspace",
+   "signing_name": "repostspace"
+  },
+  {
+   "api_version": "2020-04-30",
+   "endpoint_prefix": "resiliencehub",
+   "probe": {
+    "method": "GET",
+    "op": "ListApps",
+    "uri": "/list-apps"
+   },
+   "protocol": "rest-json",
+   "service_id": "resiliencehub",
+   "signing_name": "resiliencehub"
+  },
+  {
+   "api_version": "2026-02-17",
+   "endpoint_prefix": "resiliencehub",
+   "probe": {
+    "method": "GET",
+    "op": "ListPolicies",
+    "uri": "/v2/list-policies"
+   },
+   "protocol": "rest-json",
+   "service_id": "resiliencehubv2",
+   "signing_name": "resiliencehub"
+  },
+  {
+   "api_version": "2019-06-28",
+   "endpoint_prefix": "savingsplans",
+   "protocol": "rest-json",
+   "service_id": "savingsplans",
+   "signing_name": "savingsplans"
+  },
+  {
+   "api_version": "2019-12-02",
+   "endpoint_prefix": "schemas",
+   "probe": {
+    "method": "GET",
+    "op": "ListRegistries",
+    "uri": "/v1/registries"
+   },
+   "protocol": "rest-json",
+   "service_id": "schemas",
+   "signing_name": "schemas"
+  },
+  {
+   "api_version": "2017-08-25",
+   "endpoint_prefix": "signer",
+   "probe": {
+    "method": "GET",
+    "op": "ListSigningJobs",
+    "uri": "/signing-jobs"
+   },
+   "protocol": "rest-json",
+   "service_id": "signer",
+   "signing_name": "signer"
+  },
+  {
+   "api_version": "2017-10-11",
+   "endpoint_prefix": "synthetics",
+   "protocol": "rest-json",
+   "service_id": "synthetics",
+   "signing_name": "synthetics"
+  },
+  {
+   "api_version": "2024-07-01",
+   "endpoint_prefix": "uxc",
+   "probe": {
+    "method": "GET",
+    "op": "ListServices",
+    "uri": "/v1/services"
+   },
+   "protocol": "rest-json",
+   "service_id": "uxc",
+   "signing_name": "uxc"
+  }
+ ]
+}

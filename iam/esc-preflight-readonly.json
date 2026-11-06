@@ -1,0 +1,25 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ScannerChecks",
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:ListTypes",
+        "ec2:DescribeAvailabilityZones",
+        "ec2:DescribeInstanceTypeOfferings",
+        "bedrock:ListFoundationModels",
+        "bedrock:ListInferenceProfiles",
+        "rds:DescribeDBEngineVersions",
+        "elasticache:DescribeCacheEngineVersions"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "OwnRolePolicies",
+      "Effect": "Allow",
+      "Action": ["iam:ListAttachedRolePolicies"],
+      "Resource": "arn:*:iam::*:role/*"
+    }
+  ]
+}

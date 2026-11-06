@@ -1,0 +1,217 @@
+{
+  "_comment": "Maps ESC User Guide service pages to SDK endpoint prefixes. A page not listed here maps to the endpoint prefix equal to its file name. `types` attaches a page to resource types whose endpoint is shared with another service (DocumentDB and Neptune use the RDS endpoint). An empty entry marks a page that documents no deployable service.",
+  "pages": {
+    "accountmanagement": {
+      "services": [
+        "account"
+      ]
+    },
+    "amazon-mq": {
+      "services": [
+        "mq"
+      ]
+    },
+    "application-auto-scaling": {
+      "services": [
+        "application-autoscaling"
+      ]
+    },
+    "ARG": {
+      "services": [
+        "ram"
+      ]
+    },
+    "artifact": {
+      "services": [
+        "artifact"
+      ]
+    },
+    "aws-backup": {
+      "services": [
+        "backup"
+      ]
+    },
+    "aws-support": {
+      "services": [
+        "support"
+      ]
+    },
+    "aws-trusted-advisor": {
+      "services": [
+        "trustedadvisor"
+      ]
+    },
+    "awsconsolehelpdocs": {},
+    "billing": {
+      "services": [
+        "budgets",
+        "ce",
+        "bcm-data-exports"
+      ]
+    },
+    "cdk": {},
+    "cloud-map": {
+      "services": [
+        "servicediscovery"
+      ]
+    },
+    "cloudwatch": {
+      "services": [
+        "monitoring"
+      ]
+    },
+    "cloudwatch-logs": {
+      "services": [
+        "logs"
+      ]
+    },
+    "cognito": {
+      "services": [
+        "cognito-idp",
+        "cognito-identity"
+      ]
+    },
+    "directory-service": {
+      "services": [
+        "ds"
+      ]
+    },
+    "documentdb": {
+      "types": [
+        "AWS::DocDB::",
+        "aws_docdb_",
+        "awscc_docdb_"
+      ]
+    },
+    "ebs": {
+      "services": [
+        "ebs",
+        "ec2"
+      ]
+    },
+    "ecr": {
+      "services": [
+        "api.ecr"
+      ]
+    },
+    "efs": {
+      "services": [
+        "elasticfilesystem"
+      ]
+    },
+    "emr": {
+      "services": [
+        "elasticmapreduce"
+      ]
+    },
+    "eum": {
+      "services": [
+        "sms-voice"
+      ]
+    },
+    "eventbridge": {
+      "services": [
+        "events",
+        "schemas",
+        "pipes",
+        "scheduler"
+      ]
+    },
+    "iam-identity-center": {
+      "services": [
+        "sso",
+        "identitystore"
+      ]
+    },
+    "iam-roles-anywhere": {
+      "services": [
+        "rolesanywhere"
+      ]
+    },
+    "imagebuilder": {
+      "services": [
+        "imagebuilder"
+      ]
+    },
+    "lake-formation": {
+      "services": [
+        "lakeformation"
+      ]
+    },
+    "linux": {},
+    "managed-flink": {
+      "services": [
+        "kinesisanalytics"
+      ]
+    },
+    "marketplace": {},
+    "msk": {
+      "services": [
+        "kafka"
+      ]
+    },
+    "neptune": {
+      "types": [
+        "AWS::Neptune::",
+        "aws_neptune_",
+        "awscc_neptune_"
+      ]
+    },
+    "opensearch-service": {
+      "services": [
+        "es"
+      ]
+    },
+    "privateca": {
+      "services": [
+        "acm-pca"
+      ]
+    },
+    "resourcegroups": {
+      "services": [
+        "resource-groups"
+      ]
+    },
+    "sagemaker-ai": {
+      "services": [
+        "api.sagemaker"
+      ]
+    },
+    "ses": {
+      "services": [
+        "email"
+      ]
+    },
+    "step-functions": {
+      "services": [
+        "states"
+      ]
+    },
+    "systems-manager": {
+      "services": [
+        "ssm"
+      ]
+    },
+    "transit-gateway": {
+      "services": [
+        "ec2"
+      ]
+    },
+    "vpc": {
+      "services": [
+        "ec2"
+      ]
+    },
+    "vpn": {
+      "services": [
+        "ec2"
+      ]
+    },
+    "waf": {
+      "services": [
+        "wafv2",
+        "waf"
+      ]
+    }
+  }
+}
