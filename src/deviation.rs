@@ -45,6 +45,8 @@ struct Rule {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct RuleRemediation {
+    /// The change in a few words, for the terminal summary.
+    pub action: String,
     pub change: String,
     pub consequence: String,
     /// AWS documentation of the substitute.
@@ -100,6 +102,17 @@ pub struct GuideProvenance {
     pub stale_rules: Vec<String>,
     /// Guide pages that map to no known service.
     pub unmapped_pages: Vec<String>,
+}
+
+/// The documented substitute for a resource type, from a rule that fires on the type
+/// alone. Used when the type itself is not available in the target.
+pub fn substitute_for(resource_type: &str) -> Option<RuleRemediation> {
+    static RULES: std::sync::OnceLock<Vec<Rule>> = std::sync::OnceLock::new();
+    RULES
+        .get_or_init(rules)
+        .iter()
+        .find(|r| r.when.is_empty() && r.types.iter().any(|t| t == resource_type))
+        .and_then(|r| r.remediation.clone())
 }
 
 pub fn assess(
@@ -313,6 +326,11 @@ mod tests {
             assert!(r.when.iter().all(well_formed), "{}", r.id);
             assert!(r.also.iter().all(|a| !a.is_empty()), "{}", r.id);
             if let Some(m) = &r.remediation {
+                assert!(
+                    !m.action.is_empty() && m.action.len() <= 45,
+                    "{}: action is required and short",
+                    r.id
+                );
                 assert!(
                     !m.change.is_empty() && !m.consequence.is_empty(),
                     "{}",

@@ -43,7 +43,7 @@ A rule ties one difference in the [ESC User Guide](https://docs.aws.eu/esc/lates
 
 - `text`, and every `also` fragment, must appear in one difference on the page. The rule fires only while it does.
 - `when` conditions are alternatives; `all` requires every condition in it. A condition tests `path` with `equals`, `prefix` or `contains`, or without an operator requires a value. Empty `when`: the type alone fires the rule.
-- `remediation` (`change`, `consequence`, `doc`) is only for features that cannot exist in a single-region partition.
+- `remediation` (`action`, `change`, `consequence`, `doc`; `action` is the short form for the terminal summary) is only for features that cannot exist in a single-region partition.
 
 A deviation is a blocker, so a wrong rule fails someone's build. To add or change a rule:
 

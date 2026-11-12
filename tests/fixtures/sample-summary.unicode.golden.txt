@@ -1,0 +1,23 @@
+◆ esc-preflight · 8 resources · eusc-de-east-1
+  botocore 1.43.120 · regional table 20251113063700 · public mode
+
+  AVAILABILITY
+  ✔ available            5
+  ✘ not available        2   AWS::CodeBuild::Project, AWS::CloudFront::Distribution
+  ⚠ disputed             1   AWS::QBusiness::Application
+
+  PORTABILITY
+  ⚠ hardcoded fields     3   3 resources: `amazonaws.com`, `eu-central-1`, `arn:aws:`, +1 more
+
+  REQUIRED CHANGES  3 flag · 1 propose · 2 fix
+  ✘ flag     cloudfront not available   → remove or replace cloudfront
+             AWS::CloudFront::Distribution
+  ✘ flag     codebuild not available    → remove or replace codebuild
+             AWS::CodeBuild::Project
+  ✘ flag     hardcoded `eu-central-1a`  → choose a zone in the target
+  ● propose  hardcoded `eu-central-1`   → `${AWS::Region}`
+  ● fix      hardcoded `amazonaws.com`  → `${AWS::URLSuffix}`
+  ● fix      hardcoded `arn:aws:`       → `arn:${AWS::Partition}:`
+
+⚠ Public sources list services, not resource types. A type the service does not support in
+  eusc-de-east-1 is only found in live mode, unless the ESC User Guide documents it.

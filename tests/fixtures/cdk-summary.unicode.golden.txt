@@ -1,0 +1,23 @@
+◆ esc-preflight · 5 resources · eusc-de-east-1
+  botocore 1.43.120 · regional table 20251113063700 · public mode
+
+  AVAILABILITY
+  ✔ available            5
+  ✔ not available        0
+
+  PORTABILITY
+  ⚠ hardcoded fields     1   1 resource: `arn:aws:`, `us-east-1`, `444455556666`
+  ⚠ env literals         2   synthesized for account 111122223333 in eu-central-1
+
+  REQUIRED CHANGES  1 flag · 1 propose · 1 fix
+  ✘ flag     hardcoded `us-east-1`, `444455556666`  → set the target Region and account
+  ● propose  2 values synthesized for eu-central-1  → synthesize again for eusc-de-east-1
+  ● fix      hardcoded `arn:aws:`                   → `arn:${AWS::Partition}:`
+
+⚠ The input was produced for eu-central-1, not eusc-de-east-1. Synthesize it for the target region
+  so region-specific values resolve as they will be deployed.
+  For a CDK app without a hardcoded env:
+    $ AWS_REGION=eusc-de-east-1 cdk synth
+
+⚠ Public sources list services, not resource types. A type the service does not support in
+  eusc-de-east-1 is only found in live mode, unless the ESC User Guide documents it.

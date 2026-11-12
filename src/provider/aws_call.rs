@@ -324,11 +324,18 @@ async fn credentials(
     let mut loader = aws_config::defaults(aws_config::BehaviorVersion::latest())
         .region(aws_config::Region::new(region.to_string()));
     if let Some(p) = profile {
+        check_profile(p).await?;
         loader = loader.profile_name(p);
     }
     let base = loader.load().await;
     let auth = |e: aws_credential_types::provider::error::CredentialsError| {
-        ScanError::Auth(format!("cannot load credentials: {e}"))
+        let hint = match profile {
+            Some(p) => format!(
+                " Check that profile `{p}` can produce credentials, for example with `aws sts get-caller-identity --profile {p}`."
+            ),
+            None => " Pass --profile, or set AWS credentials in the environment.".into(),
+        };
+        ScanError::Auth(format!("cannot load credentials: {e}.{hint}"))
     };
     match role_arn {
         None => base
@@ -348,10 +355,93 @@ async fn credentials(
     }
 }
 
+/// A named profile must exist in the AWS config or credentials file. Without this
+/// check the SDK reports only that "the credential provider was not enabled".
+async fn check_profile(name: &str) -> Result<()> {
+    let env = aws_types::os_shim_internal::Env::real();
+    let fs = aws_types::os_shim_internal::Fs::real();
+    let set = aws_config::profile::load(&fs, &env, &Default::default(), None)
+        .await
+        .ok();
+    if set.as_ref().is_some_and(|s| s.get_profile(name).is_some()) {
+        return Ok(());
+    }
+    let known: Vec<&str> = set
+        .as_ref()
+        .map(|s| s.profiles().collect())
+        .unwrap_or_default();
+    Err(ScanError::Profile(missing_profile(name, &known)))
+}
+
+/// Names a close configured profile when there is one, so the user's other profile
+/// names are not listed in an error that may be pasted elsewhere.
+fn missing_profile(name: &str, known: &[&str]) -> String {
+    match closest(name, known) {
+        Some(c) => format!("profile `{name}` not found. Did you mean `{c}`?"),
+        None => {
+            format!("profile `{name}` not found (run `aws configure list-profiles` to see yours)")
+        }
+    }
+}
+
+/// The configured name sharing the longest prefix of at least 3 characters with
+/// `name`, or within 2 edits of it. Ties go to the alphabetically first name.
+fn closest<'a>(name: &str, known: &[&'a str]) -> Option<&'a str> {
+    let prefix = |k: &str| {
+        name.chars()
+            .zip(k.chars())
+            .take_while(|(a, b)| a == b)
+            .count()
+    };
+    let mut sorted = known.to_vec();
+    sorted.sort_unstable();
+    let by_edit = sorted.iter().copied().find(|k| edits(name, k) <= 2);
+    let by_prefix = sorted
+        .iter()
+        .copied()
+        .filter(|k| prefix(k) >= 3)
+        .max_by(|a, b| prefix(a).cmp(&prefix(b)).then(b.cmp(a)));
+    by_edit.or(by_prefix)
+}
+
+/// Levenshtein distance.
+fn edits(a: &str, b: &str) -> usize {
+    let b: Vec<char> = b.chars().collect();
+    let mut row: Vec<usize> = (0..=b.len()).collect();
+    for (i, ca) in a.chars().enumerate() {
+        let mut prev = row[0];
+        row[0] = i + 1;
+        for (j, cb) in b.iter().enumerate() {
+            let cur = row[j + 1];
+            row[j + 1] = (prev + usize::from(ca != *cb)).min(row[j] + 1).min(cur + 1);
+            prev = cur;
+        }
+    }
+    row[b.len()]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::services;
+
+    #[test]
+    fn missing_profile_suggests_a_close_name_or_points_to_the_cli() {
+        let known = ["prod", "eusc-scanner", "management"];
+        assert_eq!(
+            missing_profile("eusc-ro", &known),
+            "profile `eusc-ro` not found. Did you mean `eusc-scanner`?"
+        );
+        assert_eq!(
+            missing_profile("prdo", &known),
+            "profile `prdo` not found. Did you mean `prod`?"
+        );
+        assert_eq!(
+            missing_profile("staging", &known),
+            "profile `staging` not found (run `aws configure list-profiles` to see yours)"
+        );
+        assert!(missing_profile("x", &[]).contains("list-profiles"));
+    }
 
     #[test]
     fn only_aws_endpoints_are_signed_for() {
