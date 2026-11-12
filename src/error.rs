@@ -13,6 +13,9 @@ pub enum ScanError {
     /// Live mode could not authenticate or lacks permissions.
     #[error("live-mode authentication failure: {0}")]
     Auth(String),
+    /// The `--profile` named does not exist.
+    #[error("{0}")]
+    Profile(String),
 }
 
 impl ScanError {
@@ -20,7 +23,7 @@ impl ScanError {
         match self {
             ScanError::Input(_) => 1,
             ScanError::DataSource(_) => 3,
-            ScanError::Auth(_) => 4,
+            ScanError::Auth(_) | ScanError::Profile(_) => 4,
         }
     }
 }

@@ -118,8 +118,12 @@ pub fn run() -> i32 {
         Ok(report) => {
             if !args.quiet {
                 let stderr = std::io::stderr();
-                let color = stderr.is_terminal() && std::env::var_os("NO_COLOR").is_none();
-                eprint!("{}", report::text_summary(&report, color));
+                let unicode = stderr.is_terminal();
+                let style = report::Style {
+                    unicode,
+                    color: unicode && std::env::var_os("NO_COLOR").is_none(),
+                };
+                eprint!("{}", report::text_summary(&report, style));
             }
             if let Some(f) = args.fail_on
                 && fails(&report, f)

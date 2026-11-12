@@ -14,14 +14,14 @@ It runs locally and uses only public data plus, optionally, your own ESC account
 Install [Rust](https://www.rust-lang.org/tools/install) 1.99 or later, then build and install from this repository:
 
 ```bash
-cargo install --locked --git https://github.com/aws-samples/sample-esc-preflight --tag 0.1.0
+cargo install --locked --git https://github.com/aws-samples/sample-esc-preflight --tag 0.1.1
 ```
 
 Then scan:
 
 ```bash
 # CDK app
-cdk synth --all
+cdk synth
 esc-preflight scan cdk.out --detail gaps
 
 # CloudFormation template
@@ -32,23 +32,30 @@ terraform plan -out=tfplan
 terraform show -json tfplan | esc-preflight scan --detail gaps
 ```
 
-The JSON report goes to stdout and a summary to stderr:
+The JSON report goes to stdout and a summary to stderr. In a terminal the summary uses symbols and color (`NO_COLOR` turns color off); piped or redirected, it is plain ASCII:
 
 ```
-4 resources checked against eusc-de-east-1 (botocore 1.43.122, regional table 20251113063700, mode public)
-  available: 3 (0 single-source)
-  not available: 1
-  disputed: 0
-  cannot assess: 0
-  hardcoded values: 1
-  environment literals: 0
-  divergences: 0
-  depth blockers: 0
-  documented deviations: 3
-  required changes: 1 fix, 1 propose, 4 flag
-```
+◆ esc-preflight · 172 resources · eusc-de-east-1
+  botocore 1.44.1 · regional table 20251113063700 · live mode
 
-Here a CloudFront distribution is not available, a Lambda function URL, active X-Ray tracing and an HTTP API are documented as not available, and a role ARN hardcodes `arn:aws:` and an account ID.
+  AVAILABILITY
+  ✔ available          168
+  ✘ not available        2   AWS::CodeCommit::Repository, AWS::DynamoDB::GlobalTable
+  ? cannot assess        2   custom resources, backed by their own code
+
+  PORTABILITY
+  ⚠ hardcoded fields    15   6 resources: `arn:aws:`
+  ✘ deviations           1   codepipeline source actions (ESC User Guide)
+
+  REQUIRED CHANGES  3 flag · 15 fix
+  ✘ flag     codecommit not available             → remove or replace codecommit
+             AWS::CodeCommit::Repository
+  ✘ flag     codepipeline source actions          → remove or replace the feature
+             AWS::CodePipeline::Pipeline
+  ✘ flag     dynamodb type not registered         → use AWS::DynamoDB::Table (single Region)
+             AWS::DynamoDB::GlobalTable
+  ● fix ×15  hardcoded `arn:aws:` in 6 resources  → `arn:${Aws.PARTITION}:`
+```
 
 ## Fix what it finds
 

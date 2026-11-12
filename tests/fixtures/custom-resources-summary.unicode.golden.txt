@@ -1,0 +1,17 @@
+◆ esc-preflight · 3 resources · eusc-de-east-1
+  botocore 1.43.120 · regional table 20251113063700 · public mode
+
+  AVAILABILITY
+  ✔ available            1
+  ✘ not available        1   Custom::AWS
+  ? cannot assess        1   custom resources, backed by their own code
+
+  PORTABILITY
+  ✔ nothing hardcoded or region-specific
+
+  REQUIRED CHANGES  1 flag
+  ✘ flag  custom resource calls cloudfront  → remove or replace cloudfront
+          Custom::AWS
+
+⚠ Public sources list services, not resource types. A type the service does not support in
+  eusc-de-east-1 is only found in live mode, unless the ESC User Guide documents it.

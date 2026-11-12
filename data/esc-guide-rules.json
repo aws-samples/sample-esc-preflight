@@ -56,7 +56,7 @@
       "page": "dynamodb",
       "text": "Global Tables and Cross-Region Restore",
       "types": ["AWS::DynamoDB::GlobalTable", "aws_dynamodb_table_replica", "awscc_dynamodb_global_table"],
-      "remediation": {"change": "Replace the global table with a single-Region table: AWS::DynamoDB::GlobalTable becomes AWS::DynamoDB::Table (CDK TableV2 becomes Table, awscc_dynamodb_global_table becomes aws_dynamodb_table) and aws_dynamodb_table_replica resources are removed. Carry the keys, indexes, stream, TTL and encryption settings over, and set the billing mode explicitly.", "consequence": "The new resource type replaces the table, so an existing table's data must be migrated. CDK Table defaults to provisioned capacity, TableV2 to on-demand.", "doc": "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-dynamodb-table.html"}
+      "remediation": {"action": "use AWS::DynamoDB::Table (single Region)", "change": "Replace the global table with a single-Region table: AWS::DynamoDB::GlobalTable becomes AWS::DynamoDB::Table (CDK TableV2 becomes Table, awscc_dynamodb_global_table becomes aws_dynamodb_table) and aws_dynamodb_table_replica resources are removed. Carry the keys, indexes, stream, TTL and encryption settings over, and set the billing mode explicitly.", "consequence": "The new resource type replaces the table, so an existing table's data must be migrated. CDK Table defaults to provisioned capacity, TableV2 to on-demand.", "doc": "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-dynamodb-table.html"}
     },
     {
       "id": "dynamodb-table-replica",
@@ -64,7 +64,7 @@
       "text": "Global Tables and Cross-Region Restore",
       "types": ["aws_dynamodb_table"],
       "when": [{"path": "replica"}],
-      "remediation": {"change": "Remove the replica blocks from the table.", "consequence": "Writes are no longer replicated to other Regions.", "doc": "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-dynamodb-table.html"}
+      "remediation": {"action": "remove the replica blocks", "change": "Remove the replica blocks from the table.", "consequence": "Writes are no longer replicated to other Regions.", "doc": "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-dynamodb-table.html"}
     },
     {
       "id": "secretsmanager-multi-region",
@@ -72,7 +72,7 @@
       "text": "Multi-Region secrets are not available",
       "types": ["AWS::SecretsManager::Secret", "aws_secretsmanager_secret"],
       "when": [{"path": "ReplicaRegions"}, {"path": "replica"}],
-      "remediation": {"change": "Remove ReplicaRegions (Terraform: the replica blocks) from the secret.", "consequence": "No copies of the secret exist in other Regions.", "doc": "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-secretsmanager-secret.html"}
+      "remediation": {"action": "remove the secret replicas", "change": "Remove ReplicaRegions (Terraform: the replica blocks) from the secret.", "consequence": "No copies of the secret exist in other Regions.", "doc": "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-secretsmanager-secret.html"}
     },
     {
       "id": "vpc-inter-region-peering",
@@ -566,14 +566,14 @@
       "text": "RDS Snapshot cross-Region auto backup is not available",
       "types": ["AWS::RDS::DBInstance"],
       "when": [{"path": "AutomaticBackupReplicationRegion"}],
-      "remediation": {"change": "Remove AutomaticBackupReplicationRegion from the DB instance.", "consequence": "Automated backups stay in the deployment Region.", "doc": "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-rds-dbinstance.html"}
+      "remediation": {"action": "remove AutomaticBackupReplicationRegion", "change": "Remove AutomaticBackupReplicationRegion from the DB instance.", "consequence": "Automated backups stay in the deployment Region.", "doc": "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-rds-dbinstance.html"}
     },
     {
       "id": "rds-cross-region-backup-replication",
       "page": "rds",
       "text": "RDS Snapshot cross-Region auto backup is not available",
       "types": ["aws_db_instance_automated_backups_replication"],
-      "remediation": {"change": "Remove the aws_db_instance_automated_backups_replication resource.", "consequence": "Automated backups stay in the deployment Region.", "doc": "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-rds-dbinstance.html"}
+      "remediation": {"action": "remove the backup replication resource", "change": "Remove the aws_db_instance_automated_backups_replication resource.", "consequence": "Automated backups stay in the deployment Region.", "doc": "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-rds-dbinstance.html"}
     },
     {
       "id": "rds-cross-region-replica",

@@ -39,10 +39,39 @@ pub struct RequiredChange {
     pub candidates: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub doc: Option<String>,
+    /// The change in a few words for the terminal summary. Built from the same
+    /// structured data as the change, never parsed from its text.
+    #[serde(skip)]
+    pub brief: Brief,
+}
+
+/// One summary line: what is affected and what to do, both short.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Brief {
+    pub what: String,
+    pub action: String,
+    /// The resource type the line is about, when lines of several types share
+    /// `what` and `action` and the summary lists the types instead.
+    pub subject: Option<String>,
+}
+
+pub fn brief(what: impl Into<String>, action: impl Into<String>) -> Brief {
+    Brief {
+        what: what.into(),
+        action: action.into(),
+        subject: None,
+    }
+}
+
+impl Brief {
+    pub fn about(mut self, resource_type: &str) -> Self {
+        self.subject = Some(resource_type.into());
+        self
+    }
 }
 
 impl RequiredChange {
-    pub fn new(logical_id: &str, tier: Tier, reason: String, change: String) -> Self {
+    pub fn new(logical_id: &str, tier: Tier, reason: String, change: String, brief: Brief) -> Self {
         Self {
             logical_id: logical_id.into(),
             cdk_path: None,
@@ -54,6 +83,7 @@ impl RequiredChange {
             edits: Vec::new(),
             candidates: Vec::new(),
             doc: None,
+            brief,
         }
     }
 }
@@ -87,6 +117,8 @@ pub struct Context<'a> {
 
 struct Decision {
     tier: Tier,
+    /// The change in a few words, for the terminal summary.
+    action: &'static str,
     change: String,
     precondition: Option<&'static str>,
     replace: Option<Replacement>,
@@ -112,6 +144,7 @@ fn decide(l: &Literal, h: &Hazard, ctx: &Context) -> Decision {
     match l.kind {
         HazardKind::ArnPartition => Decision {
             tier: Tier::Fix,
+            action: "build the ARN from the partition",
             change: "Build the ARN from the partition instead of the literal.".into(),
             precondition: None,
             replace: rep(
@@ -128,6 +161,7 @@ fn decide(l: &Literal, h: &Hazard, ctx: &Context) -> Decision {
             } else {
                 Tier::Propose
             },
+            action: "use the partition DNS suffix",
             change: "Build the host name from the partition's DNS suffix instead of the literal."
                 .into(),
             precondition: (!has_region_label(&h.value)).then_some(
@@ -141,6 +175,7 @@ fn decide(l: &Literal, h: &Hazard, ctx: &Context) -> Decision {
         },
         HazardKind::ServicePrincipal => Decision {
             tier: Tier::Fix,
+            action: "use the amazonaws.com principal",
             change: "Use the `amazonaws.com` form of the service principal.".into(),
             precondition: None,
             replace: rep("amazonaws.com", "amazonaws.com", "amazonaws.com"),
@@ -148,6 +183,7 @@ fn decide(l: &Literal, h: &Hazard, ctx: &Context) -> Decision {
         HazardKind::RegionLiteral => match own(env.and_then(|e| e.region.as_ref())) {
             Tier::Flag => Decision {
                 tier: Tier::Flag,
+                action: "set the target Region",
                 change: format!(
                     "`{v}` is not the Region this resource deploys to, so it refers to something in another Region. Decide what replaces it in the target."
                 ),
@@ -156,6 +192,7 @@ fn decide(l: &Literal, h: &Hazard, ctx: &Context) -> Decision {
             },
             tier => Decision {
                 tier,
+                action: "use the deployment Region",
                 change: format!("Use the deployment Region instead of `{v}`."),
                 precondition: (tier == Tier::Propose).then_some(
                     "The value means the Region the stack deploys to. The input does not say which Region it was written for.",
@@ -170,6 +207,7 @@ fn decide(l: &Literal, h: &Hazard, ctx: &Context) -> Decision {
         HazardKind::AccountId => match own(env.and_then(|e| e.account.as_ref())) {
             Tier::Flag => Decision {
                 tier: Tier::Flag,
+                action: "set the target account",
                 change: format!(
                     "`{v}` is not the account this resource deploys to. Name the account that has this role in the target partition; for an AWS-owned account, look up its value for the target Region."
                 ),
@@ -178,6 +216,7 @@ fn decide(l: &Literal, h: &Hazard, ctx: &Context) -> Decision {
             },
             tier => Decision {
                 tier,
+                action: "use the deployment account",
                 change: format!("Use the deployment account instead of `{v}`."),
                 precondition: (tier == Tier::Propose).then_some(
                     "The value is the account the stack deploys to, not another account such as a central logging or an AWS-owned account.",
@@ -198,6 +237,7 @@ fn decide(l: &Literal, h: &Hazard, ctx: &Context) -> Decision {
 fn zone(v: &str, whole: &str, env: Option<&DeployEnv>, ctx: &Context) -> Decision {
     let flag = |why: String| Decision {
         tier: Tier::Flag,
+        action: "choose a zone in the target",
         change: format!("Choose the zone for `{v}` in the target. {why}"),
         precondition: None,
         replace: None,
@@ -222,6 +262,7 @@ fn zone(v: &str, whole: &str, env: Option<&DeployEnv>, ctx: &Context) -> Decisio
         Some(n) if i >= n => flag(format!("The target offers {n} zones.")),
         Some(_) => Decision {
             tier: Tier::Propose,
+            action: "use the target's zone by index",
             change: format!("Use the target's zone at index {i} instead of `{v}`."),
             precondition: Some(
                 "Any zone of the target serves here. Zone names are per Region, so the index picks a different physical zone.",
@@ -250,6 +291,7 @@ fn foreign_principal(h: &Hazard) -> Option<RequiredChange> {
             Tier::Flag,
             format!("principal of another partition at {}", h.path),
             "IAM trust does not cross partitions. Replace the principal with an identity in the target partition, for example a role there or an OIDC provider or IAM Roles Anywhere trust anchor for the caller.".into(),
+            brief("principal of another partition", "use an identity in the target partition"),
         );
         c.consequence = Some(
             "Changing only the partition of the ARN produces a principal that does not exist in the target."
@@ -283,6 +325,10 @@ pub fn hazard(h: &Hazard, ctx: &Context) -> Vec<RequiredChange> {
             tier,
             format!("hardcoded {} at {}", values.join(", "), h.path),
             join_unique(mine.iter().map(|(_, d)| d.change.as_str())),
+            brief(
+                format!("hardcoded {}", values.join(", ")),
+                merge_actions(mine.iter().map(|(_, d)| d.action)),
+            ),
         );
         let pre = join_unique(mine.iter().filter_map(|(_, d)| d.precondition));
         c.precondition = (!pre.is_empty()).then_some(pre);
@@ -306,6 +352,34 @@ pub fn hazard(h: &Hazard, ctx: &Context) -> Vec<RequiredChange> {
     out
 }
 
+/// Short actions joined; a shared leading phrase is said once: "use the deployment
+/// Region" and "use the deployment account" become "use the deployment Region and
+/// account".
+fn merge_actions<'a>(parts: impl Iterator<Item = &'a str>) -> String {
+    let mut seen: Vec<&str> = Vec::new();
+    for p in parts {
+        if !seen.contains(&p) {
+            seen.push(p);
+        }
+    }
+    if seen.len() < 2 {
+        return seen.join("");
+    }
+    let words: Vec<Vec<&str>> = seen.iter().map(|s| s.split(' ').collect()).collect();
+    let mut common = 0;
+    while words
+        .iter()
+        .all(|w| w.len() > common + 1 && w[common] == words[0][common])
+    {
+        common += 1;
+    }
+    if common == 0 {
+        return seen.join("; ");
+    }
+    let rests: Vec<String> = words.iter().map(|w| w[common..].join(" ")).collect();
+    format!("{} {}", words[0][..common].join(" "), rests.join(" and "))
+}
+
 fn join_unique<'a>(parts: impl Iterator<Item = &'a str>) -> String {
     let mut seen: Vec<&str> = Vec::new();
     for p in parts {
@@ -321,9 +395,16 @@ pub fn deviation(d: &Deviation, ctx: &Context) -> RequiredChange {
         "{} uses a feature the ESC User Guide documents as different: \"{}\" ({})",
         d.resource_type, d.documented, d.source
     );
+    let what = d.rule.replace('-', " ");
     match d.remediation.as_ref().filter(|_| ctx.single_region) {
         Some(m) => {
-            let mut c = RequiredChange::new(&d.logical_id, Tier::Propose, reason, m.change.clone());
+            let mut c = RequiredChange::new(
+                &d.logical_id,
+                Tier::Propose,
+                reason,
+                m.change.clone(),
+                brief(what, m.action.clone()).about(&d.resource_type),
+            );
             c.consequence = Some(m.consequence.clone());
             c.doc = Some(m.doc.clone());
             c
@@ -334,6 +415,7 @@ pub fn deviation(d: &Deviation, ctx: &Context) -> RequiredChange {
                 Tier::Flag,
                 reason,
                 "Decide how to remove or replace the feature in the target.".into(),
+                brief(what, "remove or replace the feature").about(&d.resource_type),
             );
             c.doc = Some(d.source.clone());
             c
@@ -353,6 +435,7 @@ pub fn depth(
         d.value,
         d.path
     );
+    let what = format!("{} `{}` not offered", kind_label(d.kind), d.value);
     let set = ctx.offered.and_then(|o| o.get(&d.kind));
     let (candidates, consequence) = match (d.kind, set) {
         (DepthKind::InstanceType, Some(s)) => (
@@ -371,6 +454,7 @@ pub fn depth(
             Tier::Flag,
             reason,
             "Choose a value the target region offers.".into(),
+            brief(what, "choose a value the region offers"),
         );
     }
     let mut c = RequiredChange::new(
@@ -378,6 +462,7 @@ pub fn depth(
         Tier::Propose,
         reason,
         "Choose one of the candidates the target offers.".into(),
+        brief(what, format!("choose one of {} offered", candidates.len())),
     );
     c.candidates = candidates;
     c.consequence = Some(consequence.into());
@@ -469,6 +554,17 @@ fn version_candidates(value: &str, offered: &std::collections::BTreeSet<String>)
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn merged_actions_say_the_shared_phrase_once() {
+        let m = |p: &[&str]| merge_actions(p.iter().copied());
+        assert_eq!(
+            m(&["use the deployment Region", "use the deployment account"]),
+            "use the deployment Region and account"
+        );
+        assert_eq!(m(&["use a x", "use a y", "use a z"]), "use a x and y and z");
+        assert_eq!(m(&["a b", "c d"]), "a b; c d");
+    }
     use std::collections::BTreeSet;
 
     fn at(path: &str, value: &str, literals: Vec<Literal>) -> Vec<RequiredChange> {
@@ -734,6 +830,7 @@ mod tests {
             documented: "Global Tables and Cross-Region Restore".into(),
             source: "https://docs.aws.eu/esc/latest/userguide/dynamodb.html".into(),
             remediation: remediation.then(|| crate::deviation::RuleRemediation {
+                action: "use a table".into(),
                 change: "Use a table.".into(),
                 consequence: "Replaced.".into(),
                 doc: "https://docs.aws.amazon.com/x".into(),
