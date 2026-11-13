@@ -6,12 +6,13 @@ use std::time::Duration;
 
 use clap::{Parser, ValueEnum};
 
+use crate::depth::DepthSource;
 use crate::error::{Result, ScanError};
 use crate::model::{SourceFormat, Template};
-use crate::provider::{self, PublicData, aws_call, http, live, regional_table};
+use crate::provider::{self, aws_call, http, knowledge, live, partition, terraform};
 use crate::remediation;
-use crate::report::{self, Provenance, Report, TerraformProvenance};
-use crate::type_mapper::{LiveCheck, Mapping, TypeMapper};
+use crate::report::{self, KnowledgeProvenance, Provenance, Report, TerraformProvenance};
+use crate::type_mapper::{Check, Mapping, TypeMapper};
 use crate::{depth, deviation, extractor, matcher, reader};
 
 #[derive(Debug, Parser)]
@@ -34,32 +35,34 @@ enum Command {
 
 #[derive(Debug, clap::Args)]
 struct ScanArgs {
-    /// CloudFormation template (JSON or YAML), `cdk.out` directory, or
-    /// `terraform show -json` output. Omit or use `-` to read stdin.
-    template: Option<String>,
-    /// `public`: public AWS data only. `live`: also check a target-region account (read-only).
-    #[arg(long, value_enum, default_value_t = Mode::Public)]
-    mode: Mode,
-    /// AWS profile for live mode. Without it, the default credential chain is used.
+    /// CloudFormation template (JSON or YAML), CDK app or `cdk.out` directory, or
+    /// `terraform show -json` output. Default: the current directory, or piped stdin.
+    path: Option<String>,
+    /// Also check the target account (read-only), with the default credential chain.
+    #[arg(long)]
+    live: bool,
+    /// AWS profile for live mode. Implies --live.
     #[arg(long)]
     profile: Option<String>,
     /// Role to assume for live mode, on top of the profile or default credentials.
+    /// Implies --live.
     #[arg(long)]
     role_arn: Option<String>,
-    /// Write the JSON report here instead of stdout.
+    /// Write the JSON report here. Without it, the report goes to stdout when stdout is
+    /// redirected or piped.
     #[arg(long)]
     out: Option<PathBuf>,
-    /// `full`: every resource with sources and verdict. `gaps`: only findings that need action or verification.
-    #[arg(long, value_enum, default_value_t = Detail::Full)]
-    detail: Detail,
+    /// Report every resource, not only those that need action or verification.
+    #[arg(long)]
+    all: bool,
     /// Exit 2 when a finding of this kind exists.
     #[arg(long, value_enum)]
     fail_on: Option<FailOn>,
-    /// Region to assess against. Outside ESC the assessment uses fewer sources.
+    /// Region to assess against.
     #[arg(long, default_value = "eusc-de-east-1")]
-    target_region: String,
+    region: String,
     /// Per-request timeout in seconds.
-    #[arg(long, default_value_t = 30)]
+    #[arg(long, default_value_t = 60)]
     timeout: u64,
     /// Do not print the summary to stderr.
     #[arg(long, short)]
@@ -67,12 +70,13 @@ struct ScanArgs {
 }
 
 const SCAN_HELP: &str = "\
-The JSON report goes to stdout (or --out), the summary to stderr.
+The summary goes to stderr; the JSON report to --out, or to stdout when it is redirected.
 
 Examples:
-  esc-preflight scan cdk.out --detail gaps
-  terraform show -json plan.out | esc-preflight scan --fail-on blocker
-  esc-preflight scan template.yaml --mode live --profile esc
+  esc-preflight scan
+  esc-preflight scan --profile esc
+  esc-preflight scan template.yaml --out report.json
+  terraform show -json tfplan | esc-preflight scan --fail-on blocker
 
 Exit codes:
   0  report produced
@@ -82,25 +86,13 @@ Exit codes:
   4  live-mode authentication failed";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
-enum Mode {
-    Public,
-    Live,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
-enum Detail {
-    Full,
-    Gaps,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
 enum FailOn {
     /// Not available, a depth value the region does not offer, or a feature the
     /// ESC User Guide documents as not available.
     Blocker,
     /// Any hardcoded value or environment literal.
     Hazard,
-    /// Any disputed or cannot-assess finding.
+    /// Any disputed or cannot-assess finding, or a guide conflict.
     Disputed,
 }
 
@@ -140,50 +132,88 @@ pub fn run() -> i32 {
 }
 
 fn scan(args: &ScanArgs) -> Result<Report> {
-    let template = match args.template.as_deref() {
-        Some(path) => reader::read(path)?,
-        None if std::io::stdin().is_terminal() => {
-            return Err(ScanError::Input(
-                "no input: pass a path or pipe a template to stdin".into(),
-            ));
-        }
-        None => reader::read("-")?,
-    };
+    let region = &args.region;
+    let template = read_input(args.path.as_deref(), region)?;
     let client = http::Client::new(Duration::from_secs(args.timeout))?;
-    let data = provider::fetch_public(
-        &client,
-        &args.target_region,
-        template.format == SourceFormat::TerraformPlan,
-    )?;
+    let partition = partition::facts(region)?;
+    let tf = (template.format == SourceFormat::TerraformPlan)
+        .then(|| terraform::fetch(&client))
+        .transpose()?;
+    let mut depth = depth::checks(&template, region);
+    let checks = checks(&template, tf.as_ref());
+    let needs = knowledge::Needs {
+        types: checks.iter().filter_map(type_of).cloned().collect(),
+        // Also for checks with an operation: the service decides when the server does
+        // not know the operation.
+        services: checks
+            .iter()
+            .filter_map(|c| match c {
+                Check::Api { service_id, .. } => Some(service_id.clone()),
+                Check::Type(_) => None,
+            })
+            .collect(),
+        operations: checks
+            .iter()
+            .filter_map(|c| match c {
+                Check::Api {
+                    service_id,
+                    operation: Some(o),
+                } => Some(format!("{service_id}+{o}")),
+                _ => None,
+            })
+            .collect(),
+        config: depth::needs_config(&depth),
+    };
+    let data = provider::fetch_public(&client, region, partition, tf, &needs)?;
     let fetched_at = report::now_utc();
-    let scan = extractor::hazards(&template, &data.botocore.partition);
-    let (live, live_prov) = match args.mode {
-        Mode::Public => (None, None),
-        Mode::Live => {
-            let caller = aws_call::Caller::new(
-                &args.target_region,
-                &data.botocore.partition.target_dns_suffix,
-                args.profile.as_deref(),
-                args.role_arn.as_deref(),
-                Duration::from_secs(args.timeout),
-            )?;
-            let mut needs = live_needs(&template, &data, &args.target_region);
+    let mut offered = depth::public_offered(&data.knowledge);
+    depth::resolve(&mut depth, &offered, DepthSource::Knowledge);
+    let scan = extractor::hazards(&template, &data.partition);
+    let live_mode = args.live || args.profile.is_some() || args.role_arn.is_some();
+    let (live, live_prov) = if live_mode {
+        let caller = aws_call::Caller::new(
+            region,
+            &data.partition.target_dns_suffix,
+            args.profile.as_deref(),
+            args.role_arn.as_deref(),
+            Duration::from_secs(args.timeout),
+        )?;
+        let needs = live::Needs {
+            registry: checks.iter().any(|c| type_of(c).is_some()),
+            services: checks
+                .iter()
+                .filter_map(|c| match c {
+                    Check::Api { service_id, .. } => Some(service_id.clone()),
+                    Check::Type(_) => None,
+                })
+                .collect(),
+            depth: depth.clone(),
             // Also for zone literals: whether a zone index exists in the target decides
             // if a derived zone can replace one.
-            needs.zones = scan.env_literals.iter().any(|e| !e.zones.is_empty())
+            zones: scan.env_literals.iter().any(|e| !e.zones.is_empty())
                 || scan
                     .hazards
                     .iter()
                     .flat_map(|h| &h.literals)
-                    .any(|l| l.kind == extractor::HazardKind::AvailabilityZone);
-            let (l, p) = live::run(&caller, &args.target_region, needs)?;
-            (Some(l), Some(p))
-        }
+                    .any(|l| l.kind == extractor::HazardKind::AvailabilityZone),
+        };
+        let (l, p) = live::run(&caller, region, needs)?;
+        depth = l.depth.clone();
+        offered.extend(l.offered.clone());
+        (Some(l), Some(p))
+    } else {
+        (None, None)
     };
-    let findings = matcher::assess(&template, &data, live.as_ref());
+    let findings = matcher::assess(
+        &template,
+        &data.knowledge,
+        data.tf.as_ref(),
+        live.as_ref(),
+        &depth,
+    );
     let (guide, user_guide) = match &data.guide {
         Some(g) => {
-            let (f, p) = deviation::assess(&template, &findings, g);
+            let (f, p) = deviation::assess(&template, &findings, g, &data.knowledge);
             (f, Some(p))
         }
         None => Default::default(),
@@ -197,14 +227,14 @@ fn scan(args: &ScanArgs) -> Result<Report> {
             "public"
         }
         .into(),
-        target_region: args.target_region.clone(),
+        target_region: region.clone(),
         input_environments: template.envs(),
-        botocore_version: data.botocore.botocore_version.clone(),
-        botocore_urls: data.botocore.urls.clone(),
-        regional_table_url: regional_table::URL.into(),
-        regional_table_source_version: data.regional_table.source_version.clone(),
-        regional_table_unmapped: data.regional_table.unmapped_names.clone(),
-        endpoints_docs_url: data.endpoints_page.as_ref().map(|d| d.url.clone()),
+        partitions_version: partition::VERSION.into(),
+        knowledge: KnowledgeProvenance {
+            url: knowledge::URL.into(),
+            calls: data.knowledge.calls,
+            unknown: data.knowledge.unknown.iter().cloned().collect(),
+        },
         user_guide,
         fetched_at,
         terraform: data.tf.as_ref().map(|tf| TerraformProvenance {
@@ -221,47 +251,59 @@ fn scan(args: &ScanArgs) -> Result<Report> {
         guide,
         template.out_of_scope,
         &remediation::Context {
-            single_region: data.botocore.partition.target_regions == 1,
+            single_region: data.partition.target_regions == 1,
             target_zones: live.as_ref().and_then(|l| l.target_zones),
-            offered: live.as_ref().map(|l| &l.offered),
+            offered: Some(&offered),
         },
     );
     // The summary, which the exit code and stderr read, covers every finding.
-    if args.detail == Detail::Gaps {
+    if !args.all {
         report::gaps_only(&mut report);
     }
     let json = report::to_json(&report);
     match &args.out {
         Some(p) => std::fs::write(p, json)
             .map_err(|e| ScanError::Input(format!("cannot write {}: {e}", p.display())))?,
-        None => print!("{json}"),
+        None if !std::io::stdout().is_terminal() => print!("{json}"),
+        None => {}
     }
     Ok(report)
 }
 
-/// The live checks this input needs, so live mode makes no call it does not use.
-fn live_needs(template: &Template, data: &PublicData, target_region: &str) -> live::Needs {
-    let mapper = TypeMapper::new(
-        data.botocore.known_services.iter().cloned(),
-        data.tf.as_ref(),
-    );
-    let mut needs = live::Needs {
-        depth: depth::checks(template, target_region),
-        ..live::Needs::default()
-    };
-    for r in template.resources.values() {
-        let (service, check) = match mapper.map(r) {
-            Mapping::Service { service, live } => (Some(service), Some(live)),
-            Mapping::Unknown { live, .. } => (None, live),
-            Mapping::Pseudo => (None, None),
-        };
-        match check {
-            Some(LiveCheck::Registry(_)) => needs.registry = true,
-            Some(LiveCheck::ServiceApi) => needs.services.extend(service),
-            None => {}
+/// The input named, piped stdin, or the current directory.
+fn read_input(path: Option<&str>, region: &str) -> Result<Template> {
+    match path {
+        Some(p) => reader::read(p, region),
+        None if !std::io::stdin().is_terminal() => {
+            let text = reader::read_stdin()?;
+            if text.trim().is_empty() {
+                reader::read(".", region)
+            } else {
+                reader::parse_text(&text)
+            }
         }
+        None => reader::read(".", region),
     }
-    needs
+}
+
+/// What decides each resource of the input.
+fn checks(template: &Template, tf: Option<&terraform::TfMaps>) -> Vec<Check> {
+    let mapper = TypeMapper::new(tf);
+    template
+        .resources
+        .values()
+        .filter_map(|r| match mapper.map(r) {
+            Mapping::Resource { check, .. } => Some(check),
+            _ => None,
+        })
+        .collect()
+}
+
+fn type_of(c: &Check) -> Option<&String> {
+    match c {
+        Check::Type(t) => Some(t),
+        Check::Api { .. } => None,
+    }
 }
 
 fn fails(r: &Report, f: FailOn) -> bool {
@@ -269,6 +311,6 @@ fn fails(r: &Report, f: FailOn) -> bool {
     match f {
         FailOn::Blocker => s.depth_blockers + s.deviations + s.not_available > 0,
         FailOn::Hazard => s.hazards + s.environment_literals > 0,
-        FailOn::Disputed => s.disputed + s.cannot_assess > 0,
+        FailOn::Disputed => s.disputed + s.cannot_assess + s.guide_conflicts > 0,
     }
 }

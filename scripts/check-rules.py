@@ -70,6 +70,8 @@ def cfn_resolves(schema, path, cond=None):
         return cond["equals"].lower() in enum
     if "prefix" in cond:
         return any(e.startswith(cond["prefix"].lower()) for e in enum)
+    if "not_in" in cond:
+        return all(v.lower() in enum for v in cond["not_in"])
     return True
 
 

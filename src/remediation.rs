@@ -442,7 +442,13 @@ pub fn depth(
             instance_candidates(&d.value, s),
             "Price and performance differ between instance families.",
         ),
-        (DepthKind::RdsEngineVersion | DepthKind::CacheEngineVersion, Some(s)) => (
+        (
+            DepthKind::RdsEngineVersion
+            | DepthKind::CacheEngineVersion
+            | DepthKind::NeptuneEngineVersion
+            | DepthKind::DocumentDbEngineVersion,
+            Some(s),
+        ) => (
             version_candidates(&d.value, s),
             "Versions differ in features and fixes; test the application against the chosen one.",
         ),
@@ -477,6 +483,10 @@ fn kind_label(k: DepthKind) -> &'static str {
         DepthKind::InferenceProfile => "inference profile",
         DepthKind::RdsEngineVersion => "RDS engine version",
         DepthKind::CacheEngineVersion => "ElastiCache engine version",
+        DepthKind::CacheNodeType => "ElastiCache node type",
+        DepthKind::NeptuneEngineVersion => "Neptune engine version",
+        DepthKind::DocumentDbEngineVersion => "DocumentDB engine version",
+        DepthKind::RedshiftNodeType => "Redshift node type",
     }
 }
 
@@ -829,6 +839,9 @@ mod tests {
             rule: "dynamodb-global-tables".into(),
             documented: "Global Tables and Cross-Region Restore".into(),
             source: "https://docs.aws.eu/esc/latest/userguide/dynamodb.html".into(),
+            severity: crate::deviation::Severity::Blocker,
+            feature: None,
+            conflict: None,
             remediation: remediation.then(|| crate::deviation::RuleRemediation {
                 action: "use a table".into(),
                 change: "Use a table.".into(),

@@ -1,5 +1,5 @@
 ◆ esc-preflight · 5 resources · eusc-de-east-1
-  botocore 1.43.120 · regional table 20251113063700 · public mode
+  Knowledge MCP · ESC User Guide 16 pages · public mode
 
   AVAILABILITY
   ✔ available            5
@@ -18,6 +18,3 @@
   so region-specific values resolve as they will be deployed.
   For a CDK app without a hardcoded env:
     $ AWS_REGION=eusc-de-east-1 cdk synth
-
-⚠ Public sources list services, not resource types. A type the service does not support in
-  eusc-de-east-1 is only found in live mode, unless the ESC User Guide documents it.

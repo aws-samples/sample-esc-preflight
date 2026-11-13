@@ -16,15 +16,18 @@ After an intended change to the report, regenerate the golden files with `UPDATE
 
 ## Data
 
-`data/` holds service metadata and the deviation rules. Availability data is never bundled; every scan fetches it.
+`data/` holds maps, partition facts and the deviation rules. Availability data is never bundled; every scan fetches it from the AWS Knowledge MCP server.
 
 | File | Update |
 |---|---|
-| `botocore-services.json` | `python3 scripts/gen-botocore-services.py <names_data.hcl>` (needs `pip install botocore`) |
+| `botocore-services.json`, `partitions.json` | `uv run --with botocore python3 scripts/gen-botocore-services.py <names_data.hcl>`; needed for a new partition or Region |
 | `esc-guide-rules.json` | By hand, see below |
+| `cfn-products.json` | By hand: CloudFormation namespaces and types whose Knowledge MCP product name does not follow from the namespace. `cargo test -- --ignored` fails on a name the server no longer lists, here and in rule `feature`s |
 | `cdk-sdk-v2-to-v3.json` | Copied from `aws-cdk-lib` |
-| `esc-guide-pages.json`, `regional-table-names.json` | By hand; the report warns about unmapped pages and names |
+| `esc-guide-pages.json` | By hand; the report warns about unmapped pages |
 | `cfn-service-overrides.json` | By hand |
+
+`tests/fixtures/knowledge.json` is a recorded Knowledge MCP response for eusc-de-east-1; record it again when tests should see newer data.
 
 ## Deviation rules
 
@@ -42,12 +45,15 @@ A rule ties one difference in the [ESC User Guide](https://docs.aws.eu/esc/lates
 ```
 
 - `text`, and every `also` fragment, must appear in one difference on the page. The rule fires only while it does.
-- `when` conditions are alternatives; `all` requires every condition in it. A condition tests `path` with `equals`, `prefix` or `contains`, or without an operator requires a value. Empty `when`: the type alone fires the rule.
+- `when` conditions are alternatives; `all` requires every condition in it. A condition tests `path` with `equals`, `prefix`, `contains`, `not_in` (a string outside the list) or `absent` (no value), or without an operator requires a value. Empty `when`: the type alone fires the rule.
+- `severity`: `blocker` (default) or `caveat`, for a feature that works with an ESC difference. Caveats never block.
+- `feature`: the Knowledge MCP product or feature the sentence restricts. When the server lists it as available, the blocker becomes a guide conflict warning.
+- Types-only rules carry Terraform `aws_*` types only: the Knowledge MCP data and live mode decide CloudFormation types. The exception is a rule with `remediation`.
 - `remediation` (`action`, `change`, `consequence`, `doc`; `action` is the short form for the terminal summary) is only for features that cannot exist in a single-region partition.
 
-A deviation is a blocker, so a wrong rule fails someone's build. To add or change a rule:
+A blocker fails someone's build, so a wrong rule is costly. To add or change a rule:
 
-1. Quote a sentence that says the feature is not available, and match only values the template shows.
+1. Quote a sentence that says the feature is not available, or for a caveat how it differs, and match only values the template shows.
 2. Add a case that fires and a near miss to `tests/fixtures/rule-cases.json`.
 3. Check types and paths against the CloudFormation and Terraform schemas:
    ```bash
@@ -62,7 +68,9 @@ A deviation is a blocker, so a wrong rule fails someone's build. To add or chang
 - Only what the input declares is assessed, not settings made outside it.
 - Custom resources backed by your own code, SAM resources (`AWS::Serverless::*`) and nested stacks in a single template are reported as not assessable. Scan `cdk.out` or the processed template instead.
 - In a Terraform plan for a commercial Region, ARNs built from `data.aws_partition` look hand-written. Plan against the ESC Region where you can.
+- Terraform `aws_*` resources are assessed per service, not per resource type. Plan with the awscc provider, or use live mode, for type-level answers.
+- Roadmap states need a product name for the namespace; namespaces without one show no roadmap.
 
 ## Releases
 
-Not published to crates.io. For a new version, bump `version` in `Cargo.toml`, tag `<version>` (no `v` prefix, e.g. `0.1.0`) and update the tag in the README install command.
+Not published to crates.io. For a new version, bump `version` in `Cargo.toml`, tag `<version>` (no `v` prefix, e.g. `0.2.0`) and update the tag in the README install command.

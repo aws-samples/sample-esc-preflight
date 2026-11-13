@@ -1,7 +1,9 @@
 //! Documented feature differences that a resource in the input uses.
 //!
 //! Each rule ties a sentence of the ESC User Guide to resource types and, optionally,
-//! property values. A rule is active only while its sentence is on the live page.
+//! property values. A rule is active only while its sentence is on the live page. A
+//! blocker whose feature the Knowledge MCP data lists as available is a guide conflict:
+//! the guide is likely outdated, so it warns instead of blocking.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -9,6 +11,7 @@ use serde_json::Value;
 use crate::matcher::{Finding, Verdict};
 use crate::model::Template;
 use crate::provider::guide::{GuideData, Page};
+use crate::provider::knowledge::{Knowledge, State};
 
 const RULES_JSON: &str = include_str!("../data/esc-guide-rules.json");
 
@@ -33,6 +36,10 @@ struct Rule {
     /// Further fragments that must be in the same difference, for list items.
     #[serde(default)]
     also: Vec<String>,
+    #[serde(default)]
+    severity: Severity,
+    /// The Knowledge MCP product or feature the sentence restricts, to detect conflicts.
+    feature: Option<String>,
     types: Vec<String>,
     /// Alternatives: the rule fires if any matches. Empty: the type alone fires it.
     #[serde(default)]
@@ -53,9 +60,20 @@ pub struct RuleRemediation {
     pub doc: String,
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Severity {
+    /// The feature is not available.
+    #[default]
+    Blocker,
+    /// The feature works with an ESC difference.
+    Caveat,
+}
+
 /// `all` conditions must all match; otherwise `path` is tested with at most one of
-/// `equals` (case-insensitive), `prefix` or `contains`, and without one it needs a
-/// non-empty value. `contains` also searches intrinsic functions, as JSON text.
+/// `equals` (case-insensitive), `prefix`, `contains`, `not_in` (a string value outside
+/// the list) or `absent` (no value), and without one it needs a non-empty value.
+/// `contains` also searches intrinsic functions, as JSON text.
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Cond {
@@ -65,6 +83,10 @@ struct Cond {
     equals: Option<String>,
     prefix: Option<String>,
     contains: Option<String>,
+    #[serde(default)]
+    not_in: Vec<String>,
+    #[serde(default)]
+    absent: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -75,8 +97,22 @@ pub struct Deviation {
     /// The documented difference, as the guide states it.
     pub documented: String,
     pub source: String,
+    pub severity: Severity,
+    #[serde(skip)]
+    pub(crate) feature: Option<String>,
+    /// The feature the Knowledge MCP data lists as available although the guide says it
+    /// is not: a guide conflict, reported as a warning.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub conflict: Option<String>,
     #[serde(skip)]
     pub remediation: Option<RuleRemediation>,
+}
+
+impl Deviation {
+    /// Blocks deployment: a blocker the Knowledge MCP data does not contradict.
+    pub fn blocks(&self) -> bool {
+        self.severity == Severity::Blocker && self.conflict.is_none()
+    }
 }
 
 /// The differences one guide page documents for a service the input uses.
@@ -119,8 +155,19 @@ pub fn assess(
     template: &Template,
     findings: &[Finding],
     guide: &GuideData,
+    k: &Knowledge,
 ) -> (GuideFindings, GuideProvenance) {
     let (mut deviations, stale_rules) = find(template, guide);
+    for d in deviations
+        .iter_mut()
+        .filter(|d| d.severity == Severity::Blocker)
+    {
+        d.conflict = d.feature.clone().filter(|f| {
+            k.products
+                .get(f)
+                .is_some_and(|p| p.state == State::Available)
+        });
+    }
     // A resource that is not available at all already carries a required change.
     deviations.retain(|d| {
         !findings
@@ -180,6 +227,9 @@ fn find(template: &Template, guide: &GuideData) -> (Vec<Deviation>, Vec<String>)
             rule: rule.id.clone(),
             documented: documented.clone(),
             source: page.url.clone(),
+            severity: rule.severity,
+            feature: rule.feature.clone(),
+            conflict: None,
             remediation: rule.remediation.clone(),
         }));
     }
@@ -214,6 +264,9 @@ impl Cond {
                 })
                 .collect();
         }
+        if self.absent {
+            return values.iter().all(|v| v.is_null());
+        }
         // A list of scalars matches if any element does.
         let values: Vec<&Value> = values
             .into_iter()
@@ -234,6 +287,9 @@ impl Cond {
                     Value::String(s) => s.contains(c.as_str()),
                     v => v.to_string().contains(c.as_str()),
                 }
+            } else if !self.not_in.is_empty() {
+                v.as_str()
+                    .is_some_and(|s| !self.not_in.iter().any(|x| x.eq_ignore_ascii_case(s)))
             } else {
                 !matches!(v, Value::Null | Value::Bool(false))
                     && v.as_array().is_none_or(|a| !a.is_empty())
@@ -252,14 +308,25 @@ mod tests {
     use crate::reader;
 
     fn scan(template: &str) -> (Vec<Deviation>, Vec<String>) {
-        find(&reader::parse(template).unwrap(), &guide::tests::fixture())
+        find(
+            &reader::parse_text(template).unwrap(),
+            &guide::tests::fixture(),
+        )
+    }
+
+    fn assessed(template: &str) -> Vec<Deviation> {
+        let t = reader::parse_text(template).unwrap();
+        let k = crate::provider::knowledge::tests::fixture();
+        assess(&t, &[], &guide::tests::fixture(), &k).0.deviations
     }
 
     fn well_formed(c: &Cond) -> bool {
         let ops = [&c.equals, &c.prefix, &c.contains]
             .iter()
             .filter(|o| o.is_some())
-            .count();
+            .count()
+            + usize::from(!c.not_in.is_empty())
+            + usize::from(c.absent);
         if c.all.is_empty() {
             c.path.as_deref().is_some_and(|p| !p.is_empty()) && ops <= 1
         } else {
@@ -385,13 +452,35 @@ mod tests {
         }
     }
 
-    /// Every rule's sentence is on the live guide. Run with `cargo test -- --ignored`.
+    #[test]
+    fn rule_features_are_products() {
+        let k = crate::provider::knowledge::tests::fixture();
+        for r in rules() {
+            if let Some(f) = &r.feature {
+                assert!(k.products.contains_key(f), "{}: {f}", r.id);
+            }
+        }
+    }
+
+    /// Every rule's sentence is on the live guide, and every feature is still a
+    /// product. Run with `cargo test -- --ignored`.
     #[test]
     #[ignore = "network"]
     fn no_stale_rules_on_the_live_guide() {
         let client =
             crate::provider::http::Client::new(std::time::Duration::from_secs(30)).unwrap();
         let g = guide::fetch(&client).unwrap();
+        let k = crate::provider::knowledge::fetch(
+            &client,
+            "eusc-de-east-1",
+            &crate::provider::knowledge::Needs::default(),
+        )
+        .unwrap();
+        let gone: Vec<_> = rules()
+            .into_iter()
+            .filter_map(|r| r.feature.filter(|f| !k.products.contains_key(f)))
+            .collect();
+        assert!(gone.is_empty(), "{gone:?}");
         let stale: Vec<_> = rules()
             .into_iter()
             .filter(|r| anchor(r, &g).is_none())
@@ -402,11 +491,11 @@ mod tests {
 
     #[test]
     fn type_rule_fires_with_the_documented_sentence() {
-        let (d, _) = scan(r#"{"Resources":{"U":{"Type":"AWS::Lambda::Url"}}}"#);
+        let (d, _) = scan(r#"{"Resources":{"T":{"Type":"AWS::DynamoDB::GlobalTable"}}}"#);
         assert_eq!(d.len(), 1);
-        assert_eq!(d[0].rule, "lambda-function-urls");
-        assert_eq!(d[0].documented, "Function URLs is not available.");
-        assert!(d[0].source.ends_with("/lambda.html"));
+        assert_eq!(d[0].rule, "dynamodb-global-tables");
+        assert_eq!(d[0].documented, "Global Tables and Cross-Region Restore.");
+        assert!(d[0].source.ends_with("/dynamodb.html"));
     }
 
     #[test]
@@ -421,6 +510,27 @@ mod tests {
         assert!(d.is_empty() && stale.contains(&"apigateway-websocket-api".to_string()));
         assert!(scan(plain).0.is_empty());
         assert_eq!(scan(multi).0.len(), 1);
+    }
+
+    #[test]
+    fn a_contradicted_blocker_is_a_guide_conflict() {
+        let http = r#"{"Resources":{"A":{"Type":"AWS::ApiGatewayV2::Api","Properties":{"ProtocolType":"HTTP"}}}}"#;
+        let d = assessed(http);
+        assert_eq!(d[0].conflict.as_deref(), Some("HTTP API"));
+        assert!(!d[0].blocks());
+    }
+
+    #[test]
+    fn not_in_and_absent() {
+        let c: Cond = serde_json::from_str(r#"{"path":"V","not_in":["a","b"]}"#).unwrap();
+        assert!(c.matches(&serde_json::json!({"V": "c"})));
+        assert!(!c.matches(&serde_json::json!({"V": "A"})));
+        assert!(!c.matches(&serde_json::json!({"V": {"Ref": "P"}})));
+        assert!(!c.matches(&serde_json::json!({})));
+        let c: Cond = serde_json::from_str(r#"{"path":"V","absent":true}"#).unwrap();
+        assert!(c.matches(&serde_json::json!({})));
+        assert!(c.matches(&Value::Null));
+        assert!(!c.matches(&serde_json::json!({"V": "x"})));
     }
 
     #[test]

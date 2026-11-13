@@ -17,26 +17,95 @@ use serde_json::{Map, Number, Value};
 use crate::error::{Result, ScanError};
 use crate::model::{DeployEnv, OUTPUT_TYPE, Origin, Resource, Template};
 
-/// Reads a file, a cloud assembly directory, or stdin (`-`).
-pub fn read(path: &str) -> Result<Template> {
+/// Reads a file, a directory, or stdin (`-`). A directory is a cloud assembly, a CDK
+/// project with `cdk.out`, or a directory with exactly one template or Terraform plan.
+/// `target_region` only phrases the next step when nothing scannable is found.
+pub fn read(path: &str, target_region: &str) -> Result<Template> {
     if path == "-" {
-        let mut s = String::new();
-        std::io::stdin()
-            .read_to_string(&mut s)
-            .map_err(|e| ScanError::Input(format!("stdin: {e}")))?;
-        return parse_with_env(&s, None);
+        return parse_with_env(&read_stdin()?, None);
     }
     let p = Path::new(path);
     if p.is_dir() {
-        return cdk::read_assembly(p);
+        return read_dir(p, target_region);
     }
     let text = std::fs::read_to_string(p).map_err(|e| ScanError::Input(format!("{path}: {e}")))?;
     parse_with_env(&text, cdk::env_of(p))
 }
 
+pub fn read_stdin() -> Result<String> {
+    let mut s = String::new();
+    std::io::stdin()
+        .read_to_string(&mut s)
+        .map_err(|e| ScanError::Input(format!("stdin: {e}")))?;
+    Ok(s)
+}
+
+/// Template extensions tried in a directory; anything else is never read.
+const EXTENSIONS: &[&str] = &["json", "yaml", "yml", "template"];
+/// Larger files are skipped when looking for a template.
+const MAX_CANDIDATE_BYTES: u64 = 20 * 1024 * 1024;
+
+fn read_dir(dir: &Path, target_region: &str) -> Result<Template> {
+    let shown = dir.display();
+    if dir.join("manifest.json").is_file() {
+        return cdk::read_assembly(dir);
+    }
+    let out = dir.join("cdk.out");
+    if out.join("manifest.json").is_file() {
+        return cdk::read_assembly(&out);
+    }
+    let synth = format!("AWS_REGION={target_region} cdk synth");
+    if dir.join("cdk.json").is_file() {
+        return Err(ScanError::Input(format!(
+            "{shown} is a CDK app without a cloud assembly. Run `{synth}` first."
+        )));
+    }
+    let mut found = Vec::new();
+    let mut entries: Vec<_> = std::fs::read_dir(dir)
+        .map_err(|e| ScanError::Input(format!("{shown}: {e}")))?
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .collect();
+    entries.sort();
+    for f in &entries {
+        let ext = f.extension().and_then(|x| x.to_str()).unwrap_or_default();
+        if !f.is_file()
+            || !EXTENSIONS.contains(&ext)
+            || f.metadata().map_or(true, |m| m.len() > MAX_CANDIDATE_BYTES)
+        {
+            continue;
+        }
+        if let Ok(text) = std::fs::read_to_string(f)
+            && let Ok(t) = parse_with_env(&text, cdk::env_of(f))
+        {
+            found.push((f.clone(), t));
+        }
+    }
+    match found.len() {
+        1 => Ok(found.pop().expect("one").1),
+        0 if entries
+            .iter()
+            .any(|f| f.extension().is_some_and(|x| x == "tf")) =>
+        {
+            Err(ScanError::Input(format!(
+                "{shown} holds Terraform configuration but no plan. Run `terraform plan -out tfplan && terraform show -json tfplan > plan.json` with the provider set to {target_region}, then scan plan.json."
+            )))
+        }
+        0 => Err(ScanError::Input(format!(
+            "no CloudFormation template, CDK cloud assembly or Terraform plan in {shown}. For a CDK app run `{synth}` first."
+        ))),
+        _ => Err(ScanError::Input(format!(
+            "several templates in {shown}: {}. Pass one of them.",
+            found
+                .iter()
+                .filter_map(|(f, _)| f.file_name()?.to_str().map(str::to_string))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ))),
+    }
+}
+
 /// Parses input text. JSON is tried first, then YAML.
-#[cfg(test)]
-pub fn parse(text: &str) -> Result<Template> {
+pub fn parse_text(text: &str) -> Result<Template> {
     parse_with_env(text, None)
 }
 
@@ -253,7 +322,7 @@ mod tests {
 
     #[test]
     fn reads_the_cdk_construct_path() {
-        let t = parse(
+        let t = parse_text(
             r#"{"Resources":{"B":{"Type":"AWS::S3::Bucket","Metadata":{"aws:cdk:path":"App/Data/Bucket/Resource"}},"C":{"Type":"AWS::S3::Bucket"}}}"#,
         )
         .unwrap();
@@ -266,7 +335,7 @@ mod tests {
 
     #[test]
     fn parses_json() {
-        let t = parse(
+        let t = parse_text(
             r#"{"Resources":{"B":{"Type":"AWS::S3::Bucket","Properties":{"BucketName":"x"}}}}"#,
         )
         .unwrap();
@@ -288,7 +357,7 @@ Resources:
       List: !Join [",", [a, b]]
       Port: 443
 "#;
-        let t = parse(yaml).unwrap();
+        let t = parse_text(yaml).unwrap();
         let p = &t.resources["Fn"].properties;
         assert_eq!(p["Role"], json!({"Fn::GetAtt": ["Role", "Arn"]}));
         assert_eq!(p["Name"], json!({"Ref": "Prefix"}));
@@ -299,13 +368,13 @@ Resources:
 
     #[test]
     fn rejects_malformed_input() {
-        let err = parse("{not: [valid").unwrap_err();
+        let err = parse_text("{not: [valid").unwrap_err();
         assert_eq!(err.exit_code(), 1);
     }
 
     #[test]
     fn expands_for_each() {
-        let t = parse(
+        let t = parse_text(
             r#"{"Transform":"AWS::LanguageExtensions","Resources":{
             "Fn::ForEach::Tables":["Name",["Points","Score-v2"],
               {"${Name}Table":{"Type":"AWS::DynamoDB::Table","Properties":{"TableName":"&{Name}"}}}],
@@ -323,19 +392,61 @@ Resources:
 
     #[test]
     fn unpackaged_module_type_is_explained() {
-        let err = parse("Resources:\n  M:\n    Type: !Rain::Module ./m.yml\n").unwrap_err();
+        let err = parse_text("Resources:\n  M:\n    Type: !Rain::Module ./m.yml\n").unwrap_err();
         assert!(err.to_string().contains("package the template"), "{err}");
     }
 
     #[test]
     fn rejects_template_without_resources() {
-        assert_eq!(parse(r#"{"Parameters":{}}"#).unwrap_err().exit_code(), 1);
+        assert_eq!(
+            parse_text(r#"{"Parameters":{}}"#).unwrap_err().exit_code(),
+            1
+        );
+    }
+
+    fn scratch(name: &str, files: &[(&str, &str)]) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("esc-preflight-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        for (f, body) in files {
+            std::fs::write(dir.join(f), body).unwrap();
+        }
+        dir
+    }
+
+    #[test]
+    fn a_directory_finds_its_input_or_says_what_to_run() {
+        const T: &str = r#"{"Resources":{"B":{"Type":"AWS::S3::Bucket"}}}"#;
+        let one = scratch("one", &[("stack.yaml", T), ("package.json", "{}")]);
+        let t = read(one.to_str().unwrap(), "eusc-de-east-1").unwrap();
+        assert_eq!(t.resources.len(), 1);
+        let two = scratch("two", &[("a.json", T), ("b.json", T)]);
+        let e = read(two.to_str().unwrap(), "eusc-de-east-1").unwrap_err();
+        assert!(e.to_string().contains("a.json, b.json"), "{e}");
+        let cdk = scratch("cdk", &[("cdk.json", "{}")]);
+        let e = read(cdk.to_str().unwrap(), "eusc-de-east-1").unwrap_err();
+        assert!(
+            e.to_string()
+                .contains("AWS_REGION=eusc-de-east-1 cdk synth"),
+            "{e}"
+        );
+        let tf = scratch("tf", &[("main.tf", "")]);
+        let e = read(tf.to_str().unwrap(), "eusc-de-east-1").unwrap_err();
+        assert!(e.to_string().contains("terraform show -json"), "{e}");
+        let assembly = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures");
+        let t = read(assembly, "eusc-de-east-1").unwrap();
+        assert!(!t.resources.is_empty(), "./cdk.out is found");
+        for d in [one, two, cdk, tf] {
+            std::fs::remove_dir_all(d).unwrap();
+        }
     }
 
     #[test]
     fn rejects_resource_without_type() {
         assert_eq!(
-            parse(r#"{"Resources":{"A":{}}}"#).unwrap_err().exit_code(),
+            parse_text(r#"{"Resources":{"A":{}}}"#)
+                .unwrap_err()
+                .exit_code(),
             1
         );
     }

@@ -273,9 +273,8 @@ fn unescape(s: &str) -> String {
         .replace("&amp;", "&")
 }
 
-/// DNS suffixes of AWS partitions. The suffix comes from downloaded botocore data,
-/// so it is checked before any request is signed: a tampered `partitions.json` must
-/// not be able to send the signed request and session token to another host.
+/// DNS suffixes of AWS partitions. The endpoint host is checked against them before
+/// any request is signed, so a signed request and session token never go elsewhere.
 const AWS_DNS_SUFFIXES: &[&str] = &[
     "amazonaws.com",
     "amazonaws.com.cn",

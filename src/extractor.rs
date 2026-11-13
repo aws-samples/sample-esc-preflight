@@ -11,7 +11,7 @@ use crate::model::{DeployEnv, OUTPUT_TYPE, Origin, Template};
 use serde::Serialize;
 use serde_json::Value;
 
-/// Partition facts read from the live botocore `partitions.json`, never hardcoded.
+/// Partition facts from the bundled botocore `partitions.json`, never hardcoded.
 #[derive(Debug, Clone)]
 pub struct PartitionFacts {
     /// Partition id of the target region, e.g. `aws-eusc`.
@@ -379,7 +379,7 @@ pub(crate) mod tests {
     }
 
     fn kinds(json: &str) -> Vec<(HazardKind, String)> {
-        let t = reader::parse(json).unwrap();
+        let t = reader::parse_text(json).unwrap();
         hazards(&t, &facts())
             .hazards
             .into_iter()
@@ -390,7 +390,7 @@ pub(crate) mod tests {
 
     #[test]
     fn values_of_an_environment_in_the_target_are_neither_hazards_nor_reported() {
-        let mut t = reader::parse(
+        let mut t = reader::parse_text(
             r#"{"Resources":{"R":{"Type":"AWS::X::Y","Properties":{"Arn":"arn:aws-eusc:sqs:eusc-de-east-1:444455556666:q"}}}}"#,
         )
         .unwrap();
@@ -405,7 +405,7 @@ pub(crate) mod tests {
 
     #[test]
     fn scans_terraform_root_outputs() {
-        let t = reader::parse(
+        let t = reader::parse_text(
             r#"{"format_version":"1.2","planned_values":{"outputs":{"queue":{"sensitive":false,"value":"arn:aws:sqs:eusc-de-east-1:444455556666:q"}}}}"#,
         )
         .unwrap();
@@ -417,7 +417,7 @@ pub(crate) mod tests {
 
     #[test]
     fn scans_output_values() {
-        let t = reader::parse(
+        let t = reader::parse_text(
             r#"{"Resources":{"B":{"Type":"AWS::S3::Bucket"}},"Outputs":{"KeyArn":{"Value":{"Fn::Sub":"arn:aws:kms:${AWS::Region}:${AWS::AccountId}:key/x"},"Export":{"Name":"k"}}}}"#,
         )
         .unwrap();
@@ -524,7 +524,7 @@ pub(crate) mod tests {
 
     #[test]
     fn one_place_per_value() {
-        let t = reader::parse(
+        let t = reader::parse_text(
             r#"{"Resources":{"R":{"Type":"AWS::X::Y","Properties":{
             "A":"arn:aws:secretsmanager:us-east-1:444455556666:secret:x"}}}}"#,
         )
@@ -537,7 +537,7 @@ pub(crate) mod tests {
     #[test]
     fn synthesis_environment_literals_are_counted_once() {
         let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/cdk.out");
-        let t = reader::read(dir).unwrap();
+        let t = reader::read(dir, "eusc-de-east-1").unwrap();
         let s = hazards(&t, &facts());
         assert_eq!(s.env_literals.len(), 1);
         assert_eq!(s.env_literals[0].places, 2);
@@ -560,7 +560,7 @@ pub(crate) mod tests {
             region: Some(r.into()),
             account: Some(a.into()),
         };
-        let mut t = reader::parse(
+        let mut t = reader::parse_text(
             r#"{"Resources":{
             "Pipeline":{"Type":"AWS::X::Y","Properties":{
                 "Region":"us-east-1","Role":"arn:aws:iam::444455556666:role/deploy",
@@ -585,7 +585,7 @@ pub(crate) mod tests {
 
     #[test]
     fn terraform_plan_partition_literals_count_as_environment() {
-        let t = reader::parse(
+        let t = reader::parse_text(
             r#"{"format_version":"1.2","planned_values":{"root_module":{"resources":[
             {"address":"aws_iam_role_policy.p","mode":"managed","type":"aws_iam_role_policy",
              "provider_name":"registry.terraform.io/hashicorp/aws",

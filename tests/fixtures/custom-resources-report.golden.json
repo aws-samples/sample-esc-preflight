@@ -5,11 +5,11 @@
     "mode": "public",
     "target_region": "eusc-de-east-1",
     "input_environments": [],
-    "botocore_version": "1.43.120",
-    "botocore_urls": [],
-    "regional_table_url": "https://api.regional-table.region-services.aws.a2z.com/index.json",
-    "regional_table_source_version": "20251113063700",
-    "endpoints_docs_url": "https://docs.aws.eu/general/latest/gr/endpoints.html",
+    "partitions_version": "test",
+    "knowledge": {
+      "url": "https://knowledge-mcp.global.api.aws",
+      "calls": 0
+    },
     "user_guide": {
       "toc_url": "",
       "pages": 16,
@@ -23,34 +23,36 @@
   "summary": {
     "resources": 3,
     "available": 1,
-    "available_single_source": 0,
-    "not_available": 1,
-    "disputed": 0,
+    "not_available": 0,
+    "disputed": 1,
     "cannot_assess": 1,
+    "planned": 1,
     "hazards": 0,
     "environment_literals": 0,
     "divergences": 0,
     "depth_blockers": 0,
     "deviations": 0,
+    "guide_conflicts": 0,
+    "caveats": 0,
     "fixes": 0,
     "proposals": 0,
-    "flags": 1
+    "flags": 0
   },
   "findings": [
     {
       "logical_id": "CreateInvalidation",
       "resource_type": "Custom::AWS",
       "service": "cloudfront",
-      "verdict": "not-available",
+      "verdict": "disputed",
       "evidence": {
-        "botocore_listed": false,
-        "regional_table_listed": false,
-        "endpoints_page_listed": false,
-        "user_guide_listed": false,
-        "live_listed": null,
-        "live_check": null
+        "knowledge": "available"
       },
-      "note": "Not available in the target region. Remove the resource from the deployment there or replace it with a service the region offers.",
+      "roadmap": {
+        "product": "Amazon CloudFront",
+        "status": "planned",
+        "launch": "2026 Q4"
+      },
+      "note": "The Knowledge MCP data lists CloudFront CreateInvalidation, but Amazon CloudFront is planned for 2026 Q4 in the target region. Check that the feature works before relying on it.",
       "divergence": false,
       "depth": []
     },
@@ -59,14 +61,8 @@
       "resource_type": "Custom::DescribeUserPoolClient",
       "service": "cognito-idp",
       "verdict": "available",
-      "single_source": false,
       "evidence": {
-        "botocore_listed": true,
-        "regional_table_listed": true,
-        "endpoints_page_listed": true,
-        "user_guide_listed": true,
-        "live_listed": null,
-        "live_check": null
+        "knowledge": "available"
       },
       "note": null,
       "divergence": false,
@@ -100,17 +96,7 @@
   ],
   "environment_literals": [],
   "zones": null,
-  "required_changes": [
-    {
-      "logical_id": "CreateInvalidation",
-      "tier": "flag",
-      "reason": "Custom::AWS calls cloudfront, which is not available in eusc-de-east-1",
-      "change": "Not available in the target region. Remove the resource from the deployment there or replace it with a service the region offers."
-    }
-  ],
-  "source_disagreements": [],
+  "required_changes": [],
   "out_of_scope": [],
-  "warnings": [
-    "Public sources list services, not resource types. A type the service does not support in eusc-de-east-1 is only found in live mode, unless the ESC User Guide documents it."
-  ]
+  "warnings": []
 }

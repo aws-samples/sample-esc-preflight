@@ -100,8 +100,6 @@ pub const GUIDE_TOC: &str = r#"{
  ]
 }"#;
 
-pub const BOTOCORE_VERSION: &str = r#"1.43.120"#;
-
 pub const TF_PROVIDER_VERSIONS: &str = r#"6.71.0
 1.108.0"#;
 

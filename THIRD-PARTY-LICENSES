@@ -2,7 +2,8 @@ This project includes data derived from the following third-party works.
 
 ** botocore - https://github.com/boto/botocore
    data/botocore-services.json is generated from the botocore service models
-   by scripts/gen-botocore-services.py.
+   by scripts/gen-botocore-services.py; data/partitions.json is copied from
+   botocore/data/partitions.json by the same script.
    Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 ** AWS Cloud Development Kit (aws-cdk-lib) - https://github.com/aws/aws-cdk
