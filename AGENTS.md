@@ -18,7 +18,7 @@ UPDATE_GOLDEN=1 cargo test                  # after an intended report change; r
 | Path | Role |
 |---|---|
 | `src/reader.rs`, `src/reader/` | Parse templates, `cdk.out` and Terraform plan JSON into `src/model.rs` |
-| `src/provider/` | Fetch public data (botocore, regional table, ESC endpoints page and User Guide, Terraform provider data) and run live-mode calls |
+| `src/provider/` | Fetch public data (AWS Knowledge MCP, ESC User Guide, Terraform provider data), read bundled partition facts, and run live-mode calls |
 | `src/remediation.rs` | Tier and edit for every required change |
 | `data/esc-guide-rules.json` | Deviation rules, see `docs/DEVELOPMENT.md` |
 | `skills/esc-preflight/SKILL.md` | Skill that applies the report to a user's code |

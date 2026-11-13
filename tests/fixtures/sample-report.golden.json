@@ -5,11 +5,11 @@
     "mode": "public",
     "target_region": "eusc-de-east-1",
     "input_environments": [],
-    "botocore_version": "1.43.120",
-    "botocore_urls": [],
-    "regional_table_url": "https://api.regional-table.region-services.aws.a2z.com/index.json",
-    "regional_table_source_version": "20251113063700",
-    "endpoints_docs_url": "https://docs.aws.eu/general/latest/gr/endpoints.html",
+    "partitions_version": "test",
+    "knowledge": {
+      "url": "https://knowledge-mcp.global.api.aws",
+      "calls": 0
+    },
     "user_guide": {
       "toc_url": "",
       "pages": 16,
@@ -22,35 +22,36 @@
   },
   "summary": {
     "resources": 8,
-    "available": 5,
-    "available_single_source": 0,
-    "not_available": 2,
+    "available": 6,
+    "not_available": 1,
     "disputed": 1,
     "cannot_assess": 0,
+    "planned": 1,
     "hazards": 3,
     "environment_literals": 0,
     "divergences": 0,
     "depth_blockers": 0,
     "deviations": 0,
+    "guide_conflicts": 0,
+    "caveats": 0,
     "fixes": 2,
     "proposals": 1,
-    "flags": 3
+    "flags": 2
   },
   "findings": [
     {
       "logical_id": "Assistant",
       "resource_type": "AWS::QBusiness::Application",
       "service": "qbusiness",
-      "verdict": "disputed",
+      "verdict": "not-available",
       "evidence": {
-        "botocore_listed": true,
-        "regional_table_listed": false,
-        "endpoints_page_listed": false,
-        "user_guide_listed": false,
-        "live_listed": null,
-        "live_check": null
+        "knowledge": "not-available"
       },
-      "note": null,
+      "roadmap": {
+        "product": "Amazon Q Business",
+        "status": "not-expanding"
+      },
+      "note": "Amazon Q Business is not expanding to the region. Not available in the target region. Remove the resource from the deployment there or replace it with a service the region offers.",
       "divergence": false,
       "depth": []
     },
@@ -59,14 +60,8 @@
       "resource_type": "Custom::S3AutoDeleteObjects",
       "service": "s3",
       "verdict": "available",
-      "single_source": false,
       "evidence": {
-        "botocore_listed": true,
-        "regional_table_listed": true,
-        "endpoints_page_listed": true,
-        "user_guide_listed": true,
-        "live_listed": null,
-        "live_check": null
+        "knowledge": "available"
       },
       "note": null,
       "divergence": false,
@@ -77,14 +72,8 @@
       "resource_type": "AWS::S3::Bucket",
       "service": "s3",
       "verdict": "available",
-      "single_source": false,
       "evidence": {
-        "botocore_listed": true,
-        "regional_table_listed": true,
-        "endpoints_page_listed": true,
-        "user_guide_listed": true,
-        "live_listed": null,
-        "live_check": null
+        "knowledge": "available"
       },
       "note": null,
       "divergence": false,
@@ -94,16 +83,11 @@
       "logical_id": "Build",
       "resource_type": "AWS::CodeBuild::Project",
       "service": "codebuild",
-      "verdict": "not-available",
+      "verdict": "available",
       "evidence": {
-        "botocore_listed": false,
-        "regional_table_listed": false,
-        "endpoints_page_listed": false,
-        "user_guide_listed": false,
-        "live_listed": null,
-        "live_check": null
+        "knowledge": "available"
       },
-      "note": "Not available in the target region. Remove the resource from the deployment there or replace it with a service the region offers.",
+      "note": null,
       "divergence": false,
       "depth": []
     },
@@ -111,16 +95,16 @@
       "logical_id": "Cdn",
       "resource_type": "AWS::CloudFront::Distribution",
       "service": "cloudfront",
-      "verdict": "not-available",
+      "verdict": "disputed",
       "evidence": {
-        "botocore_listed": false,
-        "regional_table_listed": false,
-        "endpoints_page_listed": false,
-        "user_guide_listed": false,
-        "live_listed": null,
-        "live_check": null
+        "knowledge": "available"
       },
-      "note": "Not available in the target region. Remove the resource from the deployment there or replace it with a service the region offers.",
+      "roadmap": {
+        "product": "Amazon CloudFront",
+        "status": "planned",
+        "launch": "2026 Q4"
+      },
+      "note": "The Knowledge MCP data lists the resource type AWS::CloudFront::Distribution, but Amazon CloudFront is planned for 2026 Q4 in the target region. Check that the feature works before relying on it.",
       "divergence": false,
       "depth": []
     },
@@ -129,14 +113,8 @@
       "resource_type": "AWS::Lambda::Function",
       "service": "lambda",
       "verdict": "available",
-      "single_source": false,
       "evidence": {
-        "botocore_listed": true,
-        "regional_table_listed": true,
-        "endpoints_page_listed": true,
-        "user_guide_listed": true,
-        "live_listed": null,
-        "live_check": null
+        "knowledge": "available"
       },
       "note": null,
       "divergence": false,
@@ -147,14 +125,8 @@
       "resource_type": "AWS::IAM::Role",
       "service": "iam",
       "verdict": "available",
-      "single_source": false,
       "evidence": {
-        "botocore_listed": false,
-        "regional_table_listed": true,
-        "endpoints_page_listed": true,
-        "user_guide_listed": true,
-        "live_listed": null,
-        "live_check": null
+        "knowledge": "available"
       },
       "note": null,
       "divergence": false,
@@ -165,14 +137,8 @@
       "resource_type": "AWS::EC2::Subnet",
       "service": "ec2",
       "verdict": "available",
-      "single_source": false,
       "evidence": {
-        "botocore_listed": true,
-        "regional_table_listed": true,
-        "endpoints_page_listed": true,
-        "user_guide_listed": true,
-        "live_listed": null,
-        "live_check": null
+        "knowledge": "available"
       },
       "note": null,
       "divergence": false,
@@ -274,16 +240,10 @@
   "zones": null,
   "required_changes": [
     {
-      "logical_id": "Build",
+      "logical_id": "Assistant",
       "tier": "flag",
-      "reason": "AWS::CodeBuild::Project is not available in eusc-de-east-1",
-      "change": "Not available in the target region. Remove the resource from the deployment there or replace it with a service the region offers."
-    },
-    {
-      "logical_id": "Cdn",
-      "tier": "flag",
-      "reason": "AWS::CloudFront::Distribution is not available in eusc-de-east-1",
-      "change": "Not available in the target region. Remove the resource from the deployment there or replace it with a service the region offers."
+      "reason": "AWS::QBusiness::Application is not available in eusc-de-east-1",
+      "change": "Amazon Q Business is not expanding to the region. Not available in the target region. Remove the resource from the deployment there or replace it with a service the region offers."
     },
     {
       "logical_id": "Fn",
@@ -344,11 +304,6 @@
       "change": "Choose the zone for `eu-central-1a` in the target. Run in live mode to compare with the target's zones."
     }
   ],
-  "source_disagreements": [
-    "qbusiness"
-  ],
   "out_of_scope": [],
-  "warnings": [
-    "Public sources list services, not resource types. A type the service does not support in eusc-de-east-1 is only found in live mode, unless the ESC User Guide documents it."
-  ]
+  "warnings": []
 }

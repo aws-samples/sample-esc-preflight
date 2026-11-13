@@ -2,10 +2,11 @@
 
 use serde::Serialize;
 
-use crate::deviation::{Deviation, Documented, GuideFindings, GuideProvenance};
+use crate::deviation::{Deviation, Documented, GuideFindings, GuideProvenance, Severity};
 use crate::extractor::{EnvLiterals, Scan};
 use crate::matcher::{Finding, Verdict};
 use crate::model::{DeployEnv, OutOfScope, SourceFormat};
+use crate::provider::knowledge::State;
 use crate::provider::live::LiveProvenance;
 use crate::remediation::{self, Context, RequiredChange, Tier};
 
@@ -17,6 +18,15 @@ pub struct TerraformProvenance {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct KnowledgeProvenance {
+    pub url: String,
+    pub calls: usize,
+    /// Types, services or operations the server does not know.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub unknown: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct Provenance {
     pub tool_version: String,
     pub source_format: SourceFormat,
@@ -24,15 +34,9 @@ pub struct Provenance {
     pub target_region: String,
     /// Where the input was synthesized (CDK cloud assembly) or planned (Terraform).
     pub input_environments: Vec<DeployEnv>,
-    pub botocore_version: String,
-    pub botocore_urls: Vec<String>,
-    pub regional_table_url: String,
-    pub regional_table_source_version: String,
-    /// Regional-table service names in the target region with no mapping to a service.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub regional_table_unmapped: Vec<String>,
-    /// ESC endpoints page, when the target is in its partition.
-    pub endpoints_docs_url: Option<String>,
+    /// botocore release of the bundled partition data.
+    pub partitions_version: String,
+    pub knowledge: KnowledgeProvenance,
     /// ESC User Guide service pages, when the target is in its partition.
     pub user_guide: Option<GuideProvenance>,
     pub fetched_at: String,
@@ -44,10 +48,11 @@ pub struct Provenance {
 pub struct Summary {
     pub resources: usize,
     pub available: usize,
-    pub available_single_source: usize,
     pub not_available: usize,
     pub disputed: usize,
     pub cannot_assess: usize,
+    /// Findings whose product has a planned launch quarter.
+    pub planned: usize,
     /// Property values with a hardcoded hazard; each is one place to fix.
     pub hazards: usize,
     /// Property values written for the input's own environment (see `environment_literals`).
@@ -58,6 +63,10 @@ pub struct Summary {
     pub depth_blockers: usize,
     /// Resources that use a feature the ESC User Guide documents as not available.
     pub deviations: usize,
+    /// Guide restrictions the Knowledge MCP data contradicts; warnings, not blockers.
+    pub guide_conflicts: usize,
+    /// Features that work with an ESC difference the guide documents.
+    pub caveats: usize,
     /// Required changes by tier: applied as stated, applied after a yes, owner decides.
     pub fixes: usize,
     pub proposals: usize,
@@ -83,8 +92,6 @@ pub struct Report {
     pub environment_literals: Vec<EnvLiterals>,
     pub zones: Option<ZoneCheck>,
     pub required_changes: Vec<RequiredChange>,
-    /// Services where public sources disagree. Useful feedback for AWS data owners.
-    pub source_disagreements: Vec<String>,
     /// Terraform resources of providers other than aws and awscc.
     pub out_of_scope: Vec<OutOfScope>,
     pub warnings: Vec<String>,
@@ -121,19 +128,29 @@ pub fn build(
         resources: findings.len(),
         hazards: hazards.len(),
         environment_literals: env_literals.iter().map(|e| e.places).sum(),
-        deviations: guide.deviations.len(),
+        deviations: guide.deviations.iter().filter(|d| d.blocks()).count(),
+        guide_conflicts: guide
+            .deviations
+            .iter()
+            .filter(|d| d.conflict.is_some())
+            .count(),
+        caveats: guide
+            .deviations
+            .iter()
+            .filter(|d| d.severity == Severity::Caveat)
+            .count(),
         ..Summary::default()
     };
     let mut changes = Vec::new();
-    let mut disagreements = std::collections::BTreeSet::new();
     for f in &findings {
+        if f.roadmap
+            .as_ref()
+            .is_some_and(|r| r.status == State::Planned)
+        {
+            s.planned += 1;
+        }
         match &f.verdict {
-            Verdict::Available { single_source } => {
-                s.available += 1;
-                if *single_source {
-                    s.available_single_source += 1;
-                }
-            }
+            Verdict::Available => s.available += 1,
             Verdict::NotAvailable => s.not_available += 1,
             Verdict::Disputed => s.disputed += 1,
             Verdict::CannotAssess => s.cannot_assess += 1,
@@ -149,13 +166,6 @@ pub fn build(
             s.depth_blockers += 1;
             changes.push(remediation::depth(&f.logical_id, d, &target, ctx));
         }
-        if let (Some(svc), Some(ev)) = (&f.service, &f.evidence)
-            && (ev.regional_table_listed.is_some() || ev.user_guide_listed.is_some())
-            && (ev.botocore_listed || ev.endpoints_page_listed == Some(true))
-                != (ev.regional_table_listed == Some(true) || ev.user_guide_listed == Some(true))
-        {
-            disagreements.insert(svc.clone());
-        }
         if f.verdict == Verdict::NotAvailable {
             // Without a known service (a type only the live registry knows), the line
             // names the type instead.
@@ -163,14 +173,7 @@ pub fn build(
                 .service
                 .as_deref()
                 .unwrap_or("the resource type's service");
-            // A publicly listed service with a not-available verdict is only possible
-            // when the live registry lacks this one type.
-            let type_gap = f.evidence.as_ref().is_some_and(|ev| {
-                ev.botocore_listed
-                    || ev.endpoints_page_listed == Some(true)
-                    || ev.regional_table_listed == Some(true)
-                    || ev.user_guide_listed == Some(true)
-            }) && !f.resource_type.starts_with("Custom::");
+            let type_gap = f.type_gap && !f.resource_type.starts_with("Custom::");
             let short = if f.resource_type.starts_with("Custom::") {
                 remediation::brief(
                     format!("custom resource calls {svc}"),
@@ -188,10 +191,17 @@ pub fn build(
                     .map(|m| m.action);
                 remediation::brief(
                     what,
-                    substitute.unwrap_or_else(|| match &f.service {
-                        Some(s) => format!("use another {s} type"),
-                        None => "use a type the region registers".into(),
+                    substitute.unwrap_or_else(|| {
+                        "use another type or deploy it without CloudFormation".into()
                     }),
+                )
+            } else if let Some(rm) = &f.roadmap {
+                remediation::brief(
+                    format!("{svc} {}", rm.short()),
+                    match (&rm.status, &rm.launch) {
+                        (State::Planned, Some(q)) => format!("replace {svc} or wait for {q}"),
+                        _ => format!("remove or replace {svc}"),
+                    },
                 )
             } else {
                 remediation::brief(
@@ -219,6 +229,7 @@ pub fn build(
         guide
             .deviations
             .iter()
+            .filter(|d| d.blocks())
             .map(|d| remediation::deviation(d, ctx)),
     );
     changes.extend(hazards.iter().flat_map(|h| remediation::hazard(h, ctx)));
@@ -323,14 +334,23 @@ pub fn build(
         }
         warnings.push(w);
     }
-    let cfn_types = provenance.source_format == SourceFormat::Cloudformation
-        || findings
-            .iter()
-            .any(|f| f.resource_type.starts_with("awscc_"));
-    if !provenance.regional_table_unmapped.is_empty() {
+    if !provenance.knowledge.unknown.is_empty() {
         warnings.push(format!(
-            "Regional-table services not mapped to a service, so they count as no claim: {}.",
-            provenance.regional_table_unmapped.join(", ")
+            "The Knowledge MCP data does not know {}; only live mode can assess these resources.",
+            provenance.knowledge.unknown.join(", ")
+        ));
+    }
+    let mut conflicts: Vec<String> = Vec::new();
+    for d in guide.deviations.iter().filter(|d| d.conflict.is_some()) {
+        let c = format!("{} ({})", d.conflict.as_deref().unwrap_or_default(), d.rule);
+        if !conflicts.contains(&c) {
+            conflicts.push(c);
+        }
+    }
+    if !conflicts.is_empty() {
+        warnings.push(format!(
+            "The ESC User Guide says these features are not available, while the Knowledge MCP data lists them as available: {}. The guide is likely outdated. Ask your AWS team to confirm and to have the guide corrected.",
+            conflicts.join(", ")
         ));
     }
     if let Some(g) = &provenance.user_guide {
@@ -347,17 +367,6 @@ pub fn build(
             ));
         }
     }
-    if provenance.live.is_none() && cfn_types {
-        let guide = if provenance.user_guide.is_some() {
-            ", unless the ESC User Guide documents it"
-        } else {
-            ""
-        };
-        warnings.push(format!(
-            "Public sources list services, not resource types. A type the service does not support in {} is only found in live mode{guide}.",
-            provenance.target_region
-        ));
-    }
     Report {
         data_provenance: provenance,
         summary: s,
@@ -368,7 +377,6 @@ pub fn build(
         environment_literals: env_literals,
         zones,
         required_changes: changes,
-        source_disagreements: disagreements.into_iter().collect(),
         out_of_scope,
         warnings,
         warning_commands,
@@ -390,12 +398,7 @@ pub fn gaps_only(r: &mut Report) {
     r.findings.retain(|f| {
         f.divergence
             || f.depth.iter().any(|d| d.offered != Some(true))
-            || !matches!(
-                f.verdict,
-                Verdict::Available {
-                    single_source: false
-                }
-            )
+            || f.verdict != Verdict::Available
     });
 }
 
@@ -459,8 +462,12 @@ pub fn text_summary(r: &Report, st: Style) -> String {
             paint(
                 dim,
                 &format!(
-                    "botocore {}{dot}regional table {}{dot}{} mode",
-                    p.botocore_version, p.regional_table_source_version, p.mode
+                    "Knowledge MCP{}{dot}{} mode",
+                    p.user_guide
+                        .as_ref()
+                        .map(|g| format!("{dot}ESC User Guide {} pages", g.pages))
+                        .unwrap_or_default(),
+                    p.mode
                 )
             )
         ),
@@ -486,12 +493,7 @@ pub fn text_summary(r: &Report, st: Style) -> String {
         };
 
     out.push(paint(bold, "  AVAILABILITY"));
-    let single = if s.available_single_source > 0 {
-        format!("{} on one source only", s.available_single_source)
-    } else {
-        String::new()
-    };
-    row(&mut out, ok, green, "available", s.available, single);
+    row(&mut out, ok, green, "available", s.available, String::new());
     let na = types_of(r, |f| f.verdict == Verdict::NotAvailable);
     row(
         &mut out,
@@ -581,14 +583,18 @@ pub fn text_summary(r: &Report, st: Style) -> String {
             format!("{verb} for {}", list(&envs, 2)),
         );
     }
-    if s.deviations > 0 {
+    let rules_of = |keep: &dyn Fn(&Deviation) -> bool| {
         let mut rules: Vec<String> = Vec::new();
-        for d in &r.deviations {
+        for d in r.deviations.iter().filter(|d| keep(d)) {
             let l = d.rule.replace('-', " ");
             if !rules.contains(&l) {
                 rules.push(l);
             }
         }
+        rules
+    };
+    if s.deviations > 0 {
+        let rules = rules_of(&|d| d.blocks());
         // A documented deviation means the feature does not work in the target.
         row(
             &mut out,
@@ -596,6 +602,28 @@ pub fn text_summary(r: &Report, st: Style) -> String {
             red,
             "deviations",
             s.deviations,
+            format!("{} (ESC User Guide)", list(&rules, 2)),
+        );
+    }
+    if s.guide_conflicts > 0 {
+        let rules = rules_of(&|d| d.conflict.is_some());
+        row(
+            &mut out,
+            warn,
+            yellow,
+            "guide conflicts",
+            s.guide_conflicts,
+            format!("{} (guide likely outdated)", list(&rules, 2)),
+        );
+    }
+    if s.caveats > 0 {
+        let rules = rules_of(&|d| d.severity == Severity::Caveat);
+        row(
+            &mut out,
+            warn,
+            yellow,
+            "caveats",
+            s.caveats,
             format!("{} (ESC User Guide)", list(&rules, 2)),
         );
     }
@@ -839,11 +867,15 @@ fn change_groups(r: &Report) -> Vec<Group> {
     out
 }
 
-/// The distinct resource types of the findings that match, at most two.
+/// The distinct resource types of the findings that match, at most two, each with its
+/// product's roadmap state.
 fn types_of(r: &Report, keep: impl Fn(&Finding) -> bool) -> String {
     let mut types: Vec<String> = Vec::new();
     for f in r.findings.iter().filter(|f| keep(f)) {
-        let t = clean(&f.resource_type);
+        let t = match &f.roadmap {
+            Some(rm) => format!("{} ({})", clean(&f.resource_type), rm.short()),
+            None => clean(&f.resource_type),
+        };
         if !types.contains(&t) {
             types.push(t);
         }
@@ -941,14 +973,13 @@ pub fn now_utc() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::provider::{PublicData, botocore, endpoints_page, guide, regional_table, terraform};
-    use crate::{deviation, extractor, matcher, reader};
+    use crate::provider::{PublicData, guide, knowledge, partition, terraform};
+    use crate::{depth, deviation, extractor, matcher, reader};
 
     fn data() -> PublicData {
         PublicData {
-            botocore: botocore::tests::fixture(),
-            regional_table: regional_table::tests::fixture(),
-            endpoints_page: Some(endpoints_page::tests::fixture()),
+            partition: partition::facts("eusc-de-east-1").unwrap(),
+            knowledge: knowledge::tests::fixture(),
             guide: Some(guide::tests::fixture()),
             tf: Some(terraform::tests::fixture()),
         }
@@ -961,12 +992,12 @@ mod tests {
             mode: "public".into(),
             target_region: "eusc-de-east-1".into(),
             input_environments: envs,
-            botocore_version: String::new(),
-            botocore_urls: vec![],
-            regional_table_url: String::new(),
-            regional_table_source_version: String::new(),
-            regional_table_unmapped: vec![],
-            endpoints_docs_url: None,
+            partitions_version: "test".into(),
+            knowledge: KnowledgeProvenance {
+                url: knowledge::URL.into(),
+                calls: 0,
+                unknown: vec![],
+            },
             user_guide: None,
             fetched_at: "1970-01-01T00:00:00Z".into(),
             terraform: None,
@@ -979,16 +1010,12 @@ mod tests {
     }
 
     fn fixed(input: &str) -> Report {
-        fixed_t(reader::parse(input).unwrap())
+        fixed_t(reader::parse_text(input).unwrap())
     }
 
     fn fixed_t(t: crate::model::Template) -> Report {
         let data = data();
         let prov = Provenance {
-            botocore_version: data.botocore.botocore_version.clone(),
-            regional_table_url: regional_table::URL.into(),
-            regional_table_source_version: data.regional_table.source_version.clone(),
-            endpoints_docs_url: Some(endpoints_page::URL.into()),
             terraform: data
                 .tf
                 .as_ref()
@@ -1000,9 +1027,13 @@ mod tests {
                 }),
             ..prov(t.format, t.envs())
         };
-        let findings = matcher::assess(&t, &data, None);
-        let scan = extractor::hazards(&t, &data.botocore.partition);
-        let (g, gp) = deviation::assess(&t, &findings, data.guide.as_ref().unwrap());
+        let mut depth = depth::checks(&t, "eusc-de-east-1");
+        let offered = depth::public_offered(&data.knowledge);
+        depth::resolve(&mut depth, &offered, depth::DepthSource::Knowledge);
+        let findings = matcher::assess(&t, &data.knowledge, data.tf.as_ref(), None, &depth);
+        let scan = extractor::hazards(&t, &data.partition);
+        let (g, gp) =
+            deviation::assess(&t, &findings, data.guide.as_ref().unwrap(), &data.knowledge);
         let prov = Provenance {
             user_guide: Some(gp),
             ..prov
@@ -1014,7 +1045,8 @@ mod tests {
             g,
             t.out_of_scope.clone(),
             &Context {
-                single_region: data.botocore.partition.target_regions == 1,
+                single_region: data.partition.target_regions == 1,
+                offered: Some(&offered),
                 ..Context::default()
             },
         )
@@ -1032,7 +1064,10 @@ mod tests {
                 fixed(crate::test_inputs::CUSTOM_RESOURCES_TEMPLATE),
                 "custom-resources",
             ),
-            (fixed_t(reader::read(&cdk).unwrap()), "cdk"),
+            (
+                fixed_t(reader::read(&cdk, "eusc-de-east-1").unwrap()),
+                "cdk",
+            ),
         ]
     }
 
@@ -1256,18 +1291,18 @@ mod tests {
 
     #[test]
     fn gaps_view_drops_clean_findings_only() {
-        let t = reader::parse(crate::test_inputs::SAMPLE_TEMPLATE).unwrap();
-        let findings = matcher::assess(&t, &data(), None);
+        let t = reader::parse_text(crate::test_inputs::SAMPLE_TEMPLATE).unwrap();
+        let d = data();
+        let findings = matcher::assess(
+            &t,
+            &d.knowledge,
+            None,
+            None,
+            &std::collections::BTreeMap::new(),
+        );
         let clean = findings
             .iter()
-            .filter(|f| {
-                matches!(
-                    f.verdict,
-                    Verdict::Available {
-                        single_source: false
-                    }
-                )
-            })
+            .filter(|f| f.verdict == Verdict::Available)
             .count();
         assert!(
             clean > 0,
@@ -1290,13 +1325,13 @@ mod tests {
 
     #[test]
     fn zone_shortfall_is_a_blocker() {
-        let t = reader::read(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/tests/fixtures/cdk.out"
-        ))
+        let t = reader::read(
+            concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/cdk.out"),
+            "eusc-de-east-1",
+        )
         .unwrap();
         let data = data();
-        let mut scan = extractor::hazards(&t, &data.botocore.partition);
+        let mut scan = extractor::hazards(&t, &data.partition);
         scan.env_literals[0].zones = vec![
             "eu-central-1a".into(),
             "eu-central-1b".into(),

@@ -1,14 +1,19 @@
 ◆ esc-preflight · 15 resources · eusc-de-east-1
-  botocore 1.43.120 · regional table 20251113063700 · public mode
+  Knowledge MCP · ESC User Guide 16 pages · public mode
 
   AVAILABILITY
-  ✔ available           14
-  ✘ not available        1   aws_codebuild_project
+  ✔ available           15
+  ✔ not available        0
 
   PORTABILITY
-  ⚠ hardcoded fields     1   1 resource: `arn:aws:`
+  ⚠ hardcoded fields     2   2 resources: `111122223333`, `arn:aws:`
+  ✘ depth blockers       1   values the region does not offer
 
-  REQUIRED CHANGES  1 flag · 1 fix
-  ✘ flag  codebuild not available  → remove or replace codebuild
-          aws_codebuild_project
-  ● fix   hardcoded `arn:aws:`     → `arn:${data.aws_partition.current.partition}:`
+  REQUIRED CHANGES  2 propose · 1 fix
+  ● propose  RDS engine version `postgres 16.4` not of…  → choose one of 5 offered
+  ● propose  hardcoded `111122223333`                    → `${data.aws_caller_identity.current.account_id}`
+  ● fix      hardcoded `arn:aws:`                        → `arn:${data.aws_partition.current.partition}:`
+
+⚠ These rules match the input, but the ESC User Guide no longer contains the sentence they quote, so
+  they were skipped: rds-default-backup-window, rds-default-maintenance-window. Check the guide: the
+  restriction may have been lifted or reworded.

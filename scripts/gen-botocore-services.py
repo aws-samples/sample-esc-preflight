@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Regenerates data/botocore-services.json.
+"""Regenerates data/botocore-services.json and data/partitions.json.
 
 Usage: pip install botocore && python3 scripts/gen-botocore-services.py <names_data.hcl>
 
@@ -79,6 +79,12 @@ def main() -> None:
     path = Path(__file__).resolve().parent.parent / "data" / "botocore-services.json"
     path.write_text(json.dumps(out, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     print(f"{len(services)} services, {sum('probe' in s for s in services)} probes -> {path}")
+    # Partition facts: ARN prefixes, DNS suffixes and regions per partition.
+    parts = json.loads((Path(botocore.__file__).parent / "data" / "partitions.json").read_text())
+    parts["botocore_version"] = botocore.__version__
+    dest = path.with_name("partitions.json")
+    dest.write_text(json.dumps(parts, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    print(f"{len(parts['partitions'])} partitions -> {dest}")
 
 
 if __name__ == "__main__":

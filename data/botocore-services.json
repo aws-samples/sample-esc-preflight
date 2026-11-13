@@ -1,5 +1,5 @@
 {
- "botocore_version": "1.43.121",
+ "botocore_version": "1.44.2",
  "services": [
   {
    "api_version": "2015-12-08",
@@ -103,6 +103,18 @@
    "endpoint_prefix": "account-access",
    "protocol": "rest-json",
    "service_id": "Account Access",
+   "signing_name": "account-access"
+  },
+  {
+   "api_version": "2018-05-10",
+   "endpoint_prefix": "account-access-runtime",
+   "probe": {
+    "method": "GET",
+    "op": "ListRoles",
+    "uri": "/access"
+   },
+   "protocol": "rest-json",
+   "service_id": "Account Access Runtime",
    "signing_name": "account-access"
   },
   {
@@ -1179,8 +1191,8 @@
    "endpoint_prefix": "continuum",
    "probe": {
     "method": "GET",
-    "op": "ListCollectors",
-    "uri": "/collectors"
+    "op": "ListIntegrations",
+    "uri": "/integrations"
    },
    "protocol": "rest-json",
    "service_id": "Continuum",

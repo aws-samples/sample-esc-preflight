@@ -1,6 +1,8 @@
-//! Maps resources to SDK endpoint prefixes (service tokens) and picks their live check.
+//! Maps resources to what the availability data is keyed by: a CloudFormation type, or an
+//! SDK service and operation. Also names the SDK endpoint prefix, which keys the ESC User
+//! Guide pages.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use serde::Deserialize;
 use serde_json::Value;
@@ -18,52 +20,41 @@ struct Overrides {
     types: BTreeMap<String, String>,
 }
 
-/// How live mode checks a resource.
+/// What decides whether a resource is available.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum LiveCheck {
-    /// The CloudFormation type registry lists this type.
-    Registry(String),
-    /// The service answers its probe call.
-    ServiceApi,
+pub enum Check {
+    /// A CloudFormation resource type.
+    Type(String),
+    /// An SDK service (botocore `serviceId`), and the operation when the input names one.
+    Api {
+        service_id: String,
+        operation: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Mapping {
-    Service {
-        service: String,
-        live: LiveCheck,
+    Resource {
+        /// SDK endpoint prefix, when known.
+        service: Option<String>,
+        check: Check,
     },
     /// A CloudFormation or CDK construct that is not an AWS service resource.
     Pseudo,
-    /// No known service. Reported as cannot-assess, never guessed.
-    Unknown {
-        live: Option<LiveCheck>,
-        reason: Option<String>,
-    },
+    /// Nothing to check. Reported as cannot-assess, never guessed.
+    Unknown { reason: String },
 }
 
 pub struct TypeMapper<'a> {
     overrides: Overrides,
-    known: BTreeSet<String>,
     tf: Option<&'a TfMaps>,
 }
 
 impl<'a> TypeMapper<'a> {
-    /// `known_services` is the set of endpoint prefixes the pulled SDK data knows about,
-    /// across all partitions.
-    pub fn new(known_services: impl IntoIterator<Item = String>, tf: Option<&'a TfMaps>) -> Self {
+    pub fn new(tf: Option<&'a TfMaps>) -> Self {
         let overrides: Overrides =
             serde_json::from_str(OVERRIDES_JSON).expect("built-in override table is valid JSON");
-        let mut known: BTreeSet<String> = known_services.into_iter().collect();
-        // Override targets come from SDK service metadata, so they are known even when
-        // the service has no entry in endpoints.json (rule-set-only services).
-        known.extend(overrides.namespaces.values().cloned());
-        known.extend(overrides.types.values().cloned());
-        Self {
-            overrides,
-            known,
-            tf,
-        }
+        Self { overrides, tf }
     }
 
     pub fn map(&self, r: &Resource) -> Mapping {
@@ -79,10 +70,7 @@ impl<'a> TypeMapper<'a> {
                 .and_then(|id| services::index().by_service_id(id))
                 .map_or_else(
                     || unknown("No service in the aws provider's service data"),
-                    |s| Mapping::Service {
-                        service: s.endpoint_prefix.clone(),
-                        live: LiveCheck::ServiceApi,
-                    },
+                    |s| api(s, None),
                 ),
         }
     }
@@ -108,47 +96,46 @@ impl<'a> TypeMapper<'a> {
         if is_pseudo(t) {
             return Mapping::Pseudo;
         }
-        let registry = LiveCheck::Registry(t.to_string());
-        if let Some(s) = self.overrides.types.get(t) {
-            return Mapping::Service {
-                service: s.clone(),
-                live: registry,
-            };
-        }
-        let mut parts = t.split("::");
-        let token = match (parts.next(), parts.next(), parts.next()) {
-            (Some("AWS"), Some(ns), Some(_)) => self
-                .overrides
+        let parts: Vec<&str> = t.split("::").collect();
+        let ns = match parts.as_slice() {
+            ["AWS", ns, _] => *ns,
+            // An activated or private extension is per account; no public data knows it.
+            _ => {
+                return unknown(
+                    "Not an AWS resource type (a third-party or private registry extension). Check that it is activated in the target account.",
+                );
+            }
+        };
+        let token = self.overrides.types.get(t).cloned().unwrap_or_else(|| {
+            self.overrides
                 .namespaces
                 .get(ns)
                 .cloned()
-                .unwrap_or_else(|| ns.to_ascii_lowercase()),
-            _ => String::new(),
-        };
-        if self.known.contains(&token) {
-            Mapping::Service {
-                service: token,
-                live: registry,
-            }
-        } else if t.starts_with("AWS::") {
-            Mapping::Unknown {
-                live: Some(registry),
-                reason: Some("No public source knows the service of this type; it may be retired or newer than the data. Live mode checks the type in the target registry.".into()),
-            }
-        } else {
-            // The registry check lists AWS types only; an activated or private
-            // extension is per account, so absence there would prove nothing.
-            unknown(
-                "Not an AWS resource type (a third-party or private registry extension). Check that it is activated in the target account.",
-            )
+                .unwrap_or_else(|| ns.to_ascii_lowercase())
+        });
+        Mapping::Resource {
+            service: services::index()
+                .by_endpoint_prefix(&token)
+                .is_some()
+                .then_some(token),
+            check: Check::Type(t.to_string()),
         }
     }
 }
 
 fn unknown(reason: &str) -> Mapping {
     Mapping::Unknown {
-        live: None,
-        reason: Some(reason.into()),
+        reason: reason.into(),
+    }
+}
+
+fn api(s: &services::Service, operation: Option<String>) -> Mapping {
+    Mapping::Resource {
+        service: Some(s.endpoint_prefix.clone()),
+        check: Check::Api {
+            service_id: s.service_id.clone(),
+            operation,
+        },
     }
 }
 
@@ -168,11 +155,11 @@ const CDK_HELPERS: [(&str, &str); 6] = [
 /// Any other custom resource runs its own code, which the template does not show.
 fn custom_resource(t: &str, props: &Value) -> Mapping {
     // `CDKBucketDeployment` carries a hash suffix.
-    if let Some((_, svc)) = CDK_HELPERS.iter().find(|(name, _)| t.starts_with(name)) {
-        return Mapping::Service {
-            service: (*svc).into(),
-            live: LiveCheck::ServiceApi,
-        };
+    if let Some((_, prefix)) = CDK_HELPERS.iter().find(|(name, _)| t.starts_with(name)) {
+        let s = services::index()
+            .by_endpoint_prefix(prefix)
+            .expect("CDK helper service is in the bundled table");
+        return api(s, None);
     }
     let Some(call) = ["Create", "Update", "Delete"]
         .iter()
@@ -186,14 +173,20 @@ fn custom_resource(t: &str, props: &Value) -> Mapping {
         return unknown("Custom resource call names no service");
     };
     match services::index().by_sdk_name(&name) {
-        Some(s) => Mapping::Service {
-            service: s.endpoint_prefix.clone(),
-            live: LiveCheck::ServiceApi,
-        },
+        Some(s) => api(s, json_string_field(&call, "action").map(|a| operation(&a))),
         None => unknown(&format!(
             "Custom resource calls unknown SDK service {name:?}"
         )),
     }
+}
+
+/// `describeUserPoolClient` (JS SDK v2) and `GetObjectCommand` (v3) -> the API name.
+fn operation(s: &str) -> String {
+    let s = s.strip_suffix("Command").unwrap_or(s);
+    let mut c = s.chars();
+    c.next()
+        .map(|f| f.to_ascii_uppercase().to_string() + c.as_str())
+        .unwrap_or_default()
 }
 
 /// The literal text of a string or of an `Fn::Join` over strings, tokens dropped.
@@ -224,12 +217,8 @@ mod tests {
     use super::*;
     use crate::provider::terraform;
 
-    fn known() -> Vec<String> {
-        serde_json::from_str(include_str!("../tests/fixtures/sdk-endpoint-prefixes.json")).unwrap()
-    }
-
     fn cfn(t: &str, props: Value) -> Mapping {
-        TypeMapper::new(known(), None).map(&Resource {
+        TypeMapper::new(None).map(&Resource {
             logical_id: "R".into(),
             resource_type: t.into(),
             properties: props,
@@ -241,7 +230,7 @@ mod tests {
 
     fn service(m: Mapping) -> Option<String> {
         match m {
-            Mapping::Service { service, .. } => Some(service),
+            Mapping::Resource { service, .. } => service,
             _ => None,
         }
     }
@@ -249,14 +238,10 @@ mod tests {
     #[test]
     fn direct_namespace() {
         assert_eq!(
-            service(cfn("AWS::S3::Bucket", Value::Null)).as_deref(),
-            Some("s3")
-        );
-        assert_eq!(
             cfn("AWS::IAM::Role", Value::Null),
-            Mapping::Service {
-                service: "iam".into(),
-                live: LiveCheck::Registry("AWS::IAM::Role".into())
+            Mapping::Resource {
+                service: Some("iam".into()),
+                check: Check::Type("AWS::IAM::Role".into())
             }
         );
     }
@@ -275,58 +260,48 @@ mod tests {
             ("AWS::OpenSearchService::Domain", "es"),
             ("AWS::EFS::FileSystem", "elasticfilesystem"),
             ("AWS::ImageBuilder::Image", "imagebuilder"),
+            ("AWS::Cognito::IdentityPool", "cognito-identity"),
+            ("AWS::Cognito::UserPool", "cognito-idp"),
         ] {
             assert_eq!(service(cfn(t, Value::Null)).as_deref(), Some(s), "{t}");
         }
     }
 
     #[test]
-    fn full_type_override_beats_namespace() {
-        assert_eq!(
-            service(cfn("AWS::Cognito::IdentityPool", Value::Null)).as_deref(),
-            Some("cognito-identity")
-        );
-        assert_eq!(
-            service(cfn("AWS::Cognito::UserPool", Value::Null)).as_deref(),
-            Some("cognito-idp")
-        );
-    }
-
-    #[test]
     fn every_override_target_is_a_known_sdk_prefix() {
-        let known: BTreeSet<String> = known().into_iter().collect();
+        let idx = services::index();
         let o: Overrides = serde_json::from_str(OVERRIDES_JSON).unwrap();
         for (k, v) in o.namespaces.iter().chain(o.types.iter()) {
             assert!(
-                known.contains(v),
+                idx.by_endpoint_prefix(v).is_some(),
                 "override {k} -> {v} is not an SDK endpoint prefix"
             );
         }
     }
 
     #[test]
-    fn pseudo_resources_are_filtered() {
+    fn pseudo_and_unassessable_types() {
         for t in ["AWS::CDK::Metadata", "AWS::CloudFormation::WaitCondition"] {
             assert_eq!(cfn(t, Value::Null), Mapping::Pseudo, "{t}");
         }
-        for t in ["AWS::Serverless::Function", "AWS::CloudFormation::Stack"] {
+        for t in [
+            "AWS::Serverless::Function",
+            "AWS::CloudFormation::Stack",
+            "Vendor::Product::Thing",
+        ] {
             assert!(
-                matches!(cfn(t, Value::Null), Mapping::Unknown { live: None, .. }),
+                matches!(cfn(t, Value::Null), Mapping::Unknown { .. }),
                 "{t} is not silently skipped"
             );
         }
-    }
-
-    #[test]
-    fn unknown_types_are_cannot_assess() {
-        assert!(matches!(
+        // An AWS type of an unknown service is still checked by its type.
+        assert_eq!(
             cfn("AWS::NotAService::Thing", Value::Null),
-            Mapping::Unknown { live: Some(_), .. }
-        ));
-        assert!(matches!(
-            cfn("Vendor::Product::Thing", Value::Null),
-            Mapping::Unknown { live: None, .. }
-        ));
+            Mapping::Resource {
+                service: None,
+                check: Check::Type("AWS::NotAService::Thing".into())
+            }
+        );
     }
 
     #[test]
@@ -338,42 +313,50 @@ mod tests {
         ] {
             assert_eq!(service(cfn(t, Value::Null)).as_deref(), Some(svc), "{t}");
         }
-    }
-
-    #[test]
-    fn every_cdk_helper_service_is_known() {
-        let idx = services::index();
         for (_, svc) in CDK_HELPERS {
-            assert!(idx.by_endpoint_prefix(svc).is_some(), "{svc}");
+            assert!(services::index().by_endpoint_prefix(svc).is_some(), "{svc}");
         }
     }
 
     #[test]
-    fn custom_resources() {
-        let t = crate::reader::parse(crate::test_inputs::CUSTOM_RESOURCES_TEMPLATE).unwrap();
-        let m = TypeMapper::new(known(), None);
+    fn custom_resources_name_their_call() {
+        let t = crate::reader::parse_text(crate::test_inputs::CUSTOM_RESOURCES_TEMPLATE).unwrap();
+        let m = TypeMapper::new(None);
         let got: BTreeMap<_, _> = t
             .resources
             .values()
             .map(|r| (r.logical_id.as_str(), m.map(r)))
             .collect();
         assert_eq!(
-            service(got["DescribeClient"].clone()).as_deref(),
-            Some("cognito-idp")
+            got["DescribeClient"],
+            Mapping::Resource {
+                service: Some("cognito-idp".into()),
+                check: Check::Api {
+                    service_id: "Cognito Identity Provider".into(),
+                    operation: Some("DescribeUserPoolClient".into())
+                }
+            }
         );
         assert_eq!(
             service(got["CreateInvalidation"].clone()).as_deref(),
             Some("cloudfront")
         );
         assert!(
-            matches!(&got["PortalRegistration"], Mapping::Unknown { reason: Some(r), .. } if r.contains("own code"))
+            matches!(&got["PortalRegistration"], Mapping::Unknown { reason } if reason.contains("own code"))
         );
+    }
+
+    #[test]
+    fn sdk_actions_name_the_api_operation() {
+        for a in ["getObject", "GetObject", "GetObjectCommand"] {
+            assert_eq!(operation(a), "GetObject", "{a}");
+        }
     }
 
     #[test]
     fn terraform_types() {
         let tf = terraform::tests::fixture();
-        let m = TypeMapper::new(known(), Some(&tf));
+        let m = TypeMapper::new(Some(&tf));
         let r = |t: &str, origin| Resource {
             logical_id: "r".into(),
             resource_type: t.into(),
@@ -384,33 +367,30 @@ mod tests {
         };
         assert_eq!(
             m.map(&r("aws_lb", Origin::TfAws)),
-            Mapping::Service {
-                service: "elasticloadbalancing".into(),
-                live: LiveCheck::ServiceApi
+            Mapping::Resource {
+                service: Some("elasticloadbalancing".into()),
+                check: Check::Api {
+                    service_id: "Elastic Load Balancing v2".into(),
+                    operation: None
+                }
             }
         );
         assert_eq!(
-            service(m.map(&r("aws_cloudwatch_log_group", Origin::TfAws))).as_deref(),
-            Some("logs")
-        );
-        assert_eq!(
             m.map(&r("awscc_s3_bucket", Origin::TfAwscc)),
-            Mapping::Service {
-                service: "s3".into(),
-                live: LiveCheck::Registry("AWS::S3::Bucket".into())
+            Mapping::Resource {
+                service: Some("s3".into()),
+                check: Check::Type("AWS::S3::Bucket".into())
             }
         );
         assert!(matches!(
             m.map(&r("aws_not_a_service", Origin::TfAws)),
-            Mapping::Unknown {
-                live: None,
-                reason: Some(_)
-            }
+            Mapping::Unknown { .. }
         ));
-        let plan = crate::reader::parse(include_str!("../tests/fixtures/tf-plan.json")).unwrap();
+        let plan =
+            crate::reader::parse_text(include_str!("../tests/fixtures/tf-plan.json")).unwrap();
         for res in plan.resources.values() {
             assert!(
-                matches!(m.map(res), Mapping::Service { .. }),
+                matches!(m.map(res), Mapping::Resource { .. }),
                 "{} did not map",
                 res.resource_type
             );

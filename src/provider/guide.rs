@@ -1,7 +1,6 @@
 //! The ESC User Guide service pages.
 //!
-//! A page per service is an availability signal: AWS documents the service as offered
-//! in ESC. Its "How X differs" section lists feature differences, attached to findings
+//! Each page's "How X differs" section lists feature differences, attached to findings
 //! as notes and matched to resources by the rules in `data/esc-guide-rules.json`.
 
 use std::collections::BTreeMap;
@@ -14,6 +13,8 @@ use crate::error::{Result, ScanError};
 use crate::services;
 
 pub const BASE: &str = "https://docs.aws.eu/esc/latest/userguide/";
+/// The partition the guide documents. Other partitions skip this source.
+pub const PARTITION: &str = "aws-eusc";
 /// The guide listed 98 service pages on 2026-10-29. Far fewer means the layout changed.
 const MIN_PAGES: usize = 80;
 const PARALLEL: usize = 8;
@@ -43,12 +44,6 @@ pub struct GuideData {
 }
 
 impl GuideData {
-    pub fn documents(&self, service: &str) -> bool {
-        self.pages
-            .iter()
-            .any(|p| p.services.iter().any(|s| s == service))
-    }
-
     /// Pages relevant to a resource of this service and type.
     pub fn pages_for<'a>(
         &'a self,
@@ -313,10 +308,9 @@ pub(crate) mod tests {
     #[test]
     fn maps_pages_to_services() {
         let g = fixture();
-        assert!(g.documents("lambda"));
-        assert!(g.documents("cognito-idp"));
-        assert!(g.documents("codepipeline"));
-        assert!(!g.documents("cloudfront"));
+        let documents = |s: &str| g.pages.iter().any(|p| p.services.iter().any(|x| x == s));
+        assert!(documents("lambda") && documents("cognito-idp") && documents("codepipeline"));
+        assert!(!documents("cloudfront"));
         assert!(g.page("cdk").unwrap().services.is_empty());
         assert!(g.unmapped.is_empty(), "{:?}", g.unmapped);
         let docdb: Vec<_> = g

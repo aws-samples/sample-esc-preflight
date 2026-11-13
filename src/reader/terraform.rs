@@ -204,7 +204,7 @@ mod tests {
     use serde_json::json;
 
     fn fixture() -> Template {
-        crate::reader::parse(include_str!("../../tests/fixtures/tf-plan.json")).unwrap()
+        crate::reader::parse_text(include_str!("../../tests/fixtures/tf-plan.json")).unwrap()
     }
 
     #[test]

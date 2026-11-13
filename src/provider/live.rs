@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::Serialize;
 
 use super::aws_call::{Caller, Outcome, xml_values};
-use crate::depth::{self, DepthCheck, DepthKind, Offered};
+use crate::depth::{self, DepthCheck, DepthKind, DepthSource, Offered};
 use crate::error::{Result, ScanError};
 use crate::matcher::{Live, ServiceStatus};
 use crate::services::{self, Service};
@@ -14,7 +14,7 @@ use crate::services::{self, Service};
 #[derive(Debug, Default)]
 pub struct Needs {
     pub registry: bool,
-    /// Endpoint prefixes to probe.
+    /// SDK service ids to probe.
     pub services: BTreeSet<String>,
     pub depth: BTreeMap<String, Vec<DepthCheck>>,
     /// Count the target's zones, because the input spreads over its own environment's.
@@ -44,9 +44,9 @@ pub fn run(caller: &Caller, region: &str, needs: Needs) -> Result<(Live, LivePro
     let registry = needs.registry.then(|| registry_types(caller)).transpose()?;
     let mut read_only = None;
     let mut services = BTreeMap::new();
-    for prefix in &needs.services {
+    for id in &needs.services {
         let status = match services::index()
-            .by_endpoint_prefix(prefix)
+            .by_service_id(id)
             .filter(|s| s.probe.is_some())
         {
             None => ServiceStatus::Unverified(
@@ -71,7 +71,7 @@ pub fn run(caller: &Caller, region: &str, needs: Needs) -> Result<(Live, LivePro
                 }
             }
         };
-        services.insert(prefix.clone(), status);
+        services.insert(id.clone(), status);
     }
 
     let mut checks = needs.depth;
@@ -85,7 +85,7 @@ pub fn run(caller: &Caller, region: &str, needs: Needs) -> Result<(Live, LivePro
             offered.insert(*kind, set);
         }
     }
-    depth::resolve(&mut checks, &offered);
+    depth::resolve(&mut checks, &offered, DepthSource::Live);
     let target_zones = needs
         .zones
         .then(|| offered.get(&DepthKind::AvailabilityZone).map(BTreeSet::len))
@@ -96,7 +96,7 @@ pub fn run(caller: &Caller, region: &str, needs: Needs) -> Result<(Live, LivePro
         region: region.into(),
         registry_types: registry.as_ref().map(BTreeSet::len),
         service_probes: services.len(),
-        depth_probes: kinds.into_iter().collect(),
+        depth_probes: offered.keys().copied().collect(),
         read_only_access: read_only,
     };
     Ok((
@@ -248,6 +248,11 @@ fn depth_probe(
             "Marker",
             &depth::engines(checks, kind),
         ),
+        // Covered by the Knowledge MCP data only.
+        DepthKind::CacheNodeType
+        | DepthKind::NeptuneEngineVersion
+        | DepthKind::DocumentDbEngineVersion
+        | DepthKind::RedshiftNodeType => None,
     }
 }
 
@@ -357,12 +362,12 @@ mod tests {
         let needs = Needs {
             registry: true,
             services: [
-                "eks",
-                "rds",
-                "dynamodb",
-                "codepipeline",
-                "codebuild",
-                "qbusiness",
+                "EKS",
+                "RDS",
+                "DynamoDB",
+                "CodePipeline",
+                "CodeBuild",
+                "QBusiness",
             ]
             .map(String::from)
             .into(),
@@ -374,24 +379,28 @@ mod tests {
                         path: "p".into(),
                         value: "eusc-de-east-1a".into(),
                         offered: None,
+                        source: None,
                     },
                     DepthCheck {
                         kind: DepthKind::InstanceType,
                         path: "p".into(),
                         value: "m7g.large".into(),
                         offered: None,
+                        source: None,
                     },
                     DepthCheck {
                         kind: DepthKind::RdsEngineVersion,
                         path: "p".into(),
                         value: "postgres 16".into(),
                         offered: None,
+                        source: None,
                     },
                     DepthCheck {
                         kind: DepthKind::FoundationModel,
                         path: "p".into(),
                         value: "amazon.titan-embed-text-v2:0".into(),
                         offered: None,
+                        source: None,
                     },
                 ],
             )]),
@@ -400,10 +409,10 @@ mod tests {
         let (live, prov) = run(&caller, "eusc-de-east-1", needs).unwrap();
         eprintln!("{prov:?}\n{:?}\n{:?}", live.services, live.depth);
         assert!(prov.registry_types.unwrap() > 500);
-        for s in ["eks", "rds", "dynamodb", "codepipeline", "codebuild"] {
+        for s in ["EKS", "RDS", "DynamoDB", "CodePipeline", "CodeBuild"] {
             assert_eq!(live.services[s], ServiceStatus::Offered, "{s}");
         }
-        assert_eq!(live.services["qbusiness"], ServiceStatus::NotOffered);
+        assert_eq!(live.services["QBusiness"], ServiceStatus::NotOffered);
         assert_eq!(live.target_zones, Some(2));
         let d = &live.depth["r"];
         assert_eq!(d[0].offered, Some(true));

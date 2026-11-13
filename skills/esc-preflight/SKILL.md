@@ -21,17 +21,17 @@ Produce the input, then scan it.
 
 | Source | Produce | Input |
 |---|---|---|
-| CDK | `npx cdk synth` | `cdk.out` |
+| CDK | `AWS_REGION=eusc-de-east-1 npx cdk synth` | `cdk.out` |
 | CloudFormation | nothing | the template file |
 | Terraform | `terraform plan -out tfplan && terraform show -json tfplan > plan.json` (plan only) | `plan.json` |
 
 For Terraform, plan against the target when the user has an ESC profile: ESC Region and credentials for an ESC account. A plan stores resolved values, so in a plan for a commercial Region `data.aws_partition` already reads `aws` and fixes cannot be confirmed by a rescan. If that plan fails because the aws provider cannot reach ESC endpoints, the provider version does not support the aws-eusc partition. Raising it is the owner's decision: record it in the gap register and continue with a commercial plan.
 
 ```
-esc-preflight scan <input> --detail gaps --out esc-preflight-report.json
+esc-preflight scan <input> --out esc-preflight-report.json
 ```
 
-If the user has a profile for an ESC account, add `--mode live --profile <name>`. Live mode finds more (resource types, instance types, engine versions, zone counts) and turns some flags into proposals with candidates. Ask once whether such a profile exists; do not ask for credentials.
+If the user has a profile for an ESC account, add `--profile <name>`, which turns on live mode. Live mode has the final word on resource types, instance types and engine versions, and adds zone counts and Bedrock models. Ask once whether such a profile exists; do not ask for credentials.
 
 Exit code 3 means a data source failed, 4 that live-mode authentication failed; stop and report either. Exit code 1 means the input is invalid.
 
@@ -42,6 +42,8 @@ Work from `required_changes`. Each entry has a `tier`:
 - `fix`: apply without asking.
 - `propose`: show `change`, `precondition`, `consequence` and `candidates`, then apply only after an explicit yes for that entry.
 - `flag`: do not edit. Record it for the owner (step 5).
+
+A finding with `roadmap` names the product's state in ESC (`planned` with a `launch` quarter, `planning`, `not-expanding`); quote it in the gap register. A `disputed` finding, a deviation with `severity` `caveat`, and a deviation with a `conflict` (the ESC User Guide and the Knowledge MCP data disagree) are not required changes: list them in the gap register under "Verify", with the documented sentence.
 
 Locate each change by `logical_id`, plus `cdk_path` for CDK (the construct path; drop the trailing `/Resource`) or the module path inside a Terraform address. A `logical_id` ending in `Outputs/<name>` is a stack output (`CfnOutput` in CDK). `logical_id` `*` applies to the whole input.
 

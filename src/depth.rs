@@ -1,5 +1,6 @@
 //! Depth checks: property values that exist only in some regions, such as
-//! instance types, Availability Zones, Bedrock models and engine versions.
+//! instance types, Availability Zones, Bedrock models and engine versions. Public mode
+//! resolves them from the Knowledge MCP config values; live mode overrides what it probes.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -7,6 +8,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::model::Template;
+use crate::provider::knowledge::Knowledge;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -17,6 +19,17 @@ pub enum DepthKind {
     InferenceProfile,
     RdsEngineVersion,
     CacheEngineVersion,
+    CacheNodeType,
+    NeptuneEngineVersion,
+    DocumentDbEngineVersion,
+    RedshiftNodeType,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum DepthSource {
+    Knowledge,
+    Live,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -25,8 +38,10 @@ pub struct DepthCheck {
     pub path: String,
     /// The value as written, `engine version` for engine checks.
     pub value: String,
-    /// `None` until a live probe answered, or when it could not.
+    /// `None` until a source answered, or when none could.
     pub offered: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<DepthSource>,
 }
 
 /// What the target region offers, per kind. A missing kind was not probed.
@@ -55,6 +70,76 @@ const SINGLE: &[(&str, &str, DepthKind)] = &[
     ("aws_eks_node_group", "instance_types[]", InstanceType),
     ("aws_subnet", "availability_zone", AvailabilityZone),
     ("aws_instance", "availability_zone", AvailabilityZone),
+    (
+        "AWS::ElastiCache::CacheCluster",
+        "CacheNodeType",
+        CacheNodeType,
+    ),
+    (
+        "AWS::ElastiCache::ReplicationGroup",
+        "CacheNodeType",
+        CacheNodeType,
+    ),
+    ("aws_elasticache_cluster", "node_type", CacheNodeType),
+    (
+        "aws_elasticache_replication_group",
+        "node_type",
+        CacheNodeType,
+    ),
+    ("AWS::Redshift::Cluster", "NodeType", RedshiftNodeType),
+    ("aws_redshift_cluster", "node_type", RedshiftNodeType),
+];
+
+/// `(resource type, version property, engine, kind)` for services with one engine.
+const FIXED_ENGINES: &[(&str, &str, &str, DepthKind)] = &[
+    (
+        "AWS::Neptune::DBCluster",
+        "EngineVersion",
+        "neptune",
+        NeptuneEngineVersion,
+    ),
+    (
+        "aws_neptune_cluster",
+        "engine_version",
+        "neptune",
+        NeptuneEngineVersion,
+    ),
+    (
+        "AWS::DocDB::DBCluster",
+        "EngineVersion",
+        "docdb",
+        DocumentDbEngineVersion,
+    ),
+    (
+        "aws_docdb_cluster",
+        "engine_version",
+        "docdb",
+        DocumentDbEngineVersion,
+    ),
+];
+
+/// The Knowledge MCP config parent of each kind it covers. Engine values are keyed
+/// `<engine>-<version>` there.
+const CONFIG: &[(DepthKind, &str)] = &[
+    (InstanceType, "AWS::EC2::Instance::InstanceType"),
+    (RdsEngineVersion, "AWS::RDS::DBInstance::EngineVersion"),
+    (
+        CacheEngineVersion,
+        "AWS::ElastiCache::CacheCluster::EngineVersion",
+    ),
+    (
+        CacheNodeType,
+        "AWS::ElastiCache::CacheCluster::CacheNodeType",
+    ),
+    (
+        NeptuneEngineVersion,
+        "AWS::Neptune::DBCluster::EngineVersion",
+    ),
+    (
+        DocumentDbEngineVersion,
+        "AWS::DocDB::DBCluster::EngineVersion",
+    ),
+    (RedshiftNodeType, "AWS::Redshift::Cluster::NodeType"),
 ];
 
 /// `(resource type, engine property, version property, kind)`.
@@ -139,6 +224,13 @@ pub fn checks(template: &Template, target_region: &str) -> BTreeMap<String, Vec<
         }
         for (_, e, v, kind) in ENGINES.iter().filter(|(t, ..)| *t == r.resource_type) {
             if let (Some(engine), Some(version)) = (p[*e].as_str(), p[*v].as_str()) {
+                // Engine names are case-insensitive in the APIs and lowercase in the data.
+                let engine = engine.to_ascii_lowercase();
+                found.push(check(*kind, v, &format!("{engine} {version}")));
+            }
+        }
+        for (_, v, engine, kind) in FIXED_ENGINES.iter().filter(|(t, ..)| *t == r.resource_type) {
+            if let Some(version) = p[*v].as_str() {
                 found.push(check(*kind, v, &format!("{engine} {version}")));
             }
         }
@@ -158,6 +250,7 @@ fn check(kind: DepthKind, path: &str, value: &str) -> DepthCheck {
         path: path.into(),
         value: value.into(),
         offered: None,
+        source: None,
     }
 }
 
@@ -198,16 +291,68 @@ fn model_arns(v: &Value, path: &str, out: &mut Vec<DepthCheck>) {
     }
 }
 
-/// Fills `offered` from what the probes returned.
-pub fn resolve(checks: &mut BTreeMap<String, Vec<DepthCheck>>, offered: &Offered) {
+/// The checks contain a kind the Knowledge MCP config values cover.
+pub fn needs_config(checks: &BTreeMap<String, Vec<DepthCheck>>) -> bool {
+    checks
+        .values()
+        .flatten()
+        .any(|c| CONFIG.iter().any(|(k, _)| *k == c.kind))
+}
+
+/// What the Knowledge MCP config values offer, in the shape the checks use.
+pub fn public_offered(k: &Knowledge) -> Offered {
+    let mut out = Offered::new();
+    for (kind, parent) in CONFIG {
+        let Some(values) = k.config.get(*parent) else {
+            continue;
+        };
+        let engine = matches!(
+            kind,
+            RdsEngineVersion | CacheEngineVersion | NeptuneEngineVersion | DocumentDbEngineVersion
+        );
+        let set = values
+            .iter()
+            .filter_map(|v| {
+                if !engine {
+                    return Some(v.clone());
+                }
+                // `aurora-mysql-8.0.mysql_aurora.3.08.0`: the version starts at the first
+                // `-` followed by a digit.
+                let i = v
+                    .char_indices()
+                    .find(|&(i, c)| {
+                        c == '-' && v[i + 1..].starts_with(|d: char| d.is_ascii_digit())
+                    })?
+                    .0;
+                Some(format!("{} {}", &v[..i], &v[i + 1..]))
+            })
+            .collect();
+        out.insert(*kind, set);
+    }
+    out
+}
+
+/// Fills `offered` for the kinds a source answered; other kinds keep their answer.
+pub fn resolve(
+    checks: &mut BTreeMap<String, Vec<DepthCheck>>,
+    offered: &Offered,
+    source: DepthSource,
+) {
     for c in checks.values_mut().flatten() {
-        c.offered = offered.get(&c.kind).map(|set| match c.kind {
+        let Some(set) = offered.get(&c.kind) else {
+            continue;
+        };
+        c.offered = Some(match c.kind {
             // `16` or `8.0` names a version family; any offered member satisfies it.
-            RdsEngineVersion | CacheEngineVersion => set
+            RdsEngineVersion
+            | CacheEngineVersion
+            | NeptuneEngineVersion
+            | DocumentDbEngineVersion => set
                 .iter()
                 .any(|o| *o == c.value || o.starts_with(&format!("{}.", c.value))),
             _ => set.contains(&c.value),
         });
+        c.source = Some(source);
     }
 }
 
@@ -230,7 +375,7 @@ mod tests {
     use super::*;
 
     fn plan_checks() -> BTreeMap<String, Vec<DepthCheck>> {
-        let t = crate::reader::parse(include_str!("../tests/fixtures/tf-plan.json")).unwrap();
+        let t = crate::reader::parse_text(include_str!("../tests/fixtures/tf-plan.json")).unwrap();
         checks(&t, "eusc-de-east-1")
     }
 
@@ -269,7 +414,7 @@ mod tests {
                 .into(),
         );
         offered.insert(RdsEngineVersion, ["postgres 16.4".to_string()].into());
-        resolve(&mut c, &offered);
+        resolve(&mut c, &offered, DepthSource::Live);
         assert_eq!(c["module.net.aws_subnet.private[0]"][0].offered, Some(true));
         assert_eq!(
             c["module.net.aws_subnet.private[2]"][0].offered,
@@ -290,8 +435,38 @@ mod tests {
             RdsEngineVersion,
             ["postgres 16.4".to_string(), "postgres 160.1".to_string()].into(),
         );
-        resolve(&mut c, &offered);
+        resolve(&mut c, &offered, DepthSource::Live);
         assert_eq!(c["r"][0].offered, Some(true));
+    }
+
+    #[test]
+    fn public_values_come_from_knowledge_config_keys() {
+        let o = public_offered(&crate::provider::knowledge::tests::fixture());
+        assert!(o[&InstanceType].contains("m7i.large"));
+        assert!(
+            o[&RdsEngineVersion]
+                .iter()
+                .any(|v| v.starts_with("aurora-mysql 8.0"))
+        );
+        assert!(
+            o[&RdsEngineVersion]
+                .iter()
+                .any(|v| v.starts_with("postgres 16"))
+        );
+        assert!(o[&CacheEngineVersion].contains("valkey 7.2"));
+        assert!(
+            o[&NeptuneEngineVersion]
+                .iter()
+                .all(|v| v.starts_with("neptune 1."))
+        );
+        assert!(!o.contains_key(&AvailabilityZone));
+        let mut c = plan_checks();
+        resolve(&mut c, &o, DepthSource::Knowledge);
+        let db = &c["aws_db_instance.this"][0];
+        assert_eq!(db.source, Some(DepthSource::Knowledge));
+        assert!(db.offered.is_some());
+        // Zones are left to live mode.
+        assert_eq!(c["module.net.aws_subnet.private[0]"][0].offered, None);
     }
 
     #[test]
