@@ -10,7 +10,7 @@ use serde_json::Value;
 use crate::model::Template;
 use crate::provider::knowledge::Knowledge;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum DepthKind {
     InstanceType,
@@ -25,22 +25,21 @@ pub enum DepthKind {
     RedshiftNodeType,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum DepthSource {
     Knowledge,
     Live,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, schemars::JsonSchema)]
 pub struct DepthCheck {
     pub kind: DepthKind,
     pub path: String,
     /// The value as written, `engine version` for engine checks.
     pub value: String,
-    /// `None` until a source answered, or when none could.
+    /// Null until a source answered, or when none could.
     pub offered: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<DepthSource>,
 }
 

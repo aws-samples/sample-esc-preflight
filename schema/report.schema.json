@@ -1,0 +1,1112 @@
+{
+  "$defs": {
+    "Cause": {
+      "description": "`ids` names what fired: hazard kinds, the depth kind, or the guide rule.",
+      "properties": {
+        "ids": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "type": {
+          "$ref": "#/$defs/CauseType"
+        }
+      },
+      "required": [
+        "ids",
+        "type"
+      ],
+      "type": "object"
+    },
+    "CauseType": {
+      "description": "What a required change comes from.",
+      "oneOf": [
+        {
+          "const": "availability",
+          "description": "The resource is not available in the target.",
+          "type": "string"
+        },
+        {
+          "const": "deviation",
+          "description": "The ESC User Guide documents the feature as not available.",
+          "type": "string"
+        },
+        {
+          "const": "depth",
+          "description": "A property value the target does not offer.",
+          "type": "string"
+        },
+        {
+          "const": "hazard",
+          "description": "A hardcoded literal.",
+          "type": "string"
+        },
+        {
+          "const": "zones",
+          "description": "More zones than the target offers.",
+          "type": "string"
+        },
+        {
+          "const": "environment",
+          "description": "Values written for the input's own environment.",
+          "type": "string"
+        }
+      ]
+    },
+    "DeployEnv": {
+      "description": "Where the input was synthesized (CDK) or planned (Terraform). Values written for\nthis environment are not hardcoded by hand; they change when the input is\nproduced for the target instead.",
+      "properties": {
+        "account": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "region": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "account",
+        "region"
+      ],
+      "type": "object"
+    },
+    "DepthCheck": {
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/DepthKind"
+        },
+        "offered": {
+          "description": "Null until a source answered, or when none could.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DepthSource"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "value": {
+          "description": "The value as written, `engine version` for engine checks.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "offered",
+        "path",
+        "source",
+        "value"
+      ],
+      "type": "object"
+    },
+    "DepthKind": {
+      "enum": [
+        "instance-type",
+        "availability-zone",
+        "foundation-model",
+        "inference-profile",
+        "rds-engine-version",
+        "cache-engine-version",
+        "cache-node-type",
+        "neptune-engine-version",
+        "document-db-engine-version",
+        "redshift-node-type"
+      ],
+      "type": "string"
+    },
+    "DepthSource": {
+      "enum": [
+        "knowledge",
+        "live"
+      ],
+      "type": "string"
+    },
+    "Deviation": {
+      "properties": {
+        "conflict": {
+          "description": "The feature the Knowledge MCP data lists as available although the guide says it\nis not: a guide conflict, reported as a warning.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "documented": {
+          "description": "The documented difference, as the guide states it.",
+          "type": "string"
+        },
+        "logical_id": {
+          "type": "string"
+        },
+        "resource_type": {
+          "type": "string"
+        },
+        "rule": {
+          "type": "string"
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity"
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "conflict",
+        "documented",
+        "logical_id",
+        "resource_type",
+        "rule",
+        "severity",
+        "source"
+      ],
+      "type": "object"
+    },
+    "Documented": {
+      "description": "The differences one guide page documents for a service the input uses.",
+      "properties": {
+        "differences": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "page": {
+          "type": "string"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "differences",
+        "page",
+        "url"
+      ],
+      "type": "object"
+    },
+    "Edit": {
+      "description": "Replace `find` in the string value at `path` with the expression for the source the\ninput was produced from. A CloudFormation expression in `${}` goes into `Fn::Sub`; a\nzone replacement is the whole value.",
+      "properties": {
+        "find": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "replace": {
+          "$ref": "#/$defs/Replacement"
+        }
+      },
+      "required": [
+        "find",
+        "path",
+        "replace"
+      ],
+      "type": "object"
+    },
+    "EnvLiterals": {
+      "description": "Values written for the environment the input was produced for.",
+      "properties": {
+        "env": {
+          "$ref": "#/$defs/DeployEnv"
+        },
+        "places": {
+          "description": "Number of property values that contain at least one such literal.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "zones": {
+          "description": "Distinct zones of the environment the input uses.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "env",
+        "places",
+        "zones"
+      ],
+      "type": "object"
+    },
+    "Evidence": {
+      "description": "What each source said about one resource.",
+      "properties": {
+        "knowledge": {
+          "$ref": "#/$defs/Listed",
+          "description": "The AWS Knowledge MCP data for the type, operation or service."
+        },
+        "live": {
+          "description": "The live check found the resource offered. Null without live mode or when the\ncheck could not decide.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "live_check": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LiveCheckKind"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "knowledge",
+        "live",
+        "live_check"
+      ],
+      "type": "object"
+    },
+    "Finding": {
+      "properties": {
+        "cdk_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "depth": {
+          "description": "Property values checked against what the target region offers.",
+          "items": {
+            "$ref": "#/$defs/DepthCheck"
+          },
+          "type": "array"
+        },
+        "evidence": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Evidence"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "logical_id": {
+          "type": "string"
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "resource_type": {
+          "type": "string"
+        },
+        "roadmap": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Roadmap"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "service": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "verdict": {
+          "$ref": "#/$defs/Verdict"
+        }
+      },
+      "required": [
+        "cdk_path",
+        "depth",
+        "evidence",
+        "logical_id",
+        "note",
+        "resource_type",
+        "roadmap",
+        "service",
+        "verdict"
+      ],
+      "type": "object"
+    },
+    "GuideProvenance": {
+      "properties": {
+        "stale_rules": {
+          "description": "Rules that match the input but whose sentence is no longer on the guide: the\nrestriction may have been lifted, or the wording changed.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "toc_url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "stale_rules",
+        "toc_url"
+      ],
+      "type": "object"
+    },
+    "Hazard": {
+      "description": "One place to fix: a property value with every hazardous literal found in it.",
+      "properties": {
+        "literals": {
+          "items": {
+            "$ref": "#/$defs/Literal"
+          },
+          "type": "array"
+        },
+        "logical_id": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "literals",
+        "logical_id",
+        "path"
+      ],
+      "type": "object"
+    },
+    "HazardKind": {
+      "oneOf": [
+        {
+          "const": "arn-partition",
+          "description": "`arn:<partition>:` in a literal.",
+          "type": "string"
+        },
+        {
+          "const": "dns-suffix",
+          "description": "An endpoint host with a partition DNS suffix.",
+          "type": "string"
+        },
+        {
+          "const": "dual-stack-suffix",
+          "description": "An endpoint host with a partition's dual-stack DNS suffix, such as `api.aws`.",
+          "type": "string"
+        },
+        {
+          "const": "service-principal",
+          "description": "A service principal with another partition's suffix, e.g. `lambda.amazonaws.com.cn`.",
+          "type": "string"
+        },
+        {
+          "const": "region-literal",
+          "description": "A Region id.",
+          "type": "string"
+        },
+        {
+          "const": "availability-zone",
+          "description": "An Availability Zone name or id.",
+          "type": "string"
+        },
+        {
+          "const": "account-id",
+          "description": "A 12-digit account id in an ARN.",
+          "type": "string"
+        }
+      ]
+    },
+    "Impact": {
+      "description": "What a hardcoded literal does when the input is deployed to the target.",
+      "oneOf": [
+        {
+          "const": "breaks",
+          "description": "It refers to another Region or partition, so the deployment fails or misbehaves.",
+          "type": "string"
+        },
+        {
+          "const": "portability",
+          "description": "It is right for the target, but ties the input to it.",
+          "type": "string"
+        }
+      ]
+    },
+    "KnowledgeProvenance": {
+      "properties": {
+        "unknown": {
+          "description": "Types, services or operations the server does not know.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "url": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "unknown",
+        "url"
+      ],
+      "type": "object"
+    },
+    "Listed": {
+      "enum": [
+        "available",
+        "not-available",
+        "unknown"
+      ],
+      "type": "string"
+    },
+    "Literal": {
+      "properties": {
+        "impact": {
+          "$ref": "#/$defs/Impact"
+        },
+        "kind": {
+          "$ref": "#/$defs/HazardKind"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "impact",
+        "kind",
+        "value"
+      ],
+      "type": "object"
+    },
+    "LiveCheckKind": {
+      "enum": [
+        "type-registry",
+        "service-api"
+      ],
+      "type": "string"
+    },
+    "LiveProvenance": {
+      "properties": {
+        "account_id": {
+          "type": "string"
+        },
+        "depth_probes": {
+          "items": {
+            "$ref": "#/$defs/DepthKind"
+          },
+          "type": "array"
+        },
+        "read_only_access": {
+          "description": "The caller's role has ReadOnlyAccess (or AdministratorAccess) attached, so an\nAccessDenied from a service means the service is not offered.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "account_id",
+        "depth_probes",
+        "read_only_access"
+      ],
+      "type": "object"
+    },
+    "OutOfScope": {
+      "description": "A Terraform resource of a provider other than aws or awscc.",
+      "properties": {
+        "address": {
+          "type": "string"
+        },
+        "provider": {
+          "type": "string"
+        },
+        "resource_type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "address",
+        "provider",
+        "resource_type"
+      ],
+      "type": "object"
+    },
+    "Outcome": {
+      "description": "What `--fail-on` decides, per category, from the summary.",
+      "properties": {
+        "blocker": {
+          "description": "Not available, a depth value the target does not offer, or a feature the ESC\nUser Guide documents as not available.",
+          "type": "boolean"
+        },
+        "disputed": {
+          "description": "A disputed or cannot-assess finding, or a guide conflict.",
+          "type": "boolean"
+        },
+        "hazard": {
+          "description": "A hardcoded literal or an environment literal.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "blocker",
+        "disputed",
+        "hazard"
+      ],
+      "type": "object"
+    },
+    "Provenance": {
+      "properties": {
+        "fetched_at": {
+          "type": "string"
+        },
+        "input_environments": {
+          "description": "Where the input was synthesized (CDK cloud assembly) or planned (Terraform).",
+          "items": {
+            "$ref": "#/$defs/DeployEnv"
+          },
+          "type": "array"
+        },
+        "knowledge": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KnowledgeProvenance"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Null when the server has no data for the target, so live mode decides alone."
+        },
+        "live": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LiveProvenance"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "partitions_version": {
+          "description": "botocore release of the bundled partition data.",
+          "type": "string"
+        },
+        "source_format": {
+          "$ref": "#/$defs/SourceFormat"
+        },
+        "target_region": {
+          "type": "string"
+        },
+        "terraform": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TerraformProvenance"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tool_version": {
+          "type": "string"
+        },
+        "user_guide": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GuideProvenance"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "ESC User Guide service pages, when the target is in its partition."
+        }
+      },
+      "required": [
+        "fetched_at",
+        "input_environments",
+        "knowledge",
+        "live",
+        "partitions_version",
+        "source_format",
+        "target_region",
+        "terraform",
+        "tool_version",
+        "user_guide"
+      ],
+      "type": "object"
+    },
+    "Replacement": {
+      "properties": {
+        "cdk": {
+          "type": "string"
+        },
+        "cloudformation": {
+          "type": "string"
+        },
+        "terraform": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "cdk",
+        "cloudformation",
+        "terraform"
+      ],
+      "type": "object"
+    },
+    "RequiredChange": {
+      "properties": {
+        "candidates": {
+          "description": "Values the target offers, for the owner to choose from.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "cause": {
+          "$ref": "#/$defs/Cause"
+        },
+        "cdk_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "change": {
+          "type": "string"
+        },
+        "consequence": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "doc": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "edits": {
+          "items": {
+            "$ref": "#/$defs/Edit"
+          },
+          "type": "array"
+        },
+        "logical_id": {
+          "type": "string"
+        },
+        "precondition": {
+          "description": "What must hold for a proposed change to be right.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "reason": {
+          "type": "string"
+        },
+        "tier": {
+          "$ref": "#/$defs/Tier"
+        }
+      },
+      "required": [
+        "candidates",
+        "cause",
+        "cdk_path",
+        "change",
+        "consequence",
+        "doc",
+        "edits",
+        "logical_id",
+        "precondition",
+        "reason",
+        "tier"
+      ],
+      "type": "object"
+    },
+    "Roadmap": {
+      "description": "The product's state in the target region, when it is not available there.",
+      "properties": {
+        "launch": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "product": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/State"
+        }
+      },
+      "required": [
+        "launch",
+        "product",
+        "status"
+      ],
+      "type": "object"
+    },
+    "Severity": {
+      "oneOf": [
+        {
+          "const": "blocker",
+          "description": "The feature is not available.",
+          "type": "string"
+        },
+        {
+          "const": "caveat",
+          "description": "The feature works with an ESC difference.",
+          "type": "string"
+        }
+      ]
+    },
+    "SourceFormat": {
+      "enum": [
+        "cloudformation",
+        "terraform-plan"
+      ],
+      "type": "string"
+    },
+    "State": {
+      "enum": [
+        "available",
+        "planned",
+        "planning",
+        "not-expanding",
+        "not-available"
+      ],
+      "type": "string"
+    },
+    "Summary": {
+      "properties": {
+        "available": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "cannot_assess": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "caveats": {
+          "description": "Features that work with an ESC difference the guide documents.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "depth_blockers": {
+          "description": "Depth checks whose value the target region does not offer, plus a zone\nshortfall (see `zones`).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "deviations": {
+          "description": "Resources that use a feature the ESC User Guide documents as not available.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "disputed": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "divergences": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "environment_literals": {
+          "description": "Property values written for the input's own environment (see `environment_literals`).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "fixes": {
+          "description": "Required changes by tier: applied as stated, applied after a yes, owner decides.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "flags": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "guide_conflicts": {
+          "description": "Guide restrictions the Knowledge MCP data contradicts; warnings, not blockers.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "hazards": {
+          "description": "Property values with a hardcoded hazard; each is one place to fix.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "not_available": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "planned": {
+          "description": "Findings whose product has a planned launch quarter.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "proposals": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "resources": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "available",
+        "cannot_assess",
+        "caveats",
+        "depth_blockers",
+        "deviations",
+        "disputed",
+        "divergences",
+        "environment_literals",
+        "fixes",
+        "flags",
+        "guide_conflicts",
+        "hazards",
+        "not_available",
+        "planned",
+        "proposals",
+        "resources"
+      ],
+      "type": "object"
+    },
+    "TerraformProvenance": {
+      "properties": {
+        "aws_provider_version": {
+          "type": "string"
+        },
+        "awscc_provider_version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "aws_provider_version",
+        "awscc_provider_version"
+      ],
+      "type": "object"
+    },
+    "Tier": {
+      "enum": [
+        "fix",
+        "propose",
+        "flag"
+      ],
+      "type": "string"
+    },
+    "Verdict": {
+      "oneOf": [
+        {
+          "enum": [
+            "available",
+            "not-available"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "disputed",
+          "description": "The sources disagree, or the type exists while its product is not launched.",
+          "type": "string"
+        },
+        {
+          "const": "cannot-assess",
+          "description": "No source knows the resource.",
+          "type": "string"
+        }
+      ]
+    },
+    "Warning": {
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/WarningCode"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "WarningCode": {
+      "oneOf": [
+        {
+          "const": "input-region-mismatch",
+          "description": "The input was produced for another Region than the target.",
+          "type": "string"
+        },
+        {
+          "const": "knowledge-unknown",
+          "description": "The Knowledge MCP server does not know some types, services or operations.",
+          "type": "string"
+        },
+        {
+          "const": "knowledge-region-unlisted",
+          "description": "The Knowledge MCP server has no data for the target; live mode decides alone.",
+          "type": "string"
+        },
+        {
+          "const": "guide-conflict",
+          "description": "The ESC User Guide and the Knowledge MCP data disagree.",
+          "type": "string"
+        },
+        {
+          "const": "stale-rules",
+          "description": "Rules matched, but the guide no longer contains their sentence.",
+          "type": "string"
+        }
+      ]
+    },
+    "ZoneCheck": {
+      "description": "The input spreads over more zones of its own environment than the target offers.",
+      "properties": {
+        "target_offers": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "used": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "target_offers",
+        "used"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "data_provenance": {
+      "$ref": "#/$defs/Provenance"
+    },
+    "deviations": {
+      "items": {
+        "$ref": "#/$defs/Deviation"
+      },
+      "type": "array"
+    },
+    "documented_differences": {
+      "description": "Differences the ESC User Guide documents for the services in the input.",
+      "items": {
+        "$ref": "#/$defs/Documented"
+      },
+      "type": "array"
+    },
+    "environment_literals": {
+      "items": {
+        "$ref": "#/$defs/EnvLiterals"
+      },
+      "type": "array"
+    },
+    "findings": {
+      "items": {
+        "$ref": "#/$defs/Finding"
+      },
+      "type": "array"
+    },
+    "hazards": {
+      "items": {
+        "$ref": "#/$defs/Hazard"
+      },
+      "type": "array"
+    },
+    "out_of_scope": {
+      "description": "Terraform resources of providers other than aws and awscc.",
+      "items": {
+        "$ref": "#/$defs/OutOfScope"
+      },
+      "type": "array"
+    },
+    "outcome": {
+      "$ref": "#/$defs/Outcome"
+    },
+    "required_changes": {
+      "items": {
+        "$ref": "#/$defs/RequiredChange"
+      },
+      "type": "array"
+    },
+    "schema_version": {
+      "const": 1,
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "summary": {
+      "$ref": "#/$defs/Summary"
+    },
+    "warnings": {
+      "items": {
+        "$ref": "#/$defs/Warning"
+      },
+      "type": "array"
+    },
+    "zones": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ZoneCheck"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "data_provenance",
+    "deviations",
+    "documented_differences",
+    "environment_literals",
+    "findings",
+    "hazards",
+    "out_of_scope",
+    "outcome",
+    "required_changes",
+    "schema_version",
+    "summary",
+    "warnings",
+    "zones"
+  ],
+  "title": "Report",
+  "type": "object"
+}

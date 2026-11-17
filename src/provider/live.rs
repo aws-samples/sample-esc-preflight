@@ -21,19 +21,16 @@ pub struct Needs {
     pub zones: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
 pub struct LiveProvenance {
     pub account_id: String,
-    pub region: String,
-    pub registry_types: Option<usize>,
-    pub service_probes: usize,
     pub depth_probes: Vec<DepthKind>,
     /// The caller's role has ReadOnlyAccess (or AdministratorAccess) attached, so an
     /// AccessDenied from a service means the service is not offered.
     pub read_only_access: Option<bool>,
 }
 
-pub fn run(caller: &Caller, region: &str, needs: Needs) -> Result<(Live, LiveProvenance)> {
+pub fn run(caller: &Caller, needs: Needs) -> Result<(Live, LiveProvenance)> {
     let sts = svc("sts");
     let identity = caller
         .call(sts, "GetCallerIdentity", "POST", "/", &[])
@@ -93,9 +90,6 @@ pub fn run(caller: &Caller, region: &str, needs: Needs) -> Result<(Live, LivePro
 
     let prov = LiveProvenance {
         account_id,
-        region: region.into(),
-        registry_types: registry.as_ref().map(BTreeSet::len),
-        service_probes: services.len(),
         depth_probes: offered.keys().copied().collect(),
         read_only_access: read_only,
     };
@@ -406,9 +400,9 @@ mod tests {
             )]),
             zones: true,
         };
-        let (live, prov) = run(&caller, "eusc-de-east-1", needs).unwrap();
+        let (live, prov) = run(&caller, needs).unwrap();
         eprintln!("{prov:?}\n{:?}\n{:?}", live.services, live.depth);
-        assert!(prov.registry_types.unwrap() > 500);
+        assert!(live.registry.as_ref().unwrap().len() > 500);
         for s in ["EKS", "RDS", "DynamoDB", "CodePipeline", "CodeBuild"] {
             assert_eq!(live.services[s], ServiceStatus::Offered, "{s}");
         }

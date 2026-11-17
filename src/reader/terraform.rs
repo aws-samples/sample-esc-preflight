@@ -54,7 +54,13 @@ pub fn from_value(doc: &Value) -> Result<Template> {
             },
         );
     }
-    constants(&doc["configuration"], false, &mut t.constants);
+    // Not `provider_config`: its region is the plan's environment, which every
+    // resolved value of that Region would otherwise match as typed by hand.
+    constants(
+        &doc["configuration"]["root_module"],
+        false,
+        &mut t.constants,
+    );
     t.out_of_scope.sort();
     Ok(t)
 }
@@ -313,6 +319,20 @@ mod tests {
         assert_eq!(
             c.into_iter().collect::<Vec<_>>(),
             ["arn:aws:iam::aws:policy/P"]
+        );
+    }
+
+    #[test]
+    fn the_provider_region_is_the_environment_not_a_constant() {
+        let t = crate::reader::parse_text(
+            r#"{"format_version":"1.2","planned_values":{"root_module":{"resources":[]}},
+            "configuration":{"provider_config":{"aws":{"expressions":{"region":{"constant_value":"eu-central-1"}}}},
+            "root_module":{"resources":[{"expressions":{"name":{"constant_value":"q-eu-central-1"}}}]}}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            t.constants.into_iter().collect::<Vec<_>>(),
+            ["q-eu-central-1"]
         );
     }
 

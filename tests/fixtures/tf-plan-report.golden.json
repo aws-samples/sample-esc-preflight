@@ -1,8 +1,8 @@
 {
+  "schema_version": 1,
   "data_provenance": {
     "tool_version": "test",
     "source_format": "terraform-plan",
-    "mode": "public",
     "target_region": "eusc-de-east-1",
     "input_environments": [
       {
@@ -13,22 +13,19 @@
     "partitions_version": "test",
     "knowledge": {
       "url": "https://knowledge-mcp.global.api.aws",
-      "calls": 0
+      "unknown": []
     },
     "user_guide": {
       "toc_url": "",
-      "pages": 16,
       "stale_rules": [
         "rds-default-backup-window",
         "rds-default-maintenance-window"
-      ],
-      "unmapped_pages": []
+      ]
     },
     "fetched_at": "1970-01-01T00:00:00Z",
     "terraform": {
       "aws_provider_version": "6.71.0",
-      "awscc_provider_version": "1.108.0",
-      "urls": []
+      "awscc_provider_version": "1.108.0"
     },
     "live": null
   },
@@ -46,69 +43,89 @@
     "deviations": 0,
     "guide_conflicts": 0,
     "caveats": 0,
-    "fixes": 1,
+    "fixes": 2,
     "proposals": 2,
     "flags": 0
+  },
+  "outcome": {
+    "blocker": true,
+    "hazard": true,
+    "disputed": false
   },
   "findings": [
     {
       "logical_id": "aws_cloudwatch_log_group.this",
+      "cdk_path": null,
       "resource_type": "aws_cloudwatch_log_group",
       "service": "logs",
       "verdict": "available",
       "evidence": {
-        "knowledge": "available"
+        "knowledge": "available",
+        "live": null,
+        "live_check": null
       },
+      "roadmap": null,
       "note": null,
-      "divergence": false,
       "depth": []
     },
     {
       "logical_id": "aws_cloudwatch_metric_alarm.this",
+      "cdk_path": null,
       "resource_type": "aws_cloudwatch_metric_alarm",
       "service": "monitoring",
       "verdict": "available",
       "evidence": {
-        "knowledge": "available"
+        "knowledge": "available",
+        "live": null,
+        "live_check": null
       },
+      "roadmap": null,
       "note": null,
-      "divergence": false,
       "depth": []
     },
     {
       "logical_id": "aws_codebuild_project.this",
+      "cdk_path": null,
       "resource_type": "aws_codebuild_project",
       "service": "codebuild",
       "verdict": "available",
       "evidence": {
-        "knowledge": "available"
+        "knowledge": "available",
+        "live": null,
+        "live_check": null
       },
+      "roadmap": null,
       "note": null,
-      "divergence": false,
       "depth": []
     },
     {
       "logical_id": "aws_cognito_identity_pool.this",
+      "cdk_path": null,
       "resource_type": "aws_cognito_identity_pool",
       "service": "cognito-identity",
       "verdict": "available",
       "evidence": {
-        "knowledge": "available"
+        "knowledge": "available",
+        "live": null,
+        "live_check": null
       },
+      "roadmap": null,
       "note": null,
-      "divergence": false,
       "depth": []
     },
     {
       "logical_id": "aws_db_instance.this",
+      "cdk_path": null,
       "resource_type": "aws_db_instance",
       "service": "rds",
       "verdict": "available",
       "evidence": {
-        "knowledge": "available"
+        "knowledge": "available",
+        "live": null,
+        "live_check": null
       },
+      "roadmap": null,
       "note": null,
-      "divergence": false,
       "depth": [
         {
           "kind": "rds-engine-version",
@@ -121,45 +138,55 @@
     },
     {
       "logical_id": "aws_dynamodb_table.this",
+      "cdk_path": null,
       "resource_type": "aws_dynamodb_table",
       "service": "dynamodb",
       "verdict": "available",
       "evidence": {
-        "knowledge": "available"
+        "knowledge": "available",
+        "live": null,
+        "live_check": null
       },
+      "roadmap": null,
       "note": null,
-      "divergence": false,
       "depth": []
     },
     {
       "logical_id": "aws_iam_policy.bedrock",
+      "cdk_path": null,
       "resource_type": "aws_iam_policy",
       "service": "iam",
       "verdict": "available",
       "evidence": {
-        "knowledge": "available"
+        "knowledge": "available",
+        "live": null,
+        "live_check": null
       },
+      "roadmap": null,
       "note": null,
-      "divergence": false,
       "depth": [
         {
           "kind": "foundation-model",
           "path": "policy",
           "value": "amazon.titan-embed-text-v2:0",
-          "offered": null
+          "offered": null,
+          "source": null
         }
       ]
     },
     {
       "logical_id": "aws_instance.this",
+      "cdk_path": null,
       "resource_type": "aws_instance",
       "service": "ec2",
       "verdict": "available",
       "evidence": {
-        "knowledge": "available"
+        "knowledge": "available",
+        "live": null,
+        "live_check": null
       },
+      "roadmap": null,
       "note": null,
-      "divergence": false,
       "depth": [
         {
           "kind": "instance-type",
@@ -172,107 +199,131 @@
     },
     {
       "logical_id": "aws_lb.this",
+      "cdk_path": null,
       "resource_type": "aws_lb",
       "service": "elasticloadbalancing",
       "verdict": "available",
       "evidence": {
-        "knowledge": "available"
+        "knowledge": "available",
+        "live": null,
+        "live_check": null
       },
+      "roadmap": null,
       "note": null,
-      "divergence": false,
       "depth": []
     },
     {
       "logical_id": "aws_s3_bucket.this",
+      "cdk_path": null,
       "resource_type": "aws_s3_bucket",
       "service": "s3",
       "verdict": "available",
       "evidence": {
-        "knowledge": "available"
+        "knowledge": "available",
+        "live": null,
+        "live_check": null
       },
+      "roadmap": null,
       "note": null,
-      "divergence": false,
       "depth": []
     },
     {
       "logical_id": "module.net.aws_security_group.this",
+      "cdk_path": null,
       "resource_type": "aws_security_group",
       "service": "ec2",
       "verdict": "available",
       "evidence": {
-        "knowledge": "available"
+        "knowledge": "available",
+        "live": null,
+        "live_check": null
       },
+      "roadmap": null,
       "note": null,
-      "divergence": false,
       "depth": []
     },
     {
       "logical_id": "module.net.aws_subnet.private[0]",
+      "cdk_path": null,
       "resource_type": "aws_subnet",
       "service": "ec2",
       "verdict": "available",
       "evidence": {
-        "knowledge": "available"
+        "knowledge": "available",
+        "live": null,
+        "live_check": null
       },
+      "roadmap": null,
       "note": null,
-      "divergence": false,
       "depth": [
         {
           "kind": "availability-zone",
           "path": "availability_zone",
           "value": "eusc-de-east-1a",
-          "offered": null
+          "offered": null,
+          "source": null
         }
       ]
     },
     {
       "logical_id": "module.net.aws_subnet.private[1]",
+      "cdk_path": null,
       "resource_type": "aws_subnet",
       "service": "ec2",
       "verdict": "available",
       "evidence": {
-        "knowledge": "available"
+        "knowledge": "available",
+        "live": null,
+        "live_check": null
       },
+      "roadmap": null,
       "note": null,
-      "divergence": false,
       "depth": [
         {
           "kind": "availability-zone",
           "path": "availability_zone",
           "value": "eusc-de-east-1b",
-          "offered": null
+          "offered": null,
+          "source": null
         }
       ]
     },
     {
       "logical_id": "module.net.aws_subnet.private[2]",
+      "cdk_path": null,
       "resource_type": "aws_subnet",
       "service": "ec2",
       "verdict": "available",
       "evidence": {
-        "knowledge": "available"
+        "knowledge": "available",
+        "live": null,
+        "live_check": null
       },
+      "roadmap": null,
       "note": null,
-      "divergence": false,
       "depth": [
         {
           "kind": "availability-zone",
           "path": "availability_zone",
           "value": "eusc-de-east-1c",
-          "offered": null
+          "offered": null,
+          "source": null
         }
       ]
     },
     {
       "logical_id": "module.net.aws_vpc.this",
+      "cdk_path": null,
       "resource_type": "aws_vpc",
       "service": "ec2",
       "verdict": "available",
       "evidence": {
-        "knowledge": "available"
+        "knowledge": "available",
+        "live": null,
+        "live_check": null
       },
+      "roadmap": null,
       "note": null,
-      "divergence": false,
       "depth": []
     }
   ],
@@ -282,8 +333,14 @@
       "path": "values.service_role",
       "literals": [
         {
+          "kind": "arn-partition",
+          "value": "arn:aws-eusc:",
+          "impact": "portability"
+        },
+        {
           "kind": "account-id",
-          "value": "111122223333"
+          "value": "111122223333",
+          "impact": "portability"
         }
       ]
     },
@@ -293,7 +350,8 @@
       "literals": [
         {
           "kind": "arn-partition",
-          "value": "arn:aws:"
+          "value": "arn:aws:",
+          "impact": "breaks"
         }
       ]
     }
@@ -381,24 +439,70 @@
   "required_changes": [
     {
       "logical_id": "aws_db_instance.this",
+      "cdk_path": null,
       "tier": "propose",
+      "cause": {
+        "type": "depth",
+        "ids": [
+          "rds-engine-version"
+        ]
+      },
       "reason": "RDS engine version `postgres 16.4` at engine_version is not offered in eusc-de-east-1",
       "change": "Choose one of the candidates the target offers.",
+      "precondition": null,
       "consequence": "Versions differ in features and fixes; test the application against the chosen one.",
+      "edits": [],
       "candidates": [
         "postgres 16.15",
         "postgres 16.14",
         "postgres 16.13",
         "postgres 16.12",
         "postgres 16.11"
-      ]
+      ],
+      "doc": null
     },
     {
       "logical_id": "aws_codebuild_project.this",
+      "cdk_path": null,
+      "tier": "fix",
+      "cause": {
+        "type": "hazard",
+        "ids": [
+          "arn-partition"
+        ]
+      },
+      "reason": "hardcoded `arn:aws-eusc:` at values.service_role",
+      "change": "Build the ARN from the partition instead of the literal.",
+      "precondition": null,
+      "consequence": null,
+      "edits": [
+        {
+          "path": "values.service_role",
+          "find": "arn:aws-eusc:",
+          "replace": {
+            "cloudformation": "arn:${AWS::Partition}:",
+            "cdk": "arn:${Aws.PARTITION}:",
+            "terraform": "arn:${data.aws_partition.current.partition}:"
+          }
+        }
+      ],
+      "candidates": [],
+      "doc": null
+    },
+    {
+      "logical_id": "aws_codebuild_project.this",
+      "cdk_path": null,
       "tier": "propose",
+      "cause": {
+        "type": "hazard",
+        "ids": [
+          "account-id"
+        ]
+      },
       "reason": "hardcoded `111122223333` at values.service_role",
       "change": "Use the deployment account instead of `111122223333`.",
       "precondition": "The value is the account the stack deploys to, not another account such as a central logging or an AWS-owned account.",
+      "consequence": null,
       "edits": [
         {
           "path": "values.service_role",
@@ -409,13 +513,24 @@
             "terraform": "${data.aws_caller_identity.current.account_id}"
           }
         }
-      ]
+      ],
+      "candidates": [],
+      "doc": null
     },
     {
       "logical_id": "aws_iam_policy.bedrock",
+      "cdk_path": null,
       "tier": "fix",
+      "cause": {
+        "type": "hazard",
+        "ids": [
+          "arn-partition"
+        ]
+      },
       "reason": "hardcoded `arn:aws:` at values.policy.Statement[0].Resource[0]",
       "change": "Build the ARN from the partition instead of the literal.",
+      "precondition": null,
+      "consequence": null,
       "edits": [
         {
           "path": "values.policy.Statement[0].Resource[0]",
@@ -426,7 +541,9 @@
             "terraform": "arn:${data.aws_partition.current.partition}:"
           }
         }
-      ]
+      ],
+      "candidates": [],
+      "doc": null
     }
   ],
   "out_of_scope": [
@@ -437,6 +554,9 @@
     }
   ],
   "warnings": [
-    "These rules match the input, but the ESC User Guide no longer contains the sentence they quote, so they were skipped: rds-default-backup-window, rds-default-maintenance-window. Check the guide: the restriction may have been lifted or reworded."
+    {
+      "code": "stale-rules",
+      "message": "These rules match the input, but the ESC User Guide no longer contains the sentence they quote, so they were skipped: rds-default-backup-window, rds-default-maintenance-window. Check the guide: the restriction may have been lifted or reworded."
+    }
   ]
 }

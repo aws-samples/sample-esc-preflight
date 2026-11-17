@@ -8,35 +8,36 @@ use crate::matcher::{Finding, Verdict};
 use crate::model::{DeployEnv, OutOfScope, SourceFormat};
 use crate::provider::knowledge::State;
 use crate::provider::live::LiveProvenance;
-use crate::remediation::{self, Context, RequiredChange, Tier};
+use crate::remediation::{self, Cause, CauseType, Context, RequiredChange, Tier};
 
-#[derive(Debug, Clone, Serialize)]
+/// Version of the JSON report's shape. Adding a field or an enum value keeps it;
+/// removing or renaming a field, or changing what one means, increments it.
+pub const SCHEMA_VERSION: u32 = 1;
+
+#[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
 pub struct TerraformProvenance {
     pub aws_provider_version: String,
     pub awscc_provider_version: String,
-    pub urls: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
 pub struct KnowledgeProvenance {
     pub url: String,
-    pub calls: usize,
     /// Types, services or operations the server does not know.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub unknown: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
 pub struct Provenance {
     pub tool_version: String,
     pub source_format: SourceFormat,
-    pub mode: String,
     pub target_region: String,
     /// Where the input was synthesized (CDK cloud assembly) or planned (Terraform).
     pub input_environments: Vec<DeployEnv>,
     /// botocore release of the bundled partition data.
     pub partitions_version: String,
-    pub knowledge: KnowledgeProvenance,
+    /// Null when the server has no data for the target, so live mode decides alone.
+    pub knowledge: Option<KnowledgeProvenance>,
     /// ESC User Guide service pages, when the target is in its partition.
     pub user_guide: Option<GuideProvenance>,
     pub fetched_at: String,
@@ -44,7 +45,7 @@ pub struct Provenance {
     pub live: Option<LiveProvenance>,
 }
 
-#[derive(Debug, Clone, Default, Serialize)]
+#[derive(Debug, Clone, Default, Serialize, schemars::JsonSchema)]
 pub struct Summary {
     pub resources: usize,
     pub available: usize,
@@ -74,16 +75,62 @@ pub struct Summary {
 }
 
 /// The input spreads over more zones of its own environment than the target offers.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
 pub struct ZoneCheck {
     pub used: Vec<String>,
     pub target_offers: usize,
 }
 
-#[derive(Debug, Clone, Serialize)]
+/// What `--fail-on` decides, per category, from the summary.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct Outcome {
+    /// Not available, a depth value the target does not offer, or a feature the ESC
+    /// User Guide documents as not available.
+    pub blocker: bool,
+    /// A hardcoded literal or an environment literal.
+    pub hazard: bool,
+    /// A disputed or cannot-assess finding, or a guide conflict.
+    pub disputed: bool,
+}
+
+impl Outcome {
+    pub fn of(s: &Summary) -> Self {
+        Self {
+            blocker: s.depth_blockers + s.deviations + s.not_available > 0,
+            hazard: s.hazards + s.environment_literals > 0,
+            disputed: s.disputed + s.cannot_assess + s.guide_conflicts > 0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum WarningCode {
+    /// The input was produced for another Region than the target.
+    InputRegionMismatch,
+    /// The Knowledge MCP server does not know some types, services or operations.
+    KnowledgeUnknown,
+    /// The Knowledge MCP server has no data for the target; live mode decides alone.
+    KnowledgeRegionUnlisted,
+    /// The ESC User Guide and the Knowledge MCP data disagree.
+    GuideConflict,
+    /// Rules matched, but the guide no longer contains their sentence.
+    StaleRules,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct Warning {
+    pub code: WarningCode,
+    pub message: String,
+}
+
+#[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
 pub struct Report {
+    #[schemars(extend("const" = 1))]
+    pub schema_version: u32,
     pub data_provenance: Provenance,
     pub summary: Summary,
+    pub outcome: Outcome,
     pub findings: Vec<Finding>,
     pub hazards: Vec<crate::extractor::Hazard>,
     pub deviations: Vec<Deviation>,
@@ -94,10 +141,10 @@ pub struct Report {
     pub required_changes: Vec<RequiredChange>,
     /// Terraform resources of providers other than aws and awscc.
     pub out_of_scope: Vec<OutOfScope>,
-    pub warnings: Vec<String>,
+    pub warnings: Vec<Warning>,
     /// For a warning that carries a command: its index, the prose without the
     /// command, and the command, so the terminal shows the command on its own line.
-    /// The JSON warning has both in one sentence.
+    /// The JSON warning has both in one message.
     #[serde(skip)]
     pub warning_commands: Vec<(usize, String, String)>,
 }
@@ -213,6 +260,7 @@ pub fn build(
             changes.push(RequiredChange::new(
                 &f.logical_id,
                 Tier::Flag,
+                Cause::new(CauseType::Availability, []),
                 match (&f.service, f.resource_type.starts_with("Custom::")) {
                     (Some(svc), true) => format!(
                         "{} calls {svc}, which is not available in {target}",
@@ -246,6 +294,7 @@ pub fn build(
         changes.push(RequiredChange::new(
             "*",
             Tier::Flag,
+            Cause::new(CauseType::Zones, []),
             format!(
                 "the input uses {} zones ({}); {target} offers {}",
                 z.used.len(),
@@ -277,6 +326,7 @@ pub fn build(
         let mut c = RequiredChange::new(
             "*",
             Tier::Propose,
+            Cause::new(CauseType::Environment, []),
             format!(
                 "{} property values were written for {} by synthesis or planning, not by hand",
                 e.places,
@@ -306,7 +356,23 @@ pub fn build(
             Tier::Flag => s.flags += 1,
         }
     }
-    let mut warnings: Vec<String> = Vec::new();
+    let mut warnings: Vec<Warning> = Vec::new();
+    let mut warn = |code, message: String| {
+        let w = Warning { code, message };
+        let new = !warnings.contains(&w);
+        if new {
+            warnings.push(w);
+        }
+        new.then(|| warnings.len() - 1)
+    };
+    if provenance.knowledge.is_none() {
+        warn(
+            WarningCode::KnowledgeRegionUnlisted,
+            format!(
+                "The AWS Knowledge MCP server has no data for {target}, so the verdicts come from live mode alone, without roadmap states."
+            ),
+        );
+    }
     let mut warning_commands = Vec::new();
     for region in provenance
         .input_environments
@@ -325,20 +391,25 @@ pub fn build(
         let prose = format!(
             "The input was produced for {region}, not {target}. {produce} it for the target region so region-specific values resolve as they will be deployed."
         );
-        let w = format!("{prose}{how}");
-        if warnings.contains(&w) {
-            continue;
+        if let (Some(i), Some(c)) = (
+            warn(WarningCode::InputRegionMismatch, format!("{prose}{how}")),
+            cmd,
+        ) {
+            warning_commands.push((i, prose, c));
         }
-        if let Some(c) = cmd {
-            warning_commands.push((warnings.len(), prose, c));
-        }
-        warnings.push(w);
     }
-    if !provenance.knowledge.unknown.is_empty() {
-        warnings.push(format!(
-            "The Knowledge MCP data does not know {}; only live mode can assess these resources.",
-            provenance.knowledge.unknown.join(", ")
-        ));
+    if let Some(k) = provenance
+        .knowledge
+        .as_ref()
+        .filter(|k| !k.unknown.is_empty())
+    {
+        warn(
+            WarningCode::KnowledgeUnknown,
+            format!(
+                "The Knowledge MCP data does not know {}; only live mode can assess these resources.",
+                k.unknown.join(", ")
+            ),
+        );
     }
     let mut conflicts: Vec<String> = Vec::new();
     for d in guide.deviations.iter().filter(|d| d.conflict.is_some()) {
@@ -348,27 +419,31 @@ pub fn build(
         }
     }
     if !conflicts.is_empty() {
-        warnings.push(format!(
-            "The ESC User Guide says these features are not available, while the Knowledge MCP data lists them as available: {}. The guide is likely outdated. Ask your AWS team to confirm and to have the guide corrected.",
-            conflicts.join(", ")
-        ));
+        warn(
+            WarningCode::GuideConflict,
+            format!(
+                "The ESC User Guide says these features are not available, while the Knowledge MCP data lists them as available: {}. The guide is likely outdated. Ask your AWS team to confirm and to have the guide corrected.",
+                conflicts.join(", ")
+            ),
+        );
     }
-    if let Some(g) = &provenance.user_guide {
-        if !g.stale_rules.is_empty() {
-            warnings.push(format!(
+    if let Some(g) = provenance
+        .user_guide
+        .as_ref()
+        .filter(|g| !g.stale_rules.is_empty())
+    {
+        warn(
+            WarningCode::StaleRules,
+            format!(
                 "These rules match the input, but the ESC User Guide no longer contains the sentence they quote, so they were skipped: {}. Check the guide: the restriction may have been lifted or reworded.",
                 g.stale_rules.join(", ")
-            ));
-        }
-        if !g.unmapped_pages.is_empty() {
-            warnings.push(format!(
-                "ESC User Guide pages not mapped to a service, so their differences are not attached: {}.",
-                g.unmapped_pages.join(", ")
-            ));
-        }
+            ),
+        );
     }
     Report {
+        schema_version: SCHEMA_VERSION,
         data_provenance: provenance,
+        outcome: Outcome::of(&s),
         summary: s,
         findings,
         hazards,
@@ -461,14 +536,24 @@ pub fn text_summary(r: &Report, st: Style) -> String {
             "  {}",
             paint(
                 dim,
-                &format!(
-                    "Knowledge MCP{}{dot}{} mode",
+                &[
+                    p.knowledge.as_ref().map(|_| "Knowledge MCP".to_string()),
                     p.user_guide
                         .as_ref()
-                        .map(|g| format!("{dot}ESC User Guide {} pages", g.pages))
-                        .unwrap_or_default(),
-                    p.mode
-                )
+                        .map(|g| format!("ESC User Guide {} pages", g.pages)),
+                    Some(
+                        if p.live.is_some() {
+                            "live mode"
+                        } else {
+                            "public mode"
+                        }
+                        .into()
+                    ),
+                ]
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>()
+                .join(dot)
             )
         ),
         String::new(),
@@ -539,19 +624,34 @@ pub fn text_summary(r: &Report, st: Style) -> String {
     out.push(paint(bold, "  PORTABILITY"));
     let before = out.len();
     if s.hazards > 0 {
+        let mut lits: Vec<&crate::extractor::Literal> =
+            r.hazards.iter().flat_map(|h| &h.literals).collect();
+        // Literals that break the deployment first.
+        lits.sort_by_key(|l| l.impact);
         let mut values: Vec<&str> = Vec::new();
-        for l in r.hazards.iter().flat_map(|h| &h.literals) {
+        for l in lits {
             if !values.contains(&l.value.as_str()) {
                 values.push(&l.value);
             }
         }
         let resources = distinct(r.hazards.iter().map(|h| h.logical_id.as_str()));
+        let breaking = r
+            .hazards
+            .iter()
+            .filter(|h| {
+                h.literals
+                    .iter()
+                    .any(|l| l.impact == crate::extractor::Impact::Breaks)
+            })
+            .count();
+        // Room for the breaking count, when not all of them break.
+        let room = if breaking < s.hazards { 1 } else { 3 };
         let shown = list(
             &values
                 .iter()
                 .map(|v| format!("`{}`", clean(v)))
                 .collect::<Vec<_>>(),
-            3,
+            room,
         );
         // The count is property values (fields) that contain a literal; the detail
         // names the distinct literals, so the two do not have to match.
@@ -561,7 +661,15 @@ pub fn text_summary(r: &Report, st: Style) -> String {
             yellow,
             "hardcoded fields",
             s.hazards,
-            format!("{resources} {}: {shown}", plural(resources, "resource")),
+            format!(
+                "{}{resources} {}: {shown}",
+                if breaking < s.hazards {
+                    format!("{breaking} breaking{dot}")
+                } else {
+                    String::new()
+                },
+                plural(resources, "resource")
+            ),
         );
     }
     if s.environment_literals > 0 {
@@ -743,7 +851,7 @@ pub fn text_summary(r: &Report, st: Style) -> String {
             out.push(String::new());
         }
         let split = r.warning_commands.iter().find(|(k, _, _)| *k == i);
-        let text = clean(split.map_or(w.as_str(), |(_, prose, _)| prose.as_str()));
+        let text = clean(split.map_or(w.message.as_str(), |(_, prose, _)| prose.as_str()));
         let cmd = split.map(|(_, _, c)| clean(c));
         for (k, l) in wrap(&text, WRAP - 2).iter().enumerate() {
             let lead = if k == 0 {
@@ -989,15 +1097,13 @@ mod tests {
         Provenance {
             tool_version: "test".into(),
             source_format: format,
-            mode: "public".into(),
             target_region: "eusc-de-east-1".into(),
             input_environments: envs,
             partitions_version: "test".into(),
-            knowledge: KnowledgeProvenance {
+            knowledge: Some(KnowledgeProvenance {
                 url: knowledge::URL.into(),
-                calls: 0,
                 unknown: vec![],
-            },
+            }),
             user_guide: None,
             fetched_at: "1970-01-01T00:00:00Z".into(),
             terraform: None,
@@ -1023,7 +1129,6 @@ mod tests {
                 .map(|tf| TerraformProvenance {
                     aws_provider_version: tf.aws_version.clone(),
                     awscc_provider_version: tf.awscc_version.clone(),
-                    urls: vec![],
                 }),
             ..prov(t.format, t.envs())
         };
@@ -1175,7 +1280,9 @@ mod tests {
         let (r, _) = fixture_reports().pop().unwrap();
         let cmd = "AWS_REGION=eusc-de-east-1 cdk synth";
         assert!(
-            r.warnings.iter().any(|w| w.ends_with(cmd)),
+            r.warnings
+                .iter()
+                .any(|w| w.code == WarningCode::InputRegionMismatch && w.message.ends_with(cmd)),
             "{:?}",
             r.warnings
         );
@@ -1222,6 +1329,7 @@ mod tests {
             r.required_changes.push(RequiredChange::new(
                 &format!("R{i}"),
                 Tier::Flag,
+                Cause::new(CauseType::Availability, []),
                 "x".into(),
                 "x".into(),
                 remediation::brief(format!("svc{i} not available"), "remove it"),
@@ -1379,5 +1487,120 @@ mod tests {
         let t = now_utc();
         assert_eq!(t.len(), 20);
         assert!(t.ends_with('Z') && t.as_bytes()[10] == b'T');
+    }
+
+    /// The JSON Schema of the report. Every key is always emitted, so every property
+    /// is required.
+    fn schema() -> serde_json::Value {
+        fn require_all(v: &mut serde_json::Value) {
+            match v {
+                serde_json::Value::Object(m) => {
+                    if let Some(serde_json::Value::Object(props)) = m.get("properties") {
+                        let keys: Vec<_> =
+                            props.keys().cloned().map(serde_json::Value::from).collect();
+                        m.insert("required".into(), keys.into());
+                    }
+                    m.values_mut().for_each(require_all);
+                }
+                serde_json::Value::Array(a) => a.iter_mut().for_each(require_all),
+                _ => {}
+            }
+        }
+        let mut v = serde_json::to_value(schemars::schema_for!(Report)).unwrap();
+        require_all(&mut v);
+        v
+    }
+
+    /// Every key the schema declares is in the JSON, also where the value is absent.
+    fn missing_keys(
+        v: &serde_json::Value,
+        schema: &serde_json::Value,
+        root: &serde_json::Value,
+        at: &str,
+        out: &mut Vec<String>,
+    ) {
+        if let Some(r) = schema["$ref"].as_str() {
+            let name = r.trim_start_matches("#/$defs/");
+            return missing_keys(v, &root["$defs"][name], root, at, out);
+        }
+        if v.is_null() {
+            return;
+        }
+        if let Some(branches) = schema["anyOf"].as_array().or(schema["oneOf"].as_array()) {
+            for b in branches.iter().filter(|b| b["type"] != "null") {
+                missing_keys(v, b, root, at, out);
+            }
+        }
+        if let Some(props) = schema["properties"].as_object() {
+            for (k, s) in props {
+                match v.get(k) {
+                    Some(x) => missing_keys(x, s, root, &format!("{at}.{k}"), out),
+                    None => out.push(format!("{at}.{k}")),
+                }
+            }
+        }
+        if let (Some(items), Some(a)) = (schema.get("items"), v.as_array()) {
+            for (i, x) in a.iter().enumerate() {
+                missing_keys(x, items, root, &format!("{at}[{i}]"), out);
+            }
+        }
+    }
+
+    #[test]
+    fn every_key_is_always_present() {
+        let schema = schema();
+        for input in [
+            crate::test_inputs::SAMPLE_TEMPLATE,
+            include_str!("../tests/fixtures/tf-plan.json"),
+            crate::test_inputs::CUSTOM_RESOURCES_TEMPLATE,
+        ] {
+            let v: serde_json::Value = serde_json::from_str(&fixed_report(input)).unwrap();
+            let mut missing = Vec::new();
+            missing_keys(&v, &schema, &schema, "", &mut missing);
+            assert!(missing.is_empty(), "{missing:?}");
+        }
+    }
+
+    #[test]
+    fn a_target_without_knowledge_data_says_live_mode_decides_alone() {
+        let r = build(
+            Provenance {
+                knowledge: None,
+                ..prov(SourceFormat::Cloudformation, vec![])
+            },
+            vec![],
+            extractor::Scan::default(),
+            Default::default(),
+            vec![],
+            &Context::default(),
+        );
+        assert_eq!(
+            r.warnings.iter().map(|w| w.code).collect::<Vec<_>>(),
+            [WarningCode::KnowledgeRegionUnlisted]
+        );
+        let text = text_summary(&r, Style::default());
+        let sources = text.lines().nth(1).unwrap_or_default();
+        assert_eq!(sources.trim(), "public mode", "{text}");
+    }
+
+    #[test]
+    fn outcome_matches_the_summary() {
+        let r = fixed(crate::test_inputs::SAMPLE_TEMPLATE);
+        assert_eq!(r.outcome, Outcome::of(&r.summary));
+        assert!(r.outcome.blocker && r.outcome.hazard);
+        assert_eq!(r.schema_version, SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn committed_schema_matches_the_report_types() {
+        let text = format!("{}\n", serde_json::to_string_pretty(&schema()).unwrap());
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/schema/report.schema.json");
+        if std::env::var_os("UPDATE_GOLDEN").is_some() {
+            std::fs::write(path, &text).unwrap();
+        }
+        assert!(
+            std::fs::read_to_string(path).unwrap_or_default() == text,
+            "schema/report.schema.json is out of date: run UPDATE_GOLDEN=1 cargo test schema, and decide whether SCHEMA_VERSION changes"
+        );
     }
 }

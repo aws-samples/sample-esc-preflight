@@ -1,20 +1,18 @@
 {
+  "schema_version": 1,
   "data_provenance": {
     "tool_version": "test",
     "source_format": "cloudformation",
-    "mode": "public",
     "target_region": "eusc-de-east-1",
     "input_environments": [],
     "partitions_version": "test",
     "knowledge": {
       "url": "https://knowledge-mcp.global.api.aws",
-      "calls": 0
+      "unknown": []
     },
     "user_guide": {
       "toc_url": "",
-      "pages": 16,
-      "stale_rules": [],
-      "unmapped_pages": []
+      "stale_rules": []
     },
     "fetched_at": "1970-01-01T00:00:00Z",
     "terraform": null,
@@ -38,14 +36,22 @@
     "proposals": 0,
     "flags": 0
   },
+  "outcome": {
+    "blocker": false,
+    "hazard": false,
+    "disputed": true
+  },
   "findings": [
     {
       "logical_id": "CreateInvalidation",
+      "cdk_path": null,
       "resource_type": "Custom::AWS",
       "service": "cloudfront",
       "verdict": "disputed",
       "evidence": {
-        "knowledge": "available"
+        "knowledge": "available",
+        "live": null,
+        "live_check": null
       },
       "roadmap": {
         "product": "Amazon CloudFront",
@@ -53,29 +59,32 @@
         "launch": "2026 Q4"
       },
       "note": "The Knowledge MCP data lists CloudFront CreateInvalidation, but Amazon CloudFront is planned for 2026 Q4 in the target region. Check that the feature works before relying on it.",
-      "divergence": false,
       "depth": []
     },
     {
       "logical_id": "DescribeClient",
+      "cdk_path": null,
       "resource_type": "Custom::DescribeUserPoolClient",
       "service": "cognito-idp",
       "verdict": "available",
       "evidence": {
-        "knowledge": "available"
+        "knowledge": "available",
+        "live": null,
+        "live_check": null
       },
+      "roadmap": null,
       "note": null,
-      "divergence": false,
       "depth": []
     },
     {
       "logical_id": "PortalRegistration",
+      "cdk_path": null,
       "resource_type": "Custom::PortalRegistration",
       "service": null,
       "verdict": "cannot-assess",
       "evidence": null,
+      "roadmap": null,
       "note": "Custom resource backed by its own code; the calls it makes cannot be read from the template. Its backing function is assessed separately.",
-      "divergence": false,
       "depth": []
     }
   ],

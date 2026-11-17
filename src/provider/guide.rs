@@ -39,8 +39,6 @@ pub struct Page {
 pub struct GuideData {
     pub toc_url: String,
     pub pages: Vec<Page>,
-    /// Pages that map to no known endpoint prefix.
-    pub unmapped: Vec<String>,
 }
 
 impl GuideData {
@@ -140,7 +138,6 @@ pub fn from_pages(pages: Vec<(String, String, String)>) -> GuideData {
     let table = serde_json::from_str::<Table>(PAGES_JSON)
         .expect("bundled page table is valid")
         .pages;
-    let mut unmapped = Vec::new();
     let pages = pages
         .into_iter()
         .map(|(slug, title, html)| {
@@ -153,10 +150,8 @@ pub fn from_pages(pages: Vec<(String, String, String)>) -> GuideData {
                     services: vec![slug.clone()],
                     types: Vec::new(),
                 },
-                None => {
-                    unmapped.push(slug.clone());
-                    Mapping::default()
-                }
+                // The live guide test lists these, for `data/esc-guide-pages.json`.
+                None => Mapping::default(),
             };
             let (text, differences) = differences(&html);
             Page {
@@ -173,8 +168,21 @@ pub fn from_pages(pages: Vec<(String, String, String)>) -> GuideData {
     GuideData {
         toc_url: String::new(),
         pages,
-        unmapped,
     }
+}
+
+/// Pages neither in the page table nor named after a known endpoint prefix.
+#[cfg(test)]
+pub(crate) fn unmapped(g: &GuideData) -> Vec<&str> {
+    let table: serde_json::Value = serde_json::from_str(PAGES_JSON).unwrap();
+    g.pages
+        .iter()
+        .filter(|p| {
+            table["pages"].get(&p.slug).is_none()
+                && services::index().by_endpoint_prefix(&p.slug).is_none()
+        })
+        .map(|p| p.slug.as_str())
+        .collect()
 }
 
 /// The "How X differs" section: its plain text and its top-level list items. Nested
@@ -312,7 +320,8 @@ pub(crate) mod tests {
         assert!(documents("lambda") && documents("cognito-idp") && documents("codepipeline"));
         assert!(!documents("cloudfront"));
         assert!(g.page("cdk").unwrap().services.is_empty());
-        assert!(g.unmapped.is_empty(), "{:?}", g.unmapped);
+        let unmapped = unmapped(&g);
+        assert!(unmapped.is_empty(), "{unmapped:?}");
         let docdb: Vec<_> = g
             .pages_for(Some("rds"), "AWS::DocDB::DBCluster")
             .map(|p| p.slug.as_str())

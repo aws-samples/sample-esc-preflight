@@ -21,6 +21,7 @@ const TEST_ONLY_HOSTS: &[&str] = &[
     "example.com",
     "docs.aws.eu.evil.test",
     "sqs.eu-central-1.amazonaws.com",
+    "sqs.eusc-de-east-1.amazonaws.eu",
 ];
 
 fn sources() -> Vec<(String, String)> {
