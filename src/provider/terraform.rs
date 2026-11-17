@@ -18,7 +18,6 @@ const MIN_AWSCC_TYPES: usize = 1000;
 pub struct TfMaps {
     pub aws_version: String,
     pub awscc_version: String,
-    pub urls: Vec<String>,
     prefixes: Vec<(Regex, String)>,
     awscc: BTreeMap<String, String>,
     services: usize,
@@ -45,14 +44,13 @@ impl TfMaps {
 pub fn fetch(client: &Client) -> Result<TfMaps> {
     let (aws_version, aws_url) = locate(client, "aws", "names/data/names_data.hcl")?;
     let (awscc_version, awscc_url) = locate(client, "awscc", "internal/provider/all_schemas.hcl")?;
-    let mut maps = parse(
+    let maps = parse(
         &aws_version,
         &client.get_text(&aws_url)?,
         &awscc_version,
         &client.get_text(&awscc_url)?,
     )?;
     check_complete(&maps)?;
-    maps.urls = vec![aws_url, awscc_url];
     Ok(maps)
 }
 
@@ -128,7 +126,6 @@ pub fn parse(aws_version: &str, names: &str, awscc_version: &str, schemas: &str)
     Ok(TfMaps {
         aws_version: aws_version.into(),
         awscc_version: awscc_version.into(),
-        urls: Vec::new(),
         prefixes,
         awscc,
         services,

@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use serde::Serialize;
 use serde_json::Value;
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum SourceFormat {
     #[default]
@@ -25,7 +25,9 @@ pub enum Origin {
 /// Where the input was synthesized (CDK) or planned (Terraform). Values written for
 /// this environment are not hardcoded by hand; they change when the input is
 /// produced for the target instead.
-#[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(
+    Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, schemars::JsonSchema,
+)]
 pub struct DeployEnv {
     pub region: Option<String>,
     pub account: Option<String>,
@@ -45,7 +47,7 @@ pub struct Resource {
 }
 
 /// A Terraform resource of a provider other than aws or awscc.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, schemars::JsonSchema)]
 pub struct OutOfScope {
     pub address: String,
     pub resource_type: String,

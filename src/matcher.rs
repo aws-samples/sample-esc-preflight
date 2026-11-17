@@ -17,8 +17,8 @@ use crate::type_mapper::{Check, Mapping, TypeMapper};
 /// Every not-available finding carries advice.
 const NOT_AVAILABLE_NOTE: &str = "Not available in the target region. Remove the resource from the deployment there or replace it with a service the region offers.";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(tag = "verdict", rename_all = "kebab-case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+#[serde(rename_all = "kebab-case")]
 pub enum Verdict {
     Available,
     NotAvailable,
@@ -52,14 +52,14 @@ pub struct Live {
     pub offered: crate::depth::Offered,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum LiveCheckKind {
     TypeRegistry,
     ServiceApi,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum Listed {
     Available,
@@ -68,24 +68,21 @@ pub enum Listed {
 }
 
 /// What each source said about one resource.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct Evidence {
     /// The AWS Knowledge MCP data for the type, operation or service.
     pub knowledge: Listed,
-    /// The live check found the resource offered. Absent without live mode or when the
+    /// The live check found the resource offered. Null without live mode or when the
     /// check could not decide.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub live: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub live_check: Option<LiveCheckKind>,
 }
 
 /// The product's state in the target region, when it is not available there.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct Roadmap {
     pub product: String,
     pub status: State,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub launch: Option<String>,
 }
 
@@ -113,20 +110,19 @@ impl Roadmap {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct Finding {
     pub logical_id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub cdk_path: Option<String>,
     pub resource_type: String,
     pub service: Option<String>,
-    #[serde(flatten)]
     pub verdict: Verdict,
     pub evidence: Option<Evidence>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub roadmap: Option<Roadmap>,
     pub note: Option<String>,
     /// The live check contradicted the Knowledge MCP data (an AWS data-staleness signal).
+    /// Visible in the JSON as `evidence.knowledge` against `evidence.live`.
+    #[serde(skip)]
     pub divergence: bool,
     /// Property values checked against what the target region offers.
     pub depth: Vec<DepthCheck>,

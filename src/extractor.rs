@@ -1,9 +1,10 @@
-//! Walks template properties and flags hardcoded partition-specific literals.
+//! Walks template properties and flags hardcoded Region, zone, partition, DNS suffix
+//! and account literals, for every Region including the target.
 //!
 //! Only literal strings are inspected. Values built from `AWS::Partition`, `AWS::Region`
-//! or `AWS::URLSuffix` never contain a commercial literal, so they pass naturally.
-//! Values that CDK synthesis or a Terraform plan wrote for its own environment are
-//! counted separately: producing the input for the target removes them all at once.
+//! or `AWS::URLSuffix` contain no literal, so they pass naturally. Values that CDK
+//! synthesis or a Terraform plan wrote for its own environment are counted separately:
+//! producing the input for the target removes them all at once.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -14,43 +15,63 @@ use serde_json::Value;
 /// Partition facts from the bundled botocore `partitions.json`, never hardcoded.
 #[derive(Debug, Clone)]
 pub struct PartitionFacts {
+    pub target_region: String,
     /// Partition id of the target region, e.g. `aws-eusc`.
     pub target_partition: String,
     /// DNS suffix of the target partition, e.g. `amazonaws.eu`.
     pub target_dns_suffix: String,
-    /// Partition ids other than the target.
-    pub foreign_partitions: Vec<String>,
-    /// DNS suffixes of other partitions that the target does not share.
-    pub foreign_dns_suffixes: Vec<String>,
-    /// Region ids that belong to other partitions.
-    pub foreign_regions: Vec<String>,
-    /// Partition id of each foreign region.
+    /// Every partition id.
+    pub partitions: Vec<String>,
+    /// Every partition DNS suffix, with the partitions that use it.
+    pub dns_suffixes: BTreeMap<String, BTreeSet<String>>,
+    /// The dual-stack ones among them, such as `api.aws`.
+    pub dual_stack: BTreeSet<String>,
+    /// Every Region id, with its partition.
     pub region_partition: BTreeMap<String, String>,
-    /// Foreign DNS suffixes per foreign partition.
-    pub partition_dns: BTreeMap<String, Vec<String>>,
     /// Regions in the target partition. With one, no cross-Region feature can exist.
     pub target_regions: usize,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+impl PartitionFacts {
+    /// The target partition uses this DNS suffix.
+    pub fn is_target_suffix(&self, suffix: &str) -> bool {
+        self.dns_suffixes
+            .get(suffix)
+            .is_some_and(|ps| ps.contains(&self.target_partition))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum HazardKind {
-    /// `arn:<other-partition>:` in a literal.
+    /// `arn:<partition>:` in a literal.
     ArnPartition,
-    /// An endpoint host with another partition's DNS suffix.
+    /// An endpoint host with a partition DNS suffix.
     DnsSuffix,
+    /// An endpoint host with a partition's dual-stack DNS suffix, such as `api.aws`.
+    DualStackSuffix,
     /// A service principal with another partition's suffix, e.g. `lambda.amazonaws.com.cn`.
     ServicePrincipal,
-    /// A region id of another partition.
+    /// A Region id.
     RegionLiteral,
-    /// An Availability Zone name or id of another partition.
+    /// An Availability Zone name or id.
     AvailabilityZone,
-    /// A 12-digit account id in an ARN. An ESC account always has a different id.
+    /// A 12-digit account id in an ARN.
     AccountId,
 }
 
+/// What a hardcoded literal does when the input is deployed to the target.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, schemars::JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum Impact {
+    /// It refers to another Region or partition, so the deployment fails or misbehaves.
+    Breaks,
+    /// It is right for the target, but ties the input to it.
+    Portability,
+}
+
 /// One place to fix: a property value with every hazardous literal found in it.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, schemars::JsonSchema)]
 pub struct Hazard {
     pub logical_id: String,
     pub path: String,
@@ -63,14 +84,15 @@ pub struct Hazard {
     pub value: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, schemars::JsonSchema)]
 pub struct Literal {
     pub kind: HazardKind,
     pub value: String,
+    pub impact: Impact,
 }
 
 /// Values written for the environment the input was produced for.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct EnvLiterals {
     pub env: DeployEnv,
     /// Number of property values that contain at least one such literal.
@@ -93,7 +115,7 @@ pub fn hazards(template: &Template, facts: &PartitionFacts) -> Scan {
     let known = |e: &DeployEnv| {
         e.region
             .as_ref()
-            .is_none_or(|r| facts.region_partition.contains_key(r))
+            .is_none_or(|r| *r != facts.target_region && facts.region_partition.contains_key(r))
     };
     // Environments in the target still match, so their values are not hazards, but
     // they are not reported as environment literals.
@@ -121,12 +143,21 @@ pub fn hazards(template: &Template, facts: &PartitionFacts) -> Scan {
             .collect();
         walk(&props, root, &mut |path, s| {
             let mut found = scan_literal(s, facts);
+            // An account next to another partition's ARN prefix belongs to that partition.
+            let foreign_arn = found.iter().any(|(kind, lit)| {
+                *kind == HazardKind::ArnPartition
+                    && impact(*kind, lit, false, facts) == Impact::Breaks
+            });
             let mut hits: BTreeMap<&DeployEnv, Vec<String>> = BTreeMap::new();
             let hand_written = |lit: &str| {
                 template
                     .constants
                     .iter()
-                    .any(|c| c.contains(lit) && (s.contains(c.as_str()) || c.contains(s)))
+                    // A constant that is only the literal, such as a Region tag, proves
+                    // nothing about other values that contain it.
+                    .any(|c| {
+                        c.contains(lit) && (c.contains(s) || (c != lit && s.contains(c.as_str())))
+                    })
             };
             found.retain(|(kind, lit)| {
                 let env = envs.iter().find(|env| {
@@ -174,7 +205,11 @@ pub fn hazards(template: &Template, facts: &PartitionFacts) -> Scan {
             }
             let mut literals: Vec<Literal> = found
                 .into_iter()
-                .map(|(kind, value)| Literal { kind, value })
+                .map(|(kind, value)| Literal {
+                    impact: impact(kind, &value, foreign_arn, facts),
+                    kind,
+                    value,
+                })
                 .collect();
             literals.sort();
             literals.dedup();
@@ -217,9 +252,33 @@ fn from_env(
         }),
         HazardKind::AccountId => env.account.as_deref() == Some(lit),
         HazardKind::ArnPartition => partition.is_some_and(|p| lit == format!("arn:{p}:")),
-        HazardKind::DnsSuffix | HazardKind::ServicePrincipal => partition
-            .and_then(|p| facts.partition_dns.get(p))
-            .is_some_and(|s| s.iter().any(|x| x == lit)),
+        HazardKind::DnsSuffix | HazardKind::DualStackSuffix | HazardKind::ServicePrincipal => {
+            partition
+                .and_then(|p| facts.dns_suffixes.get(lit).map(|ps| ps.contains(p)))
+                .unwrap_or(false)
+        }
+    }
+}
+
+fn impact(kind: HazardKind, lit: &str, foreign_arn: bool, facts: &PartitionFacts) -> Impact {
+    let breaks = match kind {
+        HazardKind::ArnPartition => {
+            lit.strip_prefix("arn:").and_then(|p| p.strip_suffix(':'))
+                != Some(&facts.target_partition)
+        }
+        HazardKind::DnsSuffix | HazardKind::DualStackSuffix => !facts.is_target_suffix(lit),
+        HazardKind::ServicePrincipal => true,
+        HazardKind::RegionLiteral => lit != facts.target_region,
+        // A zone id does not name its Region.
+        HazardKind::AvailabilityZone => lit
+            .strip_prefix(facts.target_region.as_str())
+            .is_none_or(|z| !(z.len() == 1 && z.chars().all(|c| c.is_ascii_lowercase()))),
+        HazardKind::AccountId => foreign_arn,
+    };
+    if breaks {
+        Impact::Breaks
+    } else {
+        Impact::Portability
     }
 }
 
@@ -248,24 +307,28 @@ fn walk(v: &Value, path: &str, f: &mut dyn FnMut(&str, &str)) {
 
 fn scan_literal(s: &str, facts: &PartitionFacts) -> Vec<(HazardKind, String)> {
     let mut found = Vec::new();
-    for p in &facts.foreign_partitions {
+    for p in &facts.partitions {
         let needle = format!("arn:{p}:");
         if s.contains(&needle) {
             found.push((HazardKind::ArnPartition, needle));
         }
     }
     match principal_suffix(s, facts) {
-        Some(SERVICE_PRINCIPAL_SUFFIX) => {}
-        Some(suffix) => found.push((HazardKind::ServicePrincipal, suffix.to_string())),
+        // `<service>.amazonaws.com` is the documented service principal, also regional.
+        Some((SERVICE_PRINCIPAL_SUFFIX, _)) => {}
+        Some((suffix, false)) if facts.is_target_suffix(suffix) => {}
+        Some((suffix, false)) => found.push((HazardKind::ServicePrincipal, suffix.to_string())),
+        // A bare host with a Region label, such as an SQS endpoint.
+        Some((suffix, true)) => found.push((suffix_kind(suffix, facts), suffix.to_string())),
         None => {
-            for suffix in &facts.foreign_dns_suffixes {
+            for suffix in facts.dns_suffixes.keys() {
                 if contains_suffix(s, suffix) {
-                    found.push((HazardKind::DnsSuffix, suffix.clone()));
+                    found.push((suffix_kind(suffix, facts), suffix.clone()));
                 }
             }
         }
     }
-    for region in &facts.foreign_regions {
+    for region in facts.region_partition.keys() {
         for (start, end) in occurrences(s, region) {
             let next = s[end..].chars().next();
             match next {
@@ -297,32 +360,39 @@ fn scan_literal(s: &str, facts: &PartitionFacts) -> Vec<(HazardKind, String)> {
     found
 }
 
-/// The suffix of service principals in the target. ESC trust policies use
-/// `lambda.amazonaws.com`, while some `aws-cn` principals end in `amazonaws.com.cn`.
+fn suffix_kind(suffix: &str, facts: &PartitionFacts) -> HazardKind {
+    if facts.dual_stack.contains(suffix) {
+        HazardKind::DualStackSuffix
+    } else {
+        HazardKind::DnsSuffix
+    }
+}
+
+/// The suffix of service principals in every partition but some `aws-cn` ones, which
+/// end in `amazonaws.com.cn`.
 const SERVICE_PRINCIPAL_SUFFIX: &str = "amazonaws.com";
 
-/// The foreign suffix of a whole literal of the form `<svc>.<foreign-suffix>`, as used
-/// in IAM trust policies, with a leading wildcard in `iam:AWSServiceName` conditions,
-/// and in service-linked role paths.
-fn principal_suffix<'a>(s: &str, facts: &'a PartitionFacts) -> Option<&'a str> {
+/// For a whole literal of the form `<svc>.<partition-suffix>`, as used in IAM trust
+/// policies, with a leading wildcard in `iam:AWSServiceName` conditions, and in
+/// service-linked role paths: the suffix, and whether a label is a Region id.
+fn principal_suffix<'a>(s: &str, facts: &'a PartitionFacts) -> Option<(&'a str, bool)> {
     let s = s.strip_prefix('*').unwrap_or(s);
     let s = s
         .split_once("aws-service-role/")
         .map_or(s, |(_, rest)| rest.split('/').next().unwrap_or(rest));
-    facts
-        .foreign_dns_suffixes
-        .iter()
-        .map(String::as_str)
-        .find(|suffix| {
-            s.strip_suffix(suffix)
-                .and_then(|head| head.strip_suffix('.'))
-                .is_some_and(|svc| {
-                    !svc.is_empty()
-                        && svc.chars().all(|c| {
-                            c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '.'
-                        })
-                })
+    facts.dns_suffixes.keys().find_map(|suffix| {
+        let svc = s.strip_suffix(suffix.as_str())?.strip_suffix('.')?;
+        let shaped = !svc.is_empty()
+            && svc
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '.');
+        shaped.then(|| {
+            let regional = svc
+                .split('.')
+                .any(|l| facts.region_partition.contains_key(l));
+            (suffix.as_str(), regional)
         })
+    })
 }
 
 /// True when `suffix` appears as a DNS suffix (not followed by a further label character).
@@ -364,18 +434,7 @@ pub(crate) mod tests {
     use crate::reader;
 
     pub fn facts() -> PartitionFacts {
-        PartitionFacts {
-            target_partition: "aws-eusc".into(),
-            target_dns_suffix: "amazonaws.eu".into(),
-            foreign_partitions: vec!["aws".into(), "aws-cn".into(), "aws-us-gov".into()],
-            foreign_dns_suffixes: vec!["amazonaws.com".into(), "amazonaws.com.cn".into()],
-            foreign_regions: vec!["eu-central-1".into(), "us-east-1".into()],
-            region_partition: [("eu-central-1", "aws"), ("us-east-1", "aws")]
-                .map(|(r, p)| (r.to_string(), p.to_string()))
-                .into(),
-            partition_dns: [("aws".to_string(), vec!["amazonaws.com".to_string()])].into(),
-            target_regions: 1,
-        }
+        crate::provider::partition::facts("eusc-de-east-1").unwrap()
     }
 
     fn kinds(json: &str) -> Vec<(HazardKind, String)> {
@@ -388,6 +447,7 @@ pub(crate) mod tests {
             .collect()
     }
 
+    /// CDK writes the partition as an `AWS::Partition` token, so a literal one was typed.
     #[test]
     fn values_of_an_environment_in_the_target_are_neither_hazards_nor_reported() {
         let mut t = reader::parse_text(
@@ -399,8 +459,97 @@ pub(crate) mod tests {
             account: Some("444455556666".into()),
         });
         let scan = hazards(&t, &facts());
-        assert!(scan.hazards.is_empty(), "{:?}", scan.hazards);
+        let left: Vec<_> = scan.hazards.iter().flat_map(|h| &h.literals).collect();
+        assert_eq!(
+            left,
+            [&Literal {
+                kind: HazardKind::ArnPartition,
+                value: "arn:aws-eusc:".into(),
+                impact: Impact::Portability
+            }]
+        );
         assert!(scan.env_literals.is_empty());
+    }
+
+    #[test]
+    fn literals_of_the_target_tie_the_input_to_it() {
+        let t = reader::parse_text(
+            r#"{"Resources":{"R":{"Type":"AWS::X::Y","Properties":{
+            "A":"arn:aws-eusc:s3:::b","H":"sqs.eusc-de-east-1.amazonaws.eu",
+            "U":"https://sqs.eusc-de-east-1.amazonaws.eu/q","Z":"eusc-de-east-1b"}}}}"#,
+        )
+        .unwrap();
+        let lits: Vec<_> = hazards(&t, &facts())
+            .hazards
+            .into_iter()
+            .flat_map(|h| h.literals)
+            .collect();
+        assert_eq!(lits.len(), 6, "{lits:?}");
+        assert!(
+            lits.iter().all(|l| l.impact == Impact::Portability),
+            "{lits:?}"
+        );
+        assert_eq!(
+            lits.iter()
+                .filter(|l| l.kind == HazardKind::DnsSuffix)
+                .count(),
+            2,
+            "a bare host with a Region label is a host, not a principal: {lits:?}"
+        );
+    }
+
+    #[test]
+    fn other_regions_of_the_target_partition_break() {
+        let mut f = crate::provider::partition::facts("eu-west-1").unwrap();
+        let t = reader::parse_text(
+            r#"{"Resources":{"R":{"Type":"AWS::X::Y","Properties":{
+            "Q":"https://sqs.eu-central-1.amazonaws.com/111122223333/q",
+            "Arn":"arn:aws:sqs:eu-west-1:111122223333:q",
+            "Z":"eu-central-1a","Own":"eu-west-1",
+            "P":{"Service":["lambda.amazonaws.com","s3.ap-east-1.amazonaws.com"]}}}}}"#,
+        )
+        .unwrap();
+        let by = |f: &PartitionFacts| -> Vec<(HazardKind, String, Impact)> {
+            hazards(&t, f)
+                .hazards
+                .into_iter()
+                .flat_map(|h| h.literals)
+                .map(|l| (l.kind, l.value, l.impact))
+                .collect()
+        };
+        let lits = by(&f);
+        use HazardKind::*;
+        use Impact::*;
+        for want in [
+            (RegionLiteral, "eu-central-1", Breaks),
+            (AvailabilityZone, "eu-central-1a", Breaks),
+            (DnsSuffix, "amazonaws.com", Portability),
+            (AccountId, "111122223333", Portability),
+            (ArnPartition, "arn:aws:", Portability),
+            (RegionLiteral, "eu-west-1", Portability),
+            (RegionLiteral, "ap-east-1", Breaks),
+        ] {
+            assert!(
+                lits.contains(&(want.0, want.1.into(), want.2)),
+                "{want:?} in {lits:?}"
+            );
+        }
+        assert!(
+            !lits.iter().any(|(k, _, _)| *k == ServicePrincipal),
+            "{lits:?}"
+        );
+        // An account next to another partition's ARN prefix is that partition's.
+        f = crate::provider::partition::facts("eusc-de-east-1").unwrap();
+        let t = reader::parse_text(
+            r#"{"Resources":{"R":{"Type":"AWS::X::Y","Properties":{"Role":"arn:aws:iam::111122223333:role/r"}}}}"#,
+        )
+        .unwrap();
+        let lits: Vec<_> = hazards(&t, &f)
+            .hazards
+            .into_iter()
+            .flat_map(|h| h.literals)
+            .collect();
+        assert!(lits.iter().all(|l| l.impact == Breaks), "{lits:?}");
     }
 
     #[test]
@@ -485,7 +634,7 @@ pub(crate) mod tests {
     fn no_false_positives_on_lookalikes() {
         let h = kinds(
             r#"{"Resources":{"R":{"Type":"AWS::X::Y","Properties":{
-            "A":"arn:aws-eusc:s3:::b","B":"notamazonaws.community","C":"xeu-central-10","D":"sqs.eusc-de-east-1.amazonaws.eu"}}}}"#,
+            "B":"notamazonaws.community","C":"xeu-central-10","D":"amazonaws.eu.example.com"}}}}"#,
         );
         assert!(h.is_empty(), "{h:?}");
     }
@@ -519,7 +668,13 @@ pub(crate) mod tests {
             "A":{"Fn::Join":["",["arn:",{"Ref":"AWS::Partition"},":secretsmanager:eusc-de-east-1:444455556666:secret:x"]]},
             "B":"123456789012","C":"build-123456789012-x"}}}}"#,
         );
-        assert_eq!(h, vec![(HazardKind::AccountId, "444455556666".into())]);
+        assert_eq!(
+            h,
+            vec![
+                (HazardKind::RegionLiteral, "eusc-de-east-1".into()),
+                (HazardKind::AccountId, "444455556666".into())
+            ]
+        );
     }
 
     #[test]
@@ -597,6 +752,11 @@ pub(crate) mod tests {
         assert!(s.hazards.is_empty(), "{:?}", s.hazards);
         assert_eq!(s.env_literals[0].places, 1);
         let mut t = t;
+        t.constants.insert("arn:aws:".into());
+        assert!(
+            hazards(&t, &facts()).hazards.is_empty(),
+            "a constant of only the literal does not make the value hand-written"
+        );
         t.constants.insert("arn:aws:s3:::b".into());
         let s = hazards(&t, &facts());
         assert_eq!(

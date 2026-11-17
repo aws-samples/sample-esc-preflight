@@ -12,7 +12,7 @@ cargo test -- --ignored                       # also the live public sources
 ESC_PREFLIGHT_PROFILE=<profile> cargo test -- --ignored   # also live mode in an ESC account
 ```
 
-After an intended change to the report, regenerate the golden files with `UPDATE_GOLDEN=1 cargo test` and review the diff.
+After an intended change to the report, regenerate the golden files and `schema/report.schema.json` with `UPDATE_GOLDEN=1 cargo test` and review the diff. If a field was removed or renamed, or its meaning changed, increment `SCHEMA_VERSION` in `src/report.rs`.
 
 ## Data
 
@@ -24,7 +24,7 @@ After an intended change to the report, regenerate the golden files with `UPDATE
 | `esc-guide-rules.json` | By hand, see below |
 | `cfn-products.json` | By hand: CloudFormation namespaces and types whose Knowledge MCP product name does not follow from the namespace. `cargo test -- --ignored` fails on a name the server no longer lists, here and in rule `feature`s |
 | `cdk-sdk-v2-to-v3.json` | Copied from `aws-cdk-lib` |
-| `esc-guide-pages.json` | By hand; the report warns about unmapped pages |
+| `esc-guide-pages.json` | By hand; the ignored live guide test lists unmapped pages |
 | `cfn-service-overrides.json` | By hand |
 
 `tests/fixtures/knowledge.json` is a recorded Knowledge MCP response for eusc-de-east-1; record it again when tests should see newer data.

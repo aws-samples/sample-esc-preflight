@@ -27,56 +27,51 @@ pub fn facts(target_region: &str) -> Result<PartitionFacts> {
             ))
         })?;
     let target_id = target["id"].as_str().unwrap_or_default().to_string();
-    let target_suffixes = [
-        &target["outputs"]["dnsSuffix"],
-        &target["outputs"]["dualStackDnsSuffix"],
-    ];
-    let mut foreign_partitions = Vec::new();
-    let mut foreign_dns = BTreeSet::new();
-    let mut foreign_regions = BTreeSet::new();
+    let mut partitions = Vec::new();
+    let mut dns_suffixes: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    let mut dual_stack = BTreeSet::new();
     let mut region_partition = BTreeMap::new();
-    let mut partition_dns: BTreeMap<String, Vec<String>> = BTreeMap::new();
     for p in parts {
         let id = p["id"].as_str().unwrap_or_default();
-        if id == target_id {
-            continue;
-        }
-        foreign_partitions.push(id.to_string());
+        partitions.push(id.to_string());
         for key in ["dnsSuffix", "dualStackDnsSuffix"] {
-            if let Some(s) = p["outputs"][key].as_str()
-                && !target_suffixes.iter().any(|t| t.as_str() == Some(s))
-            {
-                foreign_dns.insert(s.to_string());
-                partition_dns
-                    .entry(id.to_string())
+            if let Some(s) = p["outputs"][key].as_str() {
+                dns_suffixes
+                    .entry(s.to_string())
                     .or_default()
-                    .push(s.to_string());
+                    .insert(id.to_string());
+                if key == "dualStackDnsSuffix" {
+                    dual_stack.insert(s.to_string());
+                }
             }
         }
-        if let Some(rs) = p["regions"].as_object() {
-            for r in rs.keys().filter(|r| !r.ends_with("-global")) {
-                foreign_regions.insert(r.clone());
-                region_partition.insert(r.clone(), id.to_string());
-            }
+        for r in regions(p) {
+            region_partition.insert(r.to_string(), id.to_string());
         }
     }
-    // Longest first so `arn:aws-cn:` is matched before `arn:aws:` would be.
-    foreign_partitions.sort_by(|a, b| b.len().cmp(&a.len()).then(a.cmp(b)));
+    partitions.sort();
     Ok(PartitionFacts {
-        target_partition: target_id,
+        target_region: target_region.to_string(),
         target_dns_suffix: target["outputs"]["dnsSuffix"]
             .as_str()
             .unwrap_or_default()
             .to_string(),
-        foreign_partitions,
-        foreign_dns_suffixes: foreign_dns.into_iter().collect(),
-        foreign_regions: foreign_regions.into_iter().collect(),
+        target_regions: regions(target).count(),
+        target_partition: target_id,
+        partitions,
+        dns_suffixes,
+        dual_stack,
         region_partition,
-        partition_dns,
-        target_regions: target["regions"].as_object().map_or(0, |rs| {
-            rs.keys().filter(|r| !r.ends_with("-global")).count()
-        }),
     })
+}
+
+/// Region ids of a partition, without its `-global` pseudo-region.
+fn regions(p: &Value) -> impl Iterator<Item = &String> {
+    p["regions"]
+        .as_object()
+        .into_iter()
+        .flat_map(|rs| rs.keys())
+        .filter(|r| !r.ends_with("-global"))
 }
 
 #[cfg(test)]
@@ -89,13 +84,16 @@ mod tests {
         assert_eq!(p.target_partition, "aws-eusc");
         assert_eq!(p.target_dns_suffix, "amazonaws.eu");
         assert_eq!(p.target_regions, 1);
-        assert!(
-            p.foreign_dns_suffixes
-                .contains(&"amazonaws.com".to_string())
+        assert!(p.is_target_suffix("amazonaws.eu"));
+        assert!(!p.is_target_suffix("amazonaws.com"));
+        assert_eq!(
+            p.dns_suffixes["amazonaws.com"].len(),
+            2,
+            "aws and aws-us-gov"
         );
-        assert!(!p.foreign_dns_suffixes.contains(&"amazonaws.eu".to_string()));
-        assert!(p.foreign_regions.contains(&"eu-central-1".to_string()));
-        assert_eq!(p.foreign_partitions.last().map(String::as_str), Some("aws"));
+        assert_eq!(p.region_partition["eu-central-1"], "aws");
+        assert_eq!(p.region_partition["eusc-de-east-1"], "aws-eusc");
+        assert!(!p.region_partition.contains_key("aws-global"));
     }
 
     #[test]

@@ -6,12 +6,13 @@
   ✔ not available        0
 
   PORTABILITY
-  ⚠ hardcoded fields     2   2 resources: `111122223333`, `arn:aws:`
+  ⚠ hardcoded fields     2   1 breaking · 2 resources: `arn:aws:`, +2 more
   ✘ depth blockers       1   values the region does not offer
 
-  REQUIRED CHANGES  2 propose · 1 fix
+  REQUIRED CHANGES  2 propose · 2 fix
   ● propose  RDS engine version `postgres 16.4` not of…  → choose one of 5 offered
   ● propose  hardcoded `111122223333`                    → `${data.aws_caller_identity.current.account_id}`
+  ● fix      hardcoded `arn:aws-eusc:`                   → `arn:${data.aws_partition.current.partition}:`
   ● fix      hardcoded `arn:aws:`                        → `arn:${data.aws_partition.current.partition}:`
 
 ⚠ These rules match the input, but the ESC User Guide no longer contains the sentence they quote, so

@@ -77,7 +77,7 @@ For candidates, the user picks one; never pick for them. A declined proposal bec
 
 ## 5. Gap register
 
-Write `ESC-GAPS.md` at the project root with every flag, every declined proposal, and every blocker you found that the report does not list (mark those "not in the report"):
+Write `ESC-GAPS.md` at the project root with every flag, every declined proposal, and every blocker you found that the report does not list (mark those "not in the report"). The mode is `live` when `data_provenance.live` is set:
 
 ```
 # ESC gaps

@@ -1,20 +1,18 @@
 {
+  "schema_version": 1,
   "data_provenance": {
     "tool_version": "test",
     "source_format": "cloudformation",
-    "mode": "public",
     "target_region": "eusc-de-east-1",
     "input_environments": [],
     "partitions_version": "test",
     "knowledge": {
       "url": "https://knowledge-mcp.global.api.aws",
-      "calls": 0
+      "unknown": []
     },
     "user_guide": {
       "toc_url": "",
-      "pages": 16,
-      "stale_rules": [],
-      "unmapped_pages": []
+      "stale_rules": []
     },
     "fetched_at": "1970-01-01T00:00:00Z",
     "terraform": null,
@@ -38,66 +36,86 @@
     "proposals": 1,
     "flags": 2
   },
+  "outcome": {
+    "blocker": true,
+    "hazard": true,
+    "disputed": true
+  },
   "findings": [
     {
       "logical_id": "Assistant",
+      "cdk_path": null,
       "resource_type": "AWS::QBusiness::Application",
       "service": "qbusiness",
       "verdict": "not-available",
       "evidence": {
-        "knowledge": "not-available"
+        "knowledge": "not-available",
+        "live": null,
+        "live_check": null
       },
       "roadmap": {
         "product": "Amazon Q Business",
-        "status": "not-expanding"
+        "status": "not-expanding",
+        "launch": null
       },
       "note": "Amazon Q Business is not expanding to the region. Not available in the target region. Remove the resource from the deployment there or replace it with a service the region offers.",
-      "divergence": false,
       "depth": []
     },
     {
       "logical_id": "AutoDelete",
+      "cdk_path": null,
       "resource_type": "Custom::S3AutoDeleteObjects",
       "service": "s3",
       "verdict": "available",
       "evidence": {
-        "knowledge": "available"
+        "knowledge": "available",
+        "live": null,
+        "live_check": null
       },
+      "roadmap": null,
       "note": null,
-      "divergence": false,
       "depth": []
     },
     {
       "logical_id": "Bucket",
+      "cdk_path": null,
       "resource_type": "AWS::S3::Bucket",
       "service": "s3",
       "verdict": "available",
       "evidence": {
-        "knowledge": "available"
+        "knowledge": "available",
+        "live": null,
+        "live_check": null
       },
+      "roadmap": null,
       "note": null,
-      "divergence": false,
       "depth": []
     },
     {
       "logical_id": "Build",
+      "cdk_path": null,
       "resource_type": "AWS::CodeBuild::Project",
       "service": "codebuild",
       "verdict": "available",
       "evidence": {
-        "knowledge": "available"
+        "knowledge": "available",
+        "live": null,
+        "live_check": null
       },
+      "roadmap": null,
       "note": null,
-      "divergence": false,
       "depth": []
     },
     {
       "logical_id": "Cdn",
+      "cdk_path": null,
       "resource_type": "AWS::CloudFront::Distribution",
       "service": "cloudfront",
       "verdict": "disputed",
       "evidence": {
-        "knowledge": "available"
+        "knowledge": "available",
+        "live": null,
+        "live_check": null
       },
       "roadmap": {
         "product": "Amazon CloudFront",
@@ -105,43 +123,51 @@
         "launch": "2026 Q4"
       },
       "note": "The Knowledge MCP data lists the resource type AWS::CloudFront::Distribution, but Amazon CloudFront is planned for 2026 Q4 in the target region. Check that the feature works before relying on it.",
-      "divergence": false,
       "depth": []
     },
     {
       "logical_id": "Fn",
+      "cdk_path": null,
       "resource_type": "AWS::Lambda::Function",
       "service": "lambda",
       "verdict": "available",
       "evidence": {
-        "knowledge": "available"
+        "knowledge": "available",
+        "live": null,
+        "live_check": null
       },
+      "roadmap": null,
       "note": null,
-      "divergence": false,
       "depth": []
     },
     {
       "logical_id": "FnRole",
+      "cdk_path": null,
       "resource_type": "AWS::IAM::Role",
       "service": "iam",
       "verdict": "available",
       "evidence": {
-        "knowledge": "available"
+        "knowledge": "available",
+        "live": null,
+        "live_check": null
       },
+      "roadmap": null,
       "note": null,
-      "divergence": false,
       "depth": []
     },
     {
       "logical_id": "Subnet",
+      "cdk_path": null,
       "resource_type": "AWS::EC2::Subnet",
       "service": "ec2",
       "verdict": "available",
       "evidence": {
-        "knowledge": "available"
+        "knowledge": "available",
+        "live": null,
+        "live_check": null
       },
+      "roadmap": null,
       "note": null,
-      "divergence": false,
       "depth": []
     }
   ],
@@ -152,11 +178,13 @@
       "literals": [
         {
           "kind": "dns-suffix",
-          "value": "amazonaws.com"
+          "value": "amazonaws.com",
+          "impact": "breaks"
         },
         {
           "kind": "region-literal",
-          "value": "eu-central-1"
+          "value": "eu-central-1",
+          "impact": "breaks"
         }
       ]
     },
@@ -166,7 +194,8 @@
       "literals": [
         {
           "kind": "arn-partition",
-          "value": "arn:aws:"
+          "value": "arn:aws:",
+          "impact": "breaks"
         }
       ]
     },
@@ -176,7 +205,8 @@
       "literals": [
         {
           "kind": "availability-zone",
-          "value": "eu-central-1a"
+          "value": "eu-central-1a",
+          "impact": "breaks"
         }
       ]
     }
@@ -241,15 +271,34 @@
   "required_changes": [
     {
       "logical_id": "Assistant",
+      "cdk_path": null,
       "tier": "flag",
+      "cause": {
+        "type": "availability",
+        "ids": []
+      },
       "reason": "AWS::QBusiness::Application is not available in eusc-de-east-1",
-      "change": "Amazon Q Business is not expanding to the region. Not available in the target region. Remove the resource from the deployment there or replace it with a service the region offers."
+      "change": "Amazon Q Business is not expanding to the region. Not available in the target region. Remove the resource from the deployment there or replace it with a service the region offers.",
+      "precondition": null,
+      "consequence": null,
+      "edits": [],
+      "candidates": [],
+      "doc": null
     },
     {
       "logical_id": "Fn",
+      "cdk_path": null,
       "tier": "fix",
+      "cause": {
+        "type": "hazard",
+        "ids": [
+          "dns-suffix"
+        ]
+      },
       "reason": "hardcoded `amazonaws.com` at Properties.Environment.Variables.QUEUE_URL",
       "change": "Build the host name from the partition's DNS suffix instead of the literal.",
+      "precondition": null,
+      "consequence": null,
       "edits": [
         {
           "path": "Properties.Environment.Variables.QUEUE_URL",
@@ -260,14 +309,24 @@
             "terraform": "${data.aws_partition.current.dns_suffix}"
           }
         }
-      ]
+      ],
+      "candidates": [],
+      "doc": null
     },
     {
       "logical_id": "Fn",
+      "cdk_path": null,
       "tier": "propose",
+      "cause": {
+        "type": "hazard",
+        "ids": [
+          "region-literal"
+        ]
+      },
       "reason": "hardcoded `eu-central-1` at Properties.Environment.Variables.QUEUE_URL",
       "change": "Use the deployment Region instead of `eu-central-1`.",
       "precondition": "The value means the Region the stack deploys to. The input does not say which Region it was written for.",
+      "consequence": null,
       "edits": [
         {
           "path": "Properties.Environment.Variables.QUEUE_URL",
@@ -278,13 +337,24 @@
             "terraform": "${data.aws_region.current.region}"
           }
         }
-      ]
+      ],
+      "candidates": [],
+      "doc": null
     },
     {
       "logical_id": "FnRole",
+      "cdk_path": null,
       "tier": "fix",
+      "cause": {
+        "type": "hazard",
+        "ids": [
+          "arn-partition"
+        ]
+      },
       "reason": "hardcoded `arn:aws:` at Properties.ManagedPolicyArns[1]",
       "change": "Build the ARN from the partition instead of the literal.",
+      "precondition": null,
+      "consequence": null,
       "edits": [
         {
           "path": "Properties.ManagedPolicyArns[1]",
@@ -295,13 +365,27 @@
             "terraform": "arn:${data.aws_partition.current.partition}:"
           }
         }
-      ]
+      ],
+      "candidates": [],
+      "doc": null
     },
     {
       "logical_id": "Subnet",
+      "cdk_path": null,
       "tier": "flag",
+      "cause": {
+        "type": "hazard",
+        "ids": [
+          "availability-zone"
+        ]
+      },
       "reason": "hardcoded `eu-central-1a` at Properties.AvailabilityZone",
-      "change": "Choose the zone for `eu-central-1a` in the target. Run in live mode to compare with the target's zones."
+      "change": "Choose the zone for `eu-central-1a` in the target. Run in live mode to compare with the target's zones.",
+      "precondition": null,
+      "consequence": null,
+      "edits": [],
+      "candidates": [],
+      "doc": null
     }
   ],
   "out_of_scope": [],

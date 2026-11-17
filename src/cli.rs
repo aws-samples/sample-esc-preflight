@@ -118,7 +118,7 @@ pub fn run() -> i32 {
                 eprint!("{}", report::text_summary(&report, style));
             }
             if let Some(f) = args.fail_on
-                && fails(&report, f)
+                && fails(report.outcome, f)
             {
                 return 2;
             }
@@ -136,6 +136,9 @@ fn scan(args: &ScanArgs) -> Result<Report> {
     let template = read_input(args.path.as_deref(), region)?;
     let client = http::Client::new(Duration::from_secs(args.timeout))?;
     let partition = partition::facts(region)?;
+    let live_mode = args.live || args.profile.is_some() || args.role_arn.is_some();
+    let listed = knowledge::regions(&client)?.contains(region);
+    gate(region, listed, live_mode)?;
     let tf = (template.format == SourceFormat::TerraformPlan)
         .then(|| terraform::fetch(&client))
         .transpose()?;
@@ -164,12 +167,11 @@ fn scan(args: &ScanArgs) -> Result<Report> {
             .collect(),
         config: depth::needs_config(&depth),
     };
-    let data = provider::fetch_public(&client, region, partition, tf, &needs)?;
+    let data = provider::fetch_public(&client, region, partition, tf, listed.then_some(&needs))?;
     let fetched_at = report::now_utc();
     let mut offered = depth::public_offered(&data.knowledge);
     depth::resolve(&mut depth, &offered, DepthSource::Knowledge);
     let scan = extractor::hazards(&template, &data.partition);
-    let live_mode = args.live || args.profile.is_some() || args.role_arn.is_some();
     let (live, live_prov) = if live_mode {
         let caller = aws_call::Caller::new(
             region,
@@ -197,7 +199,7 @@ fn scan(args: &ScanArgs) -> Result<Report> {
                     .flat_map(|h| &h.literals)
                     .any(|l| l.kind == extractor::HazardKind::AvailabilityZone),
         };
-        let (l, p) = live::run(&caller, region, needs)?;
+        let (l, p) = live::run(&caller, needs)?;
         depth = l.depth.clone();
         offered.extend(l.offered.clone());
         (Some(l), Some(p))
@@ -221,26 +223,18 @@ fn scan(args: &ScanArgs) -> Result<Report> {
     let provenance = Provenance {
         tool_version: env!("CARGO_PKG_VERSION").into(),
         source_format: template.format,
-        mode: if live_prov.is_some() {
-            "live"
-        } else {
-            "public"
-        }
-        .into(),
         target_region: region.clone(),
         input_environments: template.envs(),
         partitions_version: partition::VERSION.into(),
-        knowledge: KnowledgeProvenance {
+        knowledge: listed.then(|| KnowledgeProvenance {
             url: knowledge::URL.into(),
-            calls: data.knowledge.calls,
             unknown: data.knowledge.unknown.iter().cloned().collect(),
-        },
+        }),
         user_guide,
         fetched_at,
         terraform: data.tf.as_ref().map(|tf| TerraformProvenance {
             aws_provider_version: tf.aws_version.clone(),
             awscc_provider_version: tf.awscc_version.clone(),
-            urls: tf.urls.clone(),
         }),
         live: live_prov,
     };
@@ -306,11 +300,45 @@ fn type_of(c: &Check) -> Option<&String> {
     }
 }
 
-fn fails(r: &Report, f: FailOn) -> bool {
-    let s = &r.summary;
+fn fails(o: report::Outcome, f: FailOn) -> bool {
     match f {
-        FailOn::Blocker => s.depth_blockers + s.deviations + s.not_available > 0,
-        FailOn::Hazard => s.hazards + s.environment_literals > 0,
-        FailOn::Disputed => s.disputed + s.cannot_assess + s.guide_conflicts > 0,
+        FailOn::Blocker => o.blocker,
+        FailOn::Hazard => o.hazard,
+        FailOn::Disputed => o.disputed,
+    }
+}
+
+/// Without Knowledge MCP data for the target, only live mode can decide.
+fn gate(region: &str, listed: bool, live_mode: bool) -> Result<()> {
+    if listed || live_mode {
+        return Ok(());
+    }
+    Err(ScanError::Input(format!(
+        "the AWS Knowledge MCP server has no data for {region}; scan it in live mode with --profile <name> or --role-arn <arn>"
+    )))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_region_without_knowledge_data_needs_live_mode() {
+        let e = gate("cn-north-1", false, false).unwrap_err();
+        assert_eq!(e.exit_code(), 1);
+        assert!(e.to_string().contains("--profile"));
+        assert!(gate("cn-north-1", false, true).is_ok());
+        assert!(gate("eu-west-1", true, false).is_ok());
+    }
+
+    #[test]
+    fn fail_on_reads_the_outcome() {
+        let o = report::Outcome {
+            blocker: true,
+            hazard: false,
+            disputed: true,
+        };
+        assert!(fails(o, FailOn::Blocker) && fails(o, FailOn::Disputed));
+        assert!(!fails(o, FailOn::Hazard));
     }
 }

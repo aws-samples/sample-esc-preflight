@@ -8,10 +8,10 @@ use serde::Serialize;
 
 use crate::depth::{DepthCheck, DepthKind, Offered};
 use crate::deviation::Deviation;
-use crate::extractor::{Hazard, HazardKind, Literal};
+use crate::extractor::{Hazard, HazardKind, Impact, Literal};
 use crate::model::DeployEnv;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum Tier {
     Fix,
@@ -19,25 +19,63 @@ pub enum Tier {
     Flag,
 }
 
-#[derive(Debug, Clone, Serialize)]
+/// What a required change comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, schemars::JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum CauseType {
+    /// The resource is not available in the target.
+    Availability,
+    /// The ESC User Guide documents the feature as not available.
+    Deviation,
+    /// A property value the target does not offer.
+    Depth,
+    /// A hardcoded literal.
+    Hazard,
+    /// More zones than the target offers.
+    Zones,
+    /// Values written for the input's own environment.
+    Environment,
+}
+
+/// `ids` names what fired: hazard kinds, the depth kind, or the guide rule.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct Cause {
+    #[serde(rename = "type")]
+    pub kind: CauseType,
+    pub ids: Vec<String>,
+}
+
+impl Cause {
+    pub fn new(kind: CauseType, ids: impl IntoIterator<Item = String>) -> Self {
+        let mut ids: Vec<String> = ids.into_iter().collect();
+        ids.sort();
+        ids.dedup();
+        Self { kind, ids }
+    }
+}
+
+/// The JSON name of an enum value, for `Cause::ids`.
+pub fn id(v: impl Serialize) -> String {
+    serde_json::to_value(v)
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_string))
+        .unwrap_or_default()
+}
+
+#[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
 pub struct RequiredChange {
     pub logical_id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub cdk_path: Option<String>,
     pub tier: Tier,
+    pub cause: Cause,
     pub reason: String,
     pub change: String,
     /// What must hold for a proposed change to be right.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub precondition: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub consequence: Option<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub edits: Vec<Edit>,
     /// Values the target offers, for the owner to choose from.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub candidates: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub doc: Option<String>,
     /// The change in a few words for the terminal summary. Built from the same
     /// structured data as the change, never parsed from its text.
@@ -71,11 +109,19 @@ impl Brief {
 }
 
 impl RequiredChange {
-    pub fn new(logical_id: &str, tier: Tier, reason: String, change: String, brief: Brief) -> Self {
+    pub fn new(
+        logical_id: &str,
+        tier: Tier,
+        cause: Cause,
+        reason: String,
+        change: String,
+        brief: Brief,
+    ) -> Self {
         Self {
             logical_id: logical_id.into(),
             cdk_path: None,
             tier,
+            cause,
             reason,
             change,
             precondition: None,
@@ -91,14 +137,14 @@ impl RequiredChange {
 /// Replace `find` in the string value at `path` with the expression for the source the
 /// input was produced from. A CloudFormation expression in `${}` goes into `Fn::Sub`; a
 /// zone replacement is the whole value.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct Edit {
     pub path: String,
     pub find: String,
     pub replace: Replacement,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct Replacement {
     pub cloudformation: String,
     pub cdk: String,
@@ -130,6 +176,14 @@ fn rep(cloudformation: &str, cdk: &str, terraform: &str) -> Option<Replacement> 
         cdk: cdk.into(),
         terraform: terraform.into(),
     })
+}
+
+fn region_expr() -> Option<Replacement> {
+    rep(
+        "${AWS::Region}",
+        "${Aws.REGION}",
+        "${data.aws_region.current.region}",
+    )
 }
 
 fn decide(l: &Literal, h: &Hazard, ctx: &Context) -> Decision {
@@ -173,12 +227,31 @@ fn decide(l: &Literal, h: &Hazard, ctx: &Context) -> Decision {
                 "${data.aws_partition.current.dns_suffix}",
             ),
         },
+        // No pseudo parameter gives the dual-stack suffix, and `AWS::URLSuffix` would
+        // silently move the client to the IPv4-only endpoint.
+        HazardKind::DualStackSuffix => Decision {
+            tier: Tier::Flag,
+            action: "pass the dual-stack suffix per partition",
+            change: format!(
+                "No pseudo parameter gives the dual-stack DNS suffix. Pass `{v}` as a parameter or map it per partition, or use the partition DNS suffix if the client does not need IPv6."
+            ),
+            precondition: None,
+            replace: None,
+        },
         HazardKind::ServicePrincipal => Decision {
             tier: Tier::Fix,
             action: "use the amazonaws.com principal",
             change: "Use the `amazonaws.com` form of the service principal.".into(),
             precondition: None,
             replace: rep("amazonaws.com", "amazonaws.com", "amazonaws.com"),
+        },
+        // A hand-written target Region means the Region the stack deploys to.
+        HazardKind::RegionLiteral if env.is_none() && l.impact == Impact::Portability => Decision {
+            tier: Tier::Fix,
+            action: "use the deployment Region",
+            change: format!("Use the deployment Region instead of `{v}`."),
+            precondition: None,
+            replace: region_expr(),
         },
         HazardKind::RegionLiteral => match own(env.and_then(|e| e.region.as_ref())) {
             Tier::Flag => Decision {
@@ -197,11 +270,7 @@ fn decide(l: &Literal, h: &Hazard, ctx: &Context) -> Decision {
                 precondition: (tier == Tier::Propose).then_some(
                     "The value means the Region the stack deploys to. The input does not say which Region it was written for.",
                 ),
-                replace: rep(
-                    "${AWS::Region}",
-                    "${Aws.REGION}",
-                    "${data.aws_region.current.region}",
-                ),
+                replace: region_expr(),
             },
         },
         HazardKind::AccountId => match own(env.and_then(|e| e.account.as_ref())) {
@@ -228,13 +297,14 @@ fn decide(l: &Literal, h: &Hazard, ctx: &Context) -> Decision {
                 ),
             },
         },
-        HazardKind::AvailabilityZone => zone(v, &h.value, env, ctx),
+        HazardKind::AvailabilityZone => zone(l, &h.value, env, ctx),
     }
 }
 
 /// A zone name `<region><letter>` becomes the zone at the same index in the target,
 /// when the target has that many zones and the region is the resource's own.
-fn zone(v: &str, whole: &str, env: Option<&DeployEnv>, ctx: &Context) -> Decision {
+fn zone(l: &Literal, whole: &str, env: Option<&DeployEnv>, ctx: &Context) -> Decision {
+    let v = l.value.as_str();
     let flag = |why: String| Decision {
         tier: Tier::Flag,
         action: "choose a zone in the target",
@@ -245,7 +315,7 @@ fn zone(v: &str, whole: &str, env: Option<&DeployEnv>, ctx: &Context) -> Decisio
     let letter = v.chars().last().filter(char::is_ascii_lowercase);
     let region = &v[..v.len().saturating_sub(1)];
     let Some(letter) = letter.filter(|_| region.ends_with(|c: char| c.is_ascii_digit())) else {
-        return flag("Zone IDs name a physical zone of another partition.".into());
+        return flag("A zone ID names one physical zone, and no expression derives it.".into());
     };
     if env
         .and_then(|e| e.region.as_deref())
@@ -257,22 +327,42 @@ fn zone(v: &str, whole: &str, env: Option<&DeployEnv>, ctx: &Context) -> Decisio
         return flag("It is part of a longer value.".into());
     }
     let i = letter as usize - 'a' as usize;
+    // An environment-agnostic CDK stack sees two zones, so `availabilityZones[2]` and
+    // later do not exist there.
+    macro_rules! with_cdk {
+        ($s:literal) => {
+            [
+                $s,
+                concat!(
+                    $s,
+                    " In CDK, the stack needs an explicit account and Region: without them it lists only two zones."
+                ),
+            ]
+        };
+    }
+    let by_index = |texts: [&'static str; 2]| Decision {
+        tier: Tier::Propose,
+        action: "use the target's zone by index",
+        change: format!("Use the target's zone at index {i} instead of `{v}`."),
+        precondition: Some(texts[usize::from(i >= 2)]),
+        replace: rep(
+            &format!(r#"{{"Fn::Select": [{i}, {{"Fn::GetAZs": ""}}]}}"#),
+            &format!("Stack.of(this).availabilityZones[{i}]"),
+            &format!("data.aws_availability_zones.available.names[{i}]"),
+        ),
+    };
+    // A zone of the target itself: the index exists unless the target has fewer zones.
+    if l.impact == Impact::Portability && ctx.target_zones.is_none_or(|n| i < n) {
+        return by_index(with_cdk!(
+            "Any zone of the target serves here. The target's zone list can differ by account, for example CloudFormation lists only zones with a default subnet when any has one, and can change when zones are added, so the index can name another zone than today."
+        ));
+    }
     match ctx.target_zones {
         None => flag("Run in live mode to compare with the target's zones.".into()),
         Some(n) if i >= n => flag(format!("The target offers {n} zones.")),
-        Some(_) => Decision {
-            tier: Tier::Propose,
-            action: "use the target's zone by index",
-            change: format!("Use the target's zone at index {i} instead of `{v}`."),
-            precondition: Some(
-                "Any zone of the target serves here. Zone names are per Region, so the index picks a different physical zone.",
-            ),
-            replace: rep(
-                &format!(r#"{{"Fn::Select": [{i}, {{"Fn::GetAZs": ""}}]}}"#),
-                &format!("Stack.of(this).availabilityZones[{i}]"),
-                &format!("data.aws_availability_zones.available.names[{i}]"),
-            ),
-        },
+        Some(_) => by_index(with_cdk!(
+            "Any zone of the target serves here. Zone names are per Region, so the index picks a different physical zone."
+        )),
     }
 }
 
@@ -281,14 +371,19 @@ fn zone(v: &str, whole: &str, env: Option<&DeployEnv>, ctx: &Context) -> Decisio
 fn foreign_principal(h: &Hazard) -> Option<RequiredChange> {
     let in_principal = h.path.contains("Principal.AWS") || h.path.ends_with("Principal");
     // With the account built from `AWS::AccountId` the principal is the deployment's
-    // own account, and the partition fix is right. A literal account is one of the
-    // other partition, because no ESC account shares an id with another partition.
-    let has = |k| h.literals.iter().any(|l| l.kind == k);
+    // own account, and the partition fix is right. A literal account next to another
+    // partition's ARN prefix is an account of that partition.
+    let has = |k| {
+        h.literals
+            .iter()
+            .any(|l| l.kind == k && l.impact == Impact::Breaks)
+    };
     let foreign = has(HazardKind::ArnPartition) && has(HazardKind::AccountId);
     (in_principal && foreign).then(|| {
         let mut c = RequiredChange::new(
             &h.logical_id,
             Tier::Flag,
+            Cause::new(CauseType::Hazard, h.literals.iter().map(|l| id(l.kind))),
             format!("principal of another partition at {}", h.path),
             "IAM trust does not cross partitions. Replace the principal with an identity in the target partition, for example a role there or an OIDC provider or IAM Roles Anywhere trust anchor for the caller.".into(),
             brief("principal of another partition", "use an identity in the target partition"),
@@ -323,6 +418,7 @@ pub fn hazard(h: &Hazard, ctx: &Context) -> Vec<RequiredChange> {
         let mut c = RequiredChange::new(
             &h.logical_id,
             tier,
+            Cause::new(CauseType::Hazard, mine.iter().map(|(l, _)| id(l.kind))),
             format!("hardcoded {} at {}", values.join(", "), h.path),
             join_unique(mine.iter().map(|(_, d)| d.change.as_str())),
             brief(
@@ -396,11 +492,13 @@ pub fn deviation(d: &Deviation, ctx: &Context) -> RequiredChange {
         d.resource_type, d.documented, d.source
     );
     let what = d.rule.replace('-', " ");
+    let cause = Cause::new(CauseType::Deviation, [d.rule.clone()]);
     match d.remediation.as_ref().filter(|_| ctx.single_region) {
         Some(m) => {
             let mut c = RequiredChange::new(
                 &d.logical_id,
                 Tier::Propose,
+                cause,
                 reason,
                 m.change.clone(),
                 brief(what, m.action.clone()).about(&d.resource_type),
@@ -413,6 +511,7 @@ pub fn deviation(d: &Deviation, ctx: &Context) -> RequiredChange {
             let mut c = RequiredChange::new(
                 &d.logical_id,
                 Tier::Flag,
+                cause,
                 reason,
                 "Decide how to remove or replace the feature in the target.".into(),
                 brief(what, "remove or replace the feature").about(&d.resource_type),
@@ -436,6 +535,7 @@ pub fn depth(
         d.path
     );
     let what = format!("{} `{}` not offered", kind_label(d.kind), d.value);
+    let cause = Cause::new(CauseType::Depth, [id(d.kind)]);
     let set = ctx.offered.and_then(|o| o.get(&d.kind));
     let (candidates, consequence) = match (d.kind, set) {
         (DepthKind::InstanceType, Some(s)) => (
@@ -458,6 +558,7 @@ pub fn depth(
         return RequiredChange::new(
             logical_id,
             Tier::Flag,
+            cause,
             reason,
             "Choose a value the target region offers.".into(),
             brief(what, "choose a value the region offers"),
@@ -466,6 +567,7 @@ pub fn depth(
     let mut c = RequiredChange::new(
         logical_id,
         Tier::Propose,
+        cause,
         reason,
         "Choose one of the candidates the target offers.".into(),
         brief(what, format!("choose one of {} offered", candidates.len())),
@@ -632,10 +734,12 @@ mod tests {
         );
     }
 
+    /// A literal of another Region or partition, as in an ESC scan of global input.
     fn lit(kind: HazardKind, value: &str) -> Literal {
         Literal {
             kind,
             value: value.into(),
+            impact: Impact::Breaks,
         }
     }
 
@@ -725,6 +829,81 @@ mod tests {
             ),
             [Tier::Flag]
         );
+    }
+
+    #[test]
+    fn the_target_region_typed_by_hand_is_a_fix() {
+        let own = Literal {
+            impact: Impact::Portability,
+            ..lit(HazardKind::RegionLiteral, "eu-west-1")
+        };
+        assert_eq!(tiers(vec![own], None, &Context::default()), [Tier::Fix]);
+    }
+
+    #[test]
+    fn a_principal_of_the_target_partition_keeps_the_partition_fix() {
+        let c = at(
+            "Properties.AssumeRolePolicyDocument.Statement[0].Principal.AWS",
+            "arn:aws:iam::111122223333:root",
+            [HazardKind::ArnPartition, HazardKind::AccountId]
+                .into_iter()
+                .zip(["arn:aws:", "111122223333"])
+                .map(|(k, v)| Literal {
+                    impact: Impact::Portability,
+                    ..lit(k, v)
+                })
+                .collect(),
+        );
+        assert!(c.iter().any(|c| c.tier == Tier::Fix), "{c:?}");
+        assert!(c.iter().all(|c| c.cause.kind == CauseType::Hazard));
+    }
+
+    #[test]
+    fn a_zone_of_the_target_is_proposed_by_index_without_live_mode() {
+        let own = Literal {
+            impact: Impact::Portability,
+            ..lit(HazardKind::AvailabilityZone, "eu-west-1b")
+        };
+        let c = tiers(vec![own], None, &Context::default());
+        assert_eq!(c, [Tier::Propose]);
+        let past = Literal {
+            impact: Impact::Portability,
+            ..lit(HazardKind::AvailabilityZone, "eu-west-1d")
+        };
+        let three = Context {
+            target_zones: Some(3),
+            ..Context::default()
+        };
+        assert_eq!(tiers(vec![past], None, &three), [Tier::Flag]);
+        let pre = |zone: &str| {
+            let own = Literal {
+                impact: Impact::Portability,
+                ..lit(HazardKind::AvailabilityZone, zone)
+            };
+            at("Properties.AvailabilityZone", zone, vec![own])[0]
+                .precondition
+                .clone()
+                .unwrap()
+        };
+        assert!(!pre("eu-west-1b").contains("CDK"));
+        assert!(pre("eu-west-1c").contains("only two zones"));
+        let id = Literal {
+            impact: Impact::Breaks,
+            ..lit(HazardKind::AvailabilityZone, "euw1-az1")
+        };
+        assert_eq!(tiers(vec![id], None, &Context::default()), [Tier::Flag]);
+    }
+
+    #[test]
+    fn a_dual_stack_suffix_is_flagged_not_rewritten_to_ipv4() {
+        let c = at(
+            "Properties.Url",
+            "sqs.eu-west-1.api.aws",
+            vec![lit(HazardKind::DualStackSuffix, "api.aws")],
+        );
+        assert_eq!(c.len(), 1);
+        assert_eq!(c[0].tier, Tier::Flag);
+        assert!(c[0].edits.is_empty());
     }
 
     #[test]

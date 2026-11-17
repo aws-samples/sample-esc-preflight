@@ -27,19 +27,23 @@ pub struct PublicData {
     pub tf: Option<terraform::TfMaps>,
 }
 
-/// Fetches the Knowledge MCP data and, in the ESC partition, the guide, in parallel.
-/// Any failure is a data-source failure (exit 3), never a fallback.
+/// Fetches the Knowledge MCP data (without `needs`, none: the server has no data for
+/// the target) and, in the ESC partition, the guide, in parallel. Any failure is a
+/// data-source failure (exit 3), never a fallback.
 pub fn fetch_public(
     client: &http::Client,
     target_region: &str,
     partition: PartitionFacts,
     tf: Option<terraform::TfMaps>,
-    needs: &knowledge::Needs,
+    needs: Option<&knowledge::Needs>,
 ) -> Result<PublicData> {
     let esc = partition.target_partition == guide::PARTITION;
     let (knowledge, guide) = std::thread::scope(|s| {
         let g = s.spawn(|| esc.then(|| guide::fetch(client)).transpose());
-        let k = knowledge::fetch(client, target_region, needs);
+        let k = needs.map_or_else(
+            || Ok(knowledge::Knowledge::default()),
+            |n| knowledge::fetch(client, target_region, n),
+        );
         (k, g.join().expect("guide fetch does not panic"))
     });
     Ok(PublicData {
@@ -73,11 +77,12 @@ mod tests {
             "eusc-de-east-1",
             partition::facts("eusc-de-east-1").unwrap(),
             Some(tf),
-            &needs,
+            Some(&needs),
         )
         .unwrap();
         assert_eq!(d.knowledge.types.get("AWS::Lambda::Function"), Some(&true));
         let g = d.guide.as_ref().unwrap();
-        assert!(g.unmapped.is_empty(), "{:?}", g.unmapped);
+        let unmapped = guide::unmapped(g);
+        assert!(unmapped.is_empty(), "{unmapped:?}");
     }
 }

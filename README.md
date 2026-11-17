@@ -5,7 +5,7 @@ Checks a CloudFormation template, CDK app or Terraform plan for compatibility wi
 * resource types, services and API operations ESC does not offer, with their roadmap state (planned for a quarter, being planned, not expanding)
 * features the [ESC User Guide](https://docs.aws.eu/esc/latest/userguide/services.html) documents as not available, and caveats for features that behave differently
 * instance types, engine versions and node types ESC does not offer
-* values hardcoded for another partition, such as `arn:aws:`, `amazonaws.com` or `eu-central-1`
+* hardcoded Regions, zones, partitions, DNS suffixes and accounts, such as `arn:aws:`, `amazonaws.com` or `eu-central-1`, including values for ESC itself
 
 It runs locally, read-only, and makes no model calls.
 
@@ -17,13 +17,14 @@ It runs locally, read-only, and makes no model calls.
 * Give your AI coding assistant a deterministic check for the IaC it writes, instead of relying on trial and error.
 * Run `esc-preflight scan --fail-on blocker` in CI, so no pipeline ships a service, feature or value ESC does not offer.
 * In an automated migration, scan, change and re-scan IaC code until no blockers remain, across repositories.
+* Move between any Regions or partitions, not only to ESC: `--region eu-west-1` for a move within the global partition, `--region us-gov-west-1` for AWS GovCloud (US), or `--region cn-north-1 --profile <name>` for AWS China, which needs live mode because the public availability data does not cover China. ESC User Guide checks apply to ESC targets only.
 
 ## Install
 
 Requires [Rust](https://www.rust-lang.org/tools/install) 1.99 or later.
 
 ```bash
-cargo install --locked --git https://github.com/aws-samples/sample-esc-preflight --tag 0.2.0
+cargo install --locked --git https://github.com/aws-samples/sample-esc-preflight --tag 0.2.1
 ```
 
 ## Scan
@@ -54,7 +55,7 @@ Each entry in `required_changes` has a tier:
 | `propose` | Apply after review; states precondition and consequence | a global table becomes a table, an instance type the region offers |
 | `flag` | Your decision | an unavailable service, a documented deviation |
 
-`edits` carry the replacement for CloudFormation, CDK and Terraform; `cdk_path` locates the CDK construct.
+`edits` carry the replacement for CloudFormation, CDK and Terraform; `cdk_path` locates the CDK construct. Each hardcoded literal has an `impact`: `breaks` when it names another Region or partition, `portability` when it is right for the target but ties the input to it. Zone IDs and other partitions' service principals always break; an account ID breaks only next to another partition's ARN prefix.
 
 These findings never block:
 
@@ -63,6 +64,12 @@ These findings never block:
 | disputed | The type exists in ESC, the service is not launched yet (for example CloudFront) | Test before relying on it |
 | caveat | The feature works with a documented ESC difference | Read the quoted sentence |
 | guide conflict | The ESC User Guide says not available, the availability data says available | Ask your AWS team to confirm and correct the guide |
+
+## JSON report
+
+The report follows [`schema/report.schema.json`](schema/report.schema.json) and states its `schema_version`. A new field or enum value keeps the version; a removed or renamed field, or one whose meaning changes, increments it. Every key is always present.
+
+For automation, read codes, enum values, ids and counts: `outcome` holds the `--fail-on` decisions, each warning has a `code`, each required change a `cause`. Text fields (`note`, `reason`, `change`, `precondition`, `consequence`, `documented`, warning `message`) can change in any release.
 
 ## Live mode
 
@@ -89,9 +96,9 @@ Permissions: [`iam/esc-preflight-readonly.json`](iam/esc-preflight-readonly.json
 | `--role-arn <arn>` | | Role to assume; turns on live mode |
 | `--live` | | Live mode with the default credential chain |
 | `--all` | | Report every resource, not only gaps |
-| `--fail-on blocker\|hazard\|disputed` | | Exit 2 on a matching finding; `disputed` includes guide conflicts |
+| `--fail-on blocker\|hazard\|disputed` | | Exit 2 on a matching finding; `hazard` includes `portability` literals, `disputed` includes guide conflicts |
 | `--out <file>` | stdout when redirected | JSON report file |
-| `--region <region>` | `eusc-de-east-1` | Region to check against |
+| `--region <region>` | `eusc-de-east-1` | Region to check against; a Region without Knowledge MCP data, such as China, needs live mode |
 | `--timeout <seconds>` | `60` | Per-request timeout |
 | `-q`, `--quiet` | | No summary |
 
@@ -112,9 +119,9 @@ Every run fetches current data, with no cache. Allow these hosts:
 | `knowledge-mcp.global.api.aws` | Availability and roadmap ([AWS Knowledge MCP server](https://awslabs.github.io/mcp/servers/aws-knowledge-mcp-server)) |
 | `docs.aws.eu` | ESC User Guide |
 | `registry.terraform.io`, `raw.githubusercontent.com` | Terraform provider data, Terraform input only |
-| AWS endpoints in `eusc-de-east-1` | Live mode only |
+| AWS endpoints in the target Region | Live mode only |
 
-The Knowledge MCP server is rate-limited. A scan makes 5 to 30 calls, two at a time; inputs with instance types or engine versions need the most. The scanner waits when the server asks it to.
+The Knowledge MCP server is rate-limited. A public-mode scan makes 6 to 31 calls, two at a time; inputs with instance types or engine versions need the most. The scanner waits when the server asks it to.
 
 ## Development
 

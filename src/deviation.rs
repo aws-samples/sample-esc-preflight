@@ -60,7 +60,9 @@ pub struct RuleRemediation {
     pub doc: String,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, schemars::JsonSchema,
+)]
 #[serde(rename_all = "kebab-case")]
 pub enum Severity {
     /// The feature is not available.
@@ -89,7 +91,7 @@ struct Cond {
     absent: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct Deviation {
     pub logical_id: String,
     pub resource_type: String,
@@ -102,7 +104,6 @@ pub struct Deviation {
     pub(crate) feature: Option<String>,
     /// The feature the Knowledge MCP data lists as available although the guide says it
     /// is not: a guide conflict, reported as a warning.
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub conflict: Option<String>,
     #[serde(skip)]
     pub remediation: Option<RuleRemediation>,
@@ -116,7 +117,7 @@ impl Deviation {
 }
 
 /// The differences one guide page documents for a service the input uses.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct Documented {
     pub page: String,
     pub url: String,
@@ -129,15 +130,15 @@ pub struct GuideFindings {
     pub documented: Vec<Documented>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct GuideProvenance {
     pub toc_url: String,
+    /// Guide pages read, for the terminal summary.
+    #[serde(skip)]
     pub pages: usize,
     /// Rules that match the input but whose sentence is no longer on the guide: the
     /// restriction may have been lifted, or the wording changed.
     pub stale_rules: Vec<String>,
-    /// Guide pages that map to no known service.
-    pub unmapped_pages: Vec<String>,
 }
 
 /// The documented substitute for a resource type, from a rule that fires on the type
@@ -196,7 +197,6 @@ pub fn assess(
             toc_url: guide.toc_url.clone(),
             pages: guide.pages.len(),
             stale_rules,
-            unmapped_pages: guide.unmapped.clone(),
         },
     )
 }
@@ -358,7 +358,6 @@ mod tests {
         GuideData {
             toc_url: String::new(),
             pages,
-            unmapped: Vec::new(),
         }
     }
 

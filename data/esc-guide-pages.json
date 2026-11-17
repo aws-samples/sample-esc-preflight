@@ -11,6 +11,11 @@
         "mq"
       ]
     },
+    "amp": {
+      "services": [
+        "aps"
+      ]
+    },
     "application-auto-scaling": {
       "services": [
         "application-autoscaling"

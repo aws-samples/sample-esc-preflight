@@ -4,7 +4,6 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicUsize, Ordering};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -14,6 +13,9 @@ use crate::error::{Result, ScanError};
 
 pub const URL: &str = "https://knowledge-mcp.global.api.aws";
 const TOOL: &str = "aws___get_regional_availability";
+/// The server answers `get_regional_availability` for any region id, with every
+/// CloudFormation type `Not Found` where it has no data; only this list tells.
+const REGIONS_TOOL: &str = "aws___list_regions";
 /// The server rejects more filter values per call.
 const MAX_FILTERS: usize = 9;
 /// Calls in flight at once. The server is rate-limited (not published; about ten calls
@@ -36,7 +38,7 @@ pub struct Needs {
     pub config: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum State {
     Available,
@@ -67,7 +69,6 @@ pub struct Knowledge {
     /// Config values the region offers, by parent key such as
     /// `AWS::EC2::Instance::InstanceType`. Empty unless config values were needed.
     pub config: BTreeMap<String, BTreeSet<String>>,
-    pub calls: usize,
     /// Filter values the server does not know.
     pub unknown: BTreeSet<String>,
 }
@@ -139,7 +140,6 @@ pub fn fetch(client: &Client, region: &str, needs: &Needs) -> Result<Knowledge> 
         filters: c.to_vec(),
     }));
 
-    let calls = AtomicUsize::new(0);
     let queue = Mutex::new(jobs);
     let results: Mutex<Vec<Result<Done>>> = Mutex::new(Vec::new());
     std::thread::scope(|s| {
@@ -149,7 +149,7 @@ pub fn fetch(client: &Client, region: &str, needs: &Needs) -> Result<Knowledge> 
                     let Some(job) = queue.lock().expect("queue lock").pop() else {
                         return;
                     };
-                    let r = run(client, region, &job, &calls).map(|(entries, unknown)| Done {
+                    let r = run(client, region, &job).map(|(entries, unknown)| Done {
                         job,
                         entries,
                         unknown,
@@ -164,10 +164,7 @@ pub fn fetch(client: &Client, region: &str, needs: &Needs) -> Result<Knowledge> 
         }
     });
 
-    let mut k = Knowledge {
-        calls: calls.into_inner(),
-        ..Knowledge::default()
-    };
+    let mut k = Knowledge::default();
     for r in results.into_inner().expect("results lock") {
         let Done {
             job: Job { kind, filters },
@@ -199,12 +196,7 @@ type Map = serde_json::Map<String, Value>;
 
 /// Runs one job: a dump follows `next_token`; a filtered call drops filter values the
 /// server does not know and asks again once.
-fn run(
-    client: &Client,
-    region: &str,
-    job: &Job,
-    calls: &AtomicUsize,
-) -> Result<(Map, BTreeSet<String>)> {
+fn run(client: &Client, region: &str, job: &Job) -> Result<(Map, BTreeSet<String>)> {
     let mut out = Map::new();
     let mut unknown = BTreeSet::new();
     let mut filters = job.filters.clone();
@@ -217,7 +209,6 @@ fn run(
         if let Some(t) = &token {
             args["next_token"] = json!(t);
         }
-        calls.fetch_add(1, Ordering::Relaxed);
         match parse(&call(client, &args)?, job.kind)? {
             Reply::Page { entries, next } => {
                 out.extend(entries);
@@ -244,13 +235,56 @@ fn run(
 }
 
 fn call(client: &Client, args: &Value) -> Result<String> {
+    call_tool(client, TOOL, args)
+}
+
+fn call_tool(client: &Client, tool: &str, args: &Value) -> Result<String> {
     let body = json!({
         "jsonrpc": "2.0",
         "id": 1,
         "method": "tools/call",
-        "params": {"name": TOOL, "arguments": args},
+        "params": {"name": tool, "arguments": args},
     });
     client.post_json(URL, &body)
+}
+
+/// The region ids the server has data for.
+pub fn regions(client: &Client) -> Result<BTreeSet<String>> {
+    parse_regions(&call_tool(client, REGIONS_TOOL, &json!({}))?)
+}
+
+fn parse_regions(body: &str) -> Result<BTreeSet<String>> {
+    let inner = tool_text(body)?;
+    let out: BTreeSet<String> = inner["content"]["result"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|r| r["region_id"].as_str().map(str::to_string))
+        .collect();
+    if out.is_empty() {
+        return Err(ScanError::DataSource(format!(
+            "{URL}: no regions listed; the response shape may have changed"
+        )));
+    }
+    Ok(out)
+}
+
+/// The JSON a tool returned as text, from a JSON or event-stream reply.
+fn tool_text(body: &str) -> Result<Value> {
+    let bad = |w: String| ScanError::DataSource(format!("{URL}: {w}"));
+    let json_text = body
+        .lines()
+        .find_map(|l| l.strip_prefix("data:"))
+        .unwrap_or(body);
+    let v: Value = serde_json::from_str(json_text.trim()).map_err(|e| bad(e.to_string()))?;
+    if let Some(e) = v.get("error") {
+        return Err(bad(e["message"].as_str().unwrap_or("error").to_string()));
+    }
+    let text = v
+        .pointer("/result/content/0/text")
+        .and_then(Value::as_str)
+        .ok_or_else(|| bad("no result content".into()))?;
+    serde_json::from_str(text).map_err(|e| bad(e.to_string()))
 }
 
 #[derive(Debug, PartialEq)]
@@ -470,6 +504,27 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn reads_the_region_list() {
+        let inner = json!({"content": {"result": [
+            {"region_id": "eu-west-1", "region_long_name": "Europe (Ireland)"},
+            {"region_id": "eusc-de-east-1", "region_long_name": "AWS European Sovereign Cloud"}
+        ]}});
+        let body = json!({"jsonrpc": "2.0", "id": 1, "result": {"isError": false, "content": [
+            {"type": "text", "text": inner.to_string()}
+        ]}});
+        let r = parse_regions(&body.to_string()).unwrap();
+        assert_eq!(r.len(), 2);
+        assert!(r.contains("eusc-de-east-1"));
+        let empty = json!({"jsonrpc": "2.0", "id": 1, "result": {"content": [
+            {"type": "text", "text": "{\"content\":{\"result\":[]}}"}
+        ]}});
+        assert_eq!(
+            parse_regions(&empty.to_string()).unwrap_err().exit_code(),
+            3
+        );
+    }
+
+    #[test]
     fn reads_pages_tokens_and_errors() {
         let body = page(
             Kind::Cfn,
@@ -594,6 +649,8 @@ pub(crate) mod tests {
             operations: ["Lambda+CreateFunctionUrlConfig"].map(String::from).into(),
             config: false,
         };
+        let regions = regions(&client).unwrap();
+        assert!(regions.contains("eusc-de-east-1") && regions.contains("us-gov-west-1"));
         let k = fetch(&client, "eusc-de-east-1", &needs).unwrap();
         assert_eq!(k.types.get("AWS::S3::Bucket"), Some(&true));
         assert_eq!(k.types.get("AWS::Lambda::Url"), Some(&false));
