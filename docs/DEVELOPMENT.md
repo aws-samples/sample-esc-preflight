@@ -67,7 +67,6 @@ A blocker fails someone's build, so a wrong rule is costly. To add or change a r
 
 - Only what the input declares is assessed, not settings made outside it.
 - Custom resources backed by your own code, SAM resources (`AWS::Serverless::*`) and nested stacks in a single template are reported as not assessable. Scan `cdk.out` or the processed template instead.
-- In a Terraform plan for a commercial Region, ARNs built from `data.aws_partition` look hand-written. Plan against the ESC Region where you can.
 - Terraform `aws_*` resources are assessed per service, not per resource type. Plan with the awscc provider, or use live mode, for type-level answers.
 - Roadmap states need a product name for the namespace; namespaces without one show no roadmap.
 

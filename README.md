@@ -17,14 +17,14 @@ It runs locally, read-only, and makes no model calls.
 * Give your AI coding assistant a deterministic check for the IaC it writes, instead of relying on trial and error.
 * Run `esc-preflight scan --fail-on blocker` in CI, so no pipeline ships a service, feature or value ESC does not offer.
 * In an automated migration, scan, change and re-scan IaC code until no blockers remain, across repositories.
-* Move between any Regions or partitions, not only to ESC: `--region eu-west-1` for a move within the global partition, `--region us-gov-west-1` for AWS GovCloud (US), or `--region cn-north-1 --profile <name>` for AWS China, which needs live mode because the public availability data does not cover China. ESC User Guide checks apply to ESC targets only.
+* Move between any Regions or partitions, not only to ESC: `--region eu-west-1` for a move within the global partition, `--region us-gov-west-1` for AWS GovCloud (US), or `--region cn-north-1 --profile <name>` for AWS China. ESC User Guide checks apply to ESC targets only.
 
 ## Install
 
 Requires [Rust](https://www.rust-lang.org/tools/install) 1.99 or later.
 
 ```bash
-cargo install --locked --git https://github.com/aws-samples/sample-esc-preflight --tag 0.2.1
+cargo install --locked --git https://github.com/aws-samples/sample-esc-preflight --tag 0.2.2
 ```
 
 ## Scan
@@ -38,6 +38,7 @@ Run in your project directory:
 | Terraform | `terraform plan -out=tfplan && terraform show -json tfplan \| esc-preflight scan` |
 
 * Without a path, `scan` reads `cdk.out` or the single template in the current directory.
+* For a target other than ESC, add `--region <region>` and synthesize or plan for that Region.
 * The summary goes to stderr. The JSON report goes to `--out <file>`, or to stdout when it is redirected.
 * Add `--profile <esc-profile>` to also check your ESC account (live mode, recommended).
 
@@ -55,7 +56,7 @@ Each entry in `required_changes` has a tier:
 | `propose` | Apply after review; states precondition and consequence | a global table becomes a table, an instance type the region offers |
 | `flag` | Your decision | an unavailable service, a documented deviation |
 
-`edits` carry the replacement for CloudFormation, CDK and Terraform; `cdk_path` locates the CDK construct. Each hardcoded literal has an `impact`: `breaks` when it names another Region or partition, `portability` when it is right for the target but ties the input to it. Zone IDs and other partitions' service principals always break; an account ID breaks only next to another partition's ARN prefix.
+`edits` carry the replacement for CloudFormation, CDK and Terraform; `cdk_path` locates the CDK construct. Each hardcoded literal has an `impact`: `breaks` when it names another Region or partition, `portability` when it is right for the target but ties the input to it. Zone IDs and other partitions' service principals always break; an account ID breaks only next to another partition's ARN prefix. A required change for hardcoded literals carries the same `impact`, `breaks` if any of its literals breaks; for other causes it is `null`.
 
 These findings never block:
 
@@ -77,13 +78,35 @@ For automation, read codes, enum values, ids and counts: `outcome` holds the `--
 esc-preflight scan --profile <esc-profile>
 ```
 
-`--profile`, `--role-arn` or `--live` (default credential chain) turn it on. Live mode reads your ESC account and overrides the public data. It also checks Availability Zones and Bedrock models.
+`--profile`, `--role-arn` or `--live` (default credential chain) turn it on. Live mode reads your account in the target Region and overrides the public data. It also checks Availability Zones and Bedrock models.
 
 Permissions: [`iam/esc-preflight-readonly.json`](iam/esc-preflight-readonly.json) plus read access to the services in your input. `ReadOnlyAccess` also works, but grants far more.
 
 ## Agent skill
 
-[`skills/esc-preflight/SKILL.md`](skills/esc-preflight/SKILL.md) lets a coding agent scan, apply fixes in your source, ask before each proposal, write flags to `ESC-GAPS.md` and rescan. It never deploys. Review its changes before you commit.
+[`skills/esc-preflight/`](skills/esc-preflight/SKILL.md) lets a coding agent take your IaC to a target Region: it scans, applies fixes in your source, asks before each proposal, records flags in `PREFLIGHT-GAPS.md` and rescans. It never deploys or commits. Review `git diff` before you commit.
+
+Copy the folder into your project, or into the same folder under your home directory:
+
+| Harness | Folder |
+|---|---|
+| Claude Code | `.claude/skills/esc-preflight/` |
+| Kiro | `.kiro/skills/esc-preflight/` |
+| Codex, GitHub Copilot, Cursor, Gemini CLI | `.agents/skills/esc-preflight/` |
+
+For a harness without skill support, copy the folder to `.agents/skills/esc-preflight/` and add this to your `AGENTS.md`:
+
+```markdown
+To prepare infrastructure code for another AWS Region or partition, follow .agents/skills/esc-preflight/SKILL.md.
+```
+
+The skill can also use the [AWS Knowledge MCP server](https://awslabs.github.io/mcp/servers/aws-knowledge-mcp-server) to research flags, for example where a substitute service is available. It needs no AWS account:
+
+```json
+{ "mcpServers": { "aws-knowledge-mcp-server": { "url": "https://knowledge-mcp.global.api.aws", "type": "http" } } }
+```
+
+The server's answers go into the gap register; the scanner's report alone decides what the agent edits.
 
 ## Options
 

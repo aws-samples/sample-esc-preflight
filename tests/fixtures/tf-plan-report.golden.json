@@ -447,6 +447,7 @@
           "rds-engine-version"
         ]
       },
+      "impact": null,
       "reason": "RDS engine version `postgres 16.4` at engine_version is not offered in eusc-de-east-1",
       "change": "Choose one of the candidates the target offers.",
       "precondition": null,
@@ -471,6 +472,7 @@
           "arn-partition"
         ]
       },
+      "impact": "portability",
       "reason": "hardcoded `arn:aws-eusc:` at values.service_role",
       "change": "Build the ARN from the partition instead of the literal.",
       "precondition": null,
@@ -499,6 +501,7 @@
           "account-id"
         ]
       },
+      "impact": "portability",
       "reason": "hardcoded `111122223333` at values.service_role",
       "change": "Use the deployment account instead of `111122223333`.",
       "precondition": "The value is the account the stack deploys to, not another account such as a central logging or an AWS-owned account.",
@@ -527,6 +530,7 @@
           "arn-partition"
         ]
       },
+      "impact": "breaks",
       "reason": "hardcoded `arn:aws:` at values.policy.Statement[0].Resource[0]",
       "change": "Build the ARN from the partition instead of the literal.",
       "precondition": null,

@@ -68,6 +68,9 @@ pub struct RequiredChange {
     pub cdk_path: Option<String>,
     pub tier: Tier,
     pub cause: Cause,
+    /// For a hardcoded literal: `breaks` when any literal of the change does. Null for
+    /// other causes.
+    pub impact: Option<Impact>,
     pub reason: String,
     pub change: String,
     /// What must hold for a proposed change to be right.
@@ -122,6 +125,7 @@ impl RequiredChange {
             cdk_path: None,
             tier,
             cause,
+            impact: None,
             reason,
             change,
             precondition: None,
@@ -210,7 +214,7 @@ fn decide(l: &Literal, h: &Hazard, ctx: &Context) -> Decision {
         HazardKind::DnsSuffix => Decision {
             // Hosts without a Region label, such as `s3.amazonaws.com`, mostly have no
             // counterpart under another partition's suffix.
-            tier: if has_region_label(&h.value) {
+            tier: if all_regional(&h.value, v) {
                 Tier::Fix
             } else {
                 Tier::Propose
@@ -218,7 +222,7 @@ fn decide(l: &Literal, h: &Hazard, ctx: &Context) -> Decision {
             action: "use the partition DNS suffix",
             change: "Build the host name from the partition's DNS suffix instead of the literal."
                 .into(),
-            precondition: (!has_region_label(&h.value)).then_some(
+            precondition: (!all_regional(&h.value, v)).then_some(
                 "The target serves this host without a Region in its name. Most global host names exist only with a Region in other partitions; check the target's endpoints.",
             ),
             replace: rep(
@@ -392,6 +396,7 @@ fn foreign_principal(h: &Hazard) -> Option<RequiredChange> {
             "Changing only the partition of the ARN produces a principal that does not exist in the target."
                 .into(),
         );
+        c.impact = Some(Impact::Breaks);
         c
     })
 }
@@ -426,6 +431,7 @@ pub fn hazard(h: &Hazard, ctx: &Context) -> Vec<RequiredChange> {
                 merge_actions(mine.iter().map(|(_, d)| d.action)),
             ),
         );
+        c.impact = mine.iter().map(|(l, _)| l.impact).min();
         let pre = join_unique(mine.iter().filter_map(|(_, d)| d.precondition));
         c.precondition = (!pre.is_empty()).then_some(pre);
         if h.value.contains(".dkr.ecr.")
@@ -605,6 +611,18 @@ fn instance_parts(t: &str) -> Option<(&str, u32, &str, &str)> {
         return None;
     }
     Some((class, rest[..end].parse().ok()?, &rest[end..], size))
+}
+
+/// Every host in `value` that ends in `suffix` has a Region label. One edit replaces
+/// the suffix in all of them, so a single global host makes the change a proposal.
+fn all_regional(value: &str, suffix: &str) -> bool {
+    let hosts: Vec<&str> = value
+        .split(|c: char| !(c.is_ascii_alphanumeric() || c == '.' || c == '-'))
+        // A fully qualified name such as a Route 53 record value ends in a dot.
+        .map(|t| t.trim_end_matches('.'))
+        .filter(|t| t.ends_with(suffix))
+        .collect();
+    !hosts.is_empty() && hosts.iter().all(|h| has_region_label(h))
 }
 
 /// A DNS label shaped like a Region id, such as `eu-central-1`.
@@ -856,6 +874,7 @@ mod tests {
         );
         assert!(c.iter().any(|c| c.tier == Tier::Fix), "{c:?}");
         assert!(c.iter().all(|c| c.cause.kind == CauseType::Hazard));
+        assert!(c.iter().all(|c| c.impact == Some(Impact::Portability)));
     }
 
     #[test]
@@ -892,6 +911,18 @@ mod tests {
             ..lit(HazardKind::AvailabilityZone, "euw1-az1")
         };
         assert_eq!(tiers(vec![id], None, &Context::default()), [Tier::Flag]);
+    }
+
+    #[test]
+    fn a_global_host_next_to_a_regional_one_makes_the_suffix_a_proposal() {
+        let d = || vec![lit(HazardKind::DnsSuffix, "amazonaws.com")];
+        let tier = |value: &str| at("Properties.X", value, d())[0].tier;
+        assert_eq!(tier("sqs.eu-west-1.amazonaws.com/q"), Tier::Fix);
+        assert_eq!(tier("sqs.eu-west-1.amazonaws.com."), Tier::Fix);
+        assert_eq!(
+            tier("s3.amazonaws.com/x sqs.eu-west-1.amazonaws.com/y"),
+            Tier::Propose
+        );
     }
 
     #[test]
