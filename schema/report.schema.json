@@ -707,6 +707,17 @@
           },
           "type": "array"
         },
+        "impact": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Impact"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "For a hardcoded literal: `breaks` when any literal of the change does. Null for\nother causes."
+        },
         "logical_id": {
           "type": "string"
         },
@@ -732,6 +743,7 @@
         "consequence",
         "doc",
         "edits",
+        "impact",
         "logical_id",
         "precondition",
         "reason",
