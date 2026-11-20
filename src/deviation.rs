@@ -1,104 +1,30 @@
-//! Documented feature differences that a resource in the input uses.
+//! Documented feature differences and dependencies that a resource in the input has.
 //!
-//! Each rule ties a sentence of the ESC User Guide to resource types and, optionally,
-//! property values. A rule is active only while its sentence is on the live page. A
-//! blocker whose feature the Knowledge MCP data lists as available is a guide conflict:
-//! the guide is likely outdated, so it warns instead of blocking.
+//! Each rule ties a sentence of the ESC User Guide or of another AWS page to resource
+//! types and, optionally, property values. A guide rule is active only while its
+//! sentence is on the live guide. A blocker whose feature the Knowledge MCP data lists
+//! as available is a guide conflict: the guide is likely outdated, so it warns instead
+//! of blocking.
 
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde::Serialize;
 
+use crate::extractor::PartitionFacts;
 use crate::matcher::{Finding, Verdict};
-use crate::model::Template;
+use crate::model::{DecidedBy, Template};
 use crate::provider::guide::{GuideData, Page};
 use crate::provider::knowledge::{Knowledge, State};
-
-const RULES_JSON: &str = include_str!("../data/esc-guide-rules.json");
-
-#[derive(Debug, Deserialize)]
-struct Rules {
-    rules: Vec<Rule>,
-}
-
-fn rules() -> Vec<Rule> {
-    serde_json::from_str::<Rules>(RULES_JSON)
-        .expect("bundled rules are valid")
-        .rules
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Rule {
-    id: String,
-    page: String,
-    /// A fragment of one documented difference.
-    text: String,
-    /// Further fragments that must be in the same difference, for list items.
-    #[serde(default)]
-    also: Vec<String>,
-    #[serde(default)]
-    severity: Severity,
-    /// The Knowledge MCP product or feature the sentence restricts, to detect conflicts.
-    feature: Option<String>,
-    types: Vec<String>,
-    /// Alternatives: the rule fires if any matches. Empty: the type alone fires it.
-    #[serde(default)]
-    when: Vec<Cond>,
-    /// The documented substitute, for features that cannot exist in a single-region
-    /// partition. Without one the deviation is left to the owner.
-    remediation: Option<RuleRemediation>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct RuleRemediation {
-    /// The change in a few words, for the terminal summary.
-    pub action: String,
-    pub change: String,
-    pub consequence: String,
-    /// AWS documentation of the substitute.
-    pub doc: String,
-}
-
-#[derive(
-    Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize, schemars::JsonSchema,
-)]
-#[serde(rename_all = "kebab-case")]
-pub enum Severity {
-    /// The feature is not available.
-    #[default]
-    Blocker,
-    /// The feature works with an ESC difference.
-    Caveat,
-}
-
-/// `all` conditions must all match; otherwise `path` is tested with at most one of
-/// `equals` (case-insensitive), `prefix`, `contains`, `not_in` (a string value outside
-/// the list) or `absent` (no value), and without one it needs a non-empty value.
-/// `contains` also searches intrinsic functions, as JSON text.
-#[derive(Debug, Default, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Cond {
-    #[serde(default)]
-    all: Vec<Cond>,
-    path: Option<String>,
-    equals: Option<String>,
-    prefix: Option<String>,
-    contains: Option<String>,
-    #[serde(default)]
-    not_in: Vec<String>,
-    #[serde(default)]
-    absent: bool,
-}
+use crate::rules::{self, Kind, Rule, Source};
+pub use crate::rules::{RuleRemediation, Severity};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct Deviation {
     pub logical_id: String,
     pub resource_type: String,
     pub rule: String,
-    /// The documented difference, as the guide states it.
+    /// The documented difference, as the guide or the AWS page states it.
     pub documented: String,
     pub source: String,
+    pub decided_by: DecidedBy,
     pub severity: Severity,
     #[serde(skip)]
     pub(crate) feature: Option<String>,
@@ -124,9 +50,25 @@ pub struct Documented {
     pub differences: Vec<String>,
 }
 
+/// Something a resource needs that stays outside the target, or that the move cannot
+/// take along, from a dependency rule. The owner decides.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct Dependency {
+    pub logical_id: String,
+    pub resource_type: String,
+    pub rule: String,
+    /// The documented sentence the dependency rests on.
+    pub documented: String,
+    pub source: String,
+    pub decided_by: DecidedBy,
+    #[serde(skip)]
+    pub remediation: Option<RuleRemediation>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct GuideFindings {
     pub deviations: Vec<Deviation>,
+    pub dependencies: Vec<Dependency>,
     pub documented: Vec<Documented>,
 }
 
@@ -143,22 +85,41 @@ pub struct GuideProvenance {
 
 /// The documented substitute for a resource type, from a rule that fires on the type
 /// alone. Used when the type itself is not available in the target.
-pub fn substitute_for(resource_type: &str) -> Option<RuleRemediation> {
-    static RULES: std::sync::OnceLock<Vec<Rule>> = std::sync::OnceLock::new();
-    RULES
-        .get_or_init(rules)
-        .iter()
+pub fn substitute_for(resource_type: &str, facts: &PartitionFacts) -> Option<RuleRemediation> {
+    rules::for_target(Kind::Deviation, facts)
         .find(|r| r.when.is_empty() && r.types.iter().any(|t| t == resource_type))
         .and_then(|r| r.remediation.clone())
 }
 
+/// Deviations and dependencies for every target; the guide provenance when the ESC
+/// User Guide was read.
 pub fn assess(
     template: &Template,
     findings: &[Finding],
-    guide: &GuideData,
+    guide: Option<&GuideData>,
     k: &Knowledge,
-) -> (GuideFindings, GuideProvenance) {
-    let (mut deviations, stale_rules) = find(template, guide);
+    facts: &PartitionFacts,
+) -> (GuideFindings, Option<GuideProvenance>) {
+    let (mut deviations, stale_rules) = find(template, guide, facts, Kind::Deviation);
+    let gone = |id: &str| {
+        findings
+            .iter()
+            .any(|f| f.logical_id == id && f.verdict == Verdict::NotAvailable)
+    };
+    let dependencies = find(template, guide, facts, Kind::Dependency)
+        .0
+        .into_iter()
+        .filter(|d| !gone(&d.logical_id))
+        .map(|d| Dependency {
+            logical_id: d.logical_id,
+            resource_type: d.resource_type,
+            rule: d.rule,
+            documented: d.documented,
+            source: d.source,
+            decided_by: d.decided_by,
+            remediation: d.remediation,
+        })
+        .collect();
     for d in deviations
         .iter_mut()
         .filter(|d| d.severity == Severity::Blocker)
@@ -170,14 +131,10 @@ pub fn assess(
         });
     }
     // A resource that is not available at all already carries a required change.
-    deviations.retain(|d| {
-        !findings
-            .iter()
-            .any(|f| f.logical_id == d.logical_id && f.verdict == Verdict::NotAvailable)
-    });
+    deviations.retain(|d| !gone(&d.logical_id));
     let mut documented: Vec<Documented> = Vec::new();
-    for f in findings {
-        for p in guide.pages_for(f.service.as_deref(), &f.resource_type) {
+    for (f, g) in findings.iter().flat_map(|f| guide.map(|g| (f, g))) {
+        for p in g.pages_for(f.service.as_deref(), &f.resource_type) {
             if !p.differences.is_empty() && !documented.iter().any(|d| d.url == p.url) {
                 documented.push(Documented {
                     page: p.title.clone(),
@@ -191,33 +148,41 @@ pub fn assess(
     (
         GuideFindings {
             deviations,
+            dependencies,
             documented,
         },
-        GuideProvenance {
-            toc_url: guide.toc_url.clone(),
-            pages: guide.pages.len(),
+        guide.map(|g| GuideProvenance {
+            toc_url: g.toc_url.clone(),
+            pages: g.pages.len(),
             stale_rules,
-        },
+        }),
     )
 }
 
-/// Deviations found in the input, and the ids of stale rules that apply to it.
-fn find(template: &Template, guide: &GuideData) -> (Vec<Deviation>, Vec<String>) {
-    let rules = rules();
+/// Rule hits of `kind` in the input, and the ids of stale rules that apply to it.
+fn find(
+    template: &Template,
+    guide: Option<&GuideData>,
+    facts: &PartitionFacts,
+    kind: Kind,
+) -> (Vec<Deviation>, Vec<String>) {
     let (mut out, mut stale) = (Vec::new(), Vec::new());
-    for rule in &rules {
+    for rule in rules::for_target(kind, facts) {
         let hits: Vec<_> = template
             .resources
             .values()
-            .filter(|r| {
-                rule.types.contains(&r.resource_type)
-                    && (rule.when.is_empty() || rule.when.iter().any(|c| c.matches(&r.properties)))
-            })
+            .filter(|r| rule.matches(&r.resource_type, &r.properties, facts))
             .collect();
         if hits.is_empty() {
             continue;
         }
-        let Some((page, documented)) = anchor(rule, guide) else {
+        let anchored = match (&rule.source, guide) {
+            // Without the guide, its rules cannot be checked, so they are not used.
+            (Source::Guide { .. }, None) => continue,
+            (Source::Guide { .. }, Some(g)) => anchor(rule, g),
+            (Source::Doc { url, quote }, _) => Some((url.clone(), quote.clone())),
+        };
+        let Some((url, documented)) = anchored else {
             stale.push(rule.id.clone());
             continue;
         };
@@ -226,7 +191,11 @@ fn find(template: &Template, guide: &GuideData) -> (Vec<Deviation>, Vec<String>)
             resource_type: r.resource_type.clone(),
             rule: rule.id.clone(),
             documented: documented.clone(),
-            source: page.url.clone(),
+            source: url.clone(),
+            decided_by: match rule.source {
+                Source::Guide { .. } => DecidedBy::Guide,
+                Source::Doc { .. } => DecidedBy::Rule,
+            },
             severity: rule.severity,
             feature: rule.feature.clone(),
             conflict: None,
@@ -237,66 +206,18 @@ fn find(template: &Template, guide: &GuideData) -> (Vec<Deviation>, Vec<String>)
     (out, stale)
 }
 
-/// The page and the one documented difference a rule quotes, if still on the guide.
-fn anchor<'g>(rule: &Rule, guide: &'g GuideData) -> Option<(&'g Page, &'g String)> {
-    let p = guide.page(&rule.page)?;
-    p.differences
-        .iter()
-        .find(|d| d.contains(&rule.text) && rule.also.iter().all(|a| d.contains(a)))
-        .map(|d| (p, d))
-}
-
-impl Cond {
-    fn matches(&self, props: &Value) -> bool {
-        if !self.all.is_empty() {
-            return self.all.iter().all(|c| c.matches(props));
+/// The source URL and the documented sentence a rule rests on. A guide rule needs its
+/// difference on the fetched guide; a doc rule's quote is checked by the network test.
+fn anchor(rule: &Rule, guide: &GuideData) -> Option<(String, String)> {
+    match &rule.source {
+        Source::Guide { page, text, also } => {
+            let p: &Page = guide.page(page)?;
+            p.differences
+                .iter()
+                .find(|d| d.contains(text.as_str()) && also.iter().all(|a| d.contains(a.as_str())))
+                .map(|d| (p.url.clone(), d.clone()))
         }
-        let Some(path) = &self.path else {
-            return false;
-        };
-        let mut values = vec![props];
-        for key in path.split('.') {
-            values = values
-                .into_iter()
-                .flat_map(|v| match v {
-                    Value::Array(a) => a.iter().filter_map(|x| x.get(key)).collect(),
-                    v => v.get(key).into_iter().collect::<Vec<_>>(),
-                })
-                .collect();
-        }
-        if self.absent {
-            return values.iter().all(|v| v.is_null());
-        }
-        // A list of scalars matches if any element does.
-        let values: Vec<&Value> = values
-            .into_iter()
-            .flat_map(|v| match v {
-                Value::Array(a) if a.iter().all(|x| !x.is_object()) && !a.is_empty() => {
-                    a.iter().collect()
-                }
-                v => vec![v],
-            })
-            .collect();
-        values.into_iter().any(|v| {
-            if let Some(want) = &self.equals {
-                v.as_str().is_some_and(|s| s.eq_ignore_ascii_case(want))
-            } else if let Some(p) = &self.prefix {
-                v.as_str().is_some_and(|s| s.starts_with(p.as_str()))
-            } else if let Some(c) = &self.contains {
-                match v {
-                    Value::String(s) => s.contains(c.as_str()),
-                    v => v.to_string().contains(c.as_str()),
-                }
-            } else if !self.not_in.is_empty() {
-                v.as_str()
-                    .is_some_and(|s| !self.not_in.iter().any(|x| x.eq_ignore_ascii_case(s)))
-            } else {
-                !matches!(v, Value::Null | Value::Bool(false))
-                    && v.as_array().is_none_or(|a| !a.is_empty())
-                    && v.as_object().is_none_or(|o| !o.is_empty())
-                    && v.as_str().is_none_or(|s| !s.is_empty())
-            }
-        })
+        Source::Doc { url, quote } => Some((url.clone(), quote.clone())),
     }
 }
 
@@ -304,49 +225,58 @@ impl Cond {
 mod tests {
     use super::*;
     use crate::model::{Origin, Resource};
-    use crate::provider::guide;
+    use crate::provider::{guide, partition};
     use crate::reader;
+    use serde::Deserialize;
+    use serde_json::Value;
+
+    fn esc() -> PartitionFacts {
+        partition::facts("eusc-de-east-1").unwrap()
+    }
+
+    /// The guide rules, with their page, text and extra fragments.
+    fn guide_rules() -> Vec<(&'static Rule, &'static str, &'static str, &'static [String])> {
+        rules::all()
+            .iter()
+            .filter_map(|r| match &r.source {
+                Source::Guide { page, text, also } => {
+                    Some((r, page.as_str(), text.as_str(), also.as_slice()))
+                }
+                Source::Doc { .. } => None,
+            })
+            .collect()
+    }
 
     fn scan(template: &str) -> (Vec<Deviation>, Vec<String>) {
         find(
             &reader::parse_text(template).unwrap(),
-            &guide::tests::fixture(),
+            Some(&guide::tests::fixture()),
+            &esc(),
+            Kind::Deviation,
         )
     }
 
     fn assessed(template: &str) -> Vec<Deviation> {
         let t = reader::parse_text(template).unwrap();
         let k = crate::provider::knowledge::tests::fixture();
-        assess(&t, &[], &guide::tests::fixture(), &k).0.deviations
-    }
-
-    fn well_formed(c: &Cond) -> bool {
-        let ops = [&c.equals, &c.prefix, &c.contains]
-            .iter()
-            .filter(|o| o.is_some())
-            .count()
-            + usize::from(!c.not_in.is_empty())
-            + usize::from(c.absent);
-        if c.all.is_empty() {
-            c.path.as_deref().is_some_and(|p| !p.is_empty()) && ops <= 1
-        } else {
-            c.path.is_none() && ops == 0 && c.all.iter().all(well_formed)
-        }
+        assess(&t, &[], Some(&guide::tests::fixture()), &k, &esc())
+            .0
+            .deviations
     }
 
     /// A guide on which every rule is active, to test conditions apart from anchors.
     fn all_active() -> GuideData {
         let mut pages: Vec<guide::Page> = Vec::new();
-        for r in rules() {
-            let item = std::iter::once(r.text.clone())
-                .chain(r.also)
+        for (_, page, text, also) in guide_rules() {
+            let item = std::iter::once(text.to_string())
+                .chain(also.iter().cloned())
                 .collect::<Vec<_>>()
                 .join(" ");
-            match pages.iter_mut().find(|p| p.slug == r.page) {
+            match pages.iter_mut().find(|p| p.slug == page) {
                 Some(p) => p.differences.push(item),
                 None => pages.push(guide::Page {
-                    url: format!("{}{}.html", guide::BASE, r.page),
-                    slug: r.page,
+                    url: format!("{}{page}.html", guide::BASE),
+                    slug: page.to_string(),
                     title: String::new(),
                     services: Vec::new(),
                     type_prefixes: Vec::new(),
@@ -361,7 +291,21 @@ mod tests {
         }
     }
 
-    fn fired(resource_type: &str, props: Value, g: &GuideData) -> Vec<String> {
+    /// A target the rule applies to.
+    fn target_of(r: &Rule) -> PartitionFacts {
+        let mut f = if r.scope.partitions.iter().any(|p| p == "aws-eusc") {
+            esc()
+        } else {
+            partition::facts(r.scope.regions.first().map_or("eu-west-1", |s| s.as_str())).unwrap()
+        };
+        if r.scope.within_partition {
+            f.source_partition = Some(f.target_partition.clone());
+        }
+        assert!(r.scope.applies(&f), "{}", r.id);
+        f
+    }
+
+    fn fired(resource_type: &str, props: Value, g: &GuideData, f: &PartitionFacts) -> Vec<String> {
         let origin = match resource_type {
             t if t.starts_with("AWS::") => Origin::Cfn,
             t if t.starts_with("awscc_") => Origin::TfAwscc,
@@ -379,36 +323,11 @@ mod tests {
                 cdk_path: None,
             },
         );
-        find(&t, g).0.into_iter().map(|d| d.rule).collect()
-    }
-
-    #[test]
-    fn rules_are_well_formed() {
-        let rules = rules();
-        let ids: std::collections::BTreeSet<_> = rules.iter().map(|r| &r.id).collect();
-        assert_eq!(ids.len(), rules.len(), "rule ids are unique");
-        for r in &rules {
-            assert!(!r.types.is_empty() && !r.text.is_empty(), "{}", r.id);
-            assert!(r.when.iter().all(well_formed), "{}", r.id);
-            assert!(r.also.iter().all(|a| !a.is_empty()), "{}", r.id);
-            if let Some(m) = &r.remediation {
-                assert!(
-                    !m.action.is_empty() && m.action.len() <= 45,
-                    "{}: action is required and short",
-                    r.id
-                );
-                assert!(
-                    !m.change.is_empty() && !m.consequence.is_empty(),
-                    "{}",
-                    r.id
-                );
-                assert!(
-                    m.doc.starts_with("https://docs.aws.amazon.com/"),
-                    "{}",
-                    r.id
-                );
-            }
-        }
+        [Kind::Deviation, Kind::Dependency]
+            .into_iter()
+            .flat_map(|k| find(&t, Some(g), f, k).0)
+            .map(|d| d.rule)
+            .collect()
     }
 
     /// Every rule with conditions has a case that fires and a near miss that does not;
@@ -422,16 +341,21 @@ mod tests {
         let cases: Cases =
             serde_json::from_str(include_str!("../tests/fixtures/rule-cases.json")).unwrap();
         let g = all_active();
+        let by_id = |id: &str| rules::all().iter().find(|r| r.id == id).unwrap();
         for (rule, ty, props, fires) in &cases.cases {
-            let hit = fired(ty, props.clone(), &g).contains(rule);
+            let hit = fired(ty, props.clone(), &g, &target_of(by_id(rule))).contains(rule);
             assert_eq!(hit, *fires, "{rule} on {ty} {props}");
         }
-        for r in rules() {
+        for r in rules::all()
+            .iter()
+            .filter(|r| matches!(r.kind, Kind::Deviation | Kind::Dependency))
+        {
             let mine = || cases.cases.iter().filter(|c| c.0 == r.id);
+            let f = target_of(r);
             if r.when.is_empty() {
                 for ty in &r.types {
                     assert!(
-                        fired(ty, Value::Null, &g).contains(&r.id),
+                        fired(ty, Value::Null, &g, &f).contains(&r.id),
                         "{} on {ty}",
                         r.id
                     );
@@ -441,7 +365,7 @@ mod tests {
                 assert!(mine().any(|c| c.3), "{} has no case that fires", r.id);
                 assert!(mine().any(|c| !c.3), "{} has no near miss", r.id);
                 assert!(
-                    fired(&r.types[0], Value::Null, &g)
+                    fired(&r.types[0], Value::Null, &g, &f)
                         .iter()
                         .all(|x| *x != r.id),
                     "{} fires without properties",
@@ -451,10 +375,20 @@ mod tests {
         }
     }
 
+    /// ESC substitutes apply to ESC only, not to every single-Region partition.
+    #[test]
+    fn substitutes_follow_the_rule_scope() {
+        let t = "AWS::DynamoDB::GlobalTable";
+        assert!(substitute_for(t, &esc()).is_some());
+        let iso_e = partition::facts("eu-isoe-west-1").unwrap();
+        assert_eq!(iso_e.target_regions, 1);
+        assert!(substitute_for(t, &iso_e).is_none());
+    }
+
     #[test]
     fn rule_features_are_products() {
         let k = crate::provider::knowledge::tests::fixture();
-        for r in rules() {
+        for r in rules::all() {
             if let Some(f) = &r.feature {
                 assert!(k.products.contains_key(f), "{}: {f}", r.id);
             }
@@ -475,17 +409,46 @@ mod tests {
             &crate::provider::knowledge::Needs::default(),
         )
         .unwrap();
-        let gone: Vec<_> = rules()
-            .into_iter()
-            .filter_map(|r| r.feature.filter(|f| !k.products.contains_key(f)))
+        let gone: Vec<_> = rules::all()
+            .iter()
+            .filter_map(|r| r.feature.as_ref().filter(|f| !k.products.contains_key(*f)))
             .collect();
         assert!(gone.is_empty(), "{gone:?}");
-        let stale: Vec<_> = rules()
+        let stale: Vec<_> = guide_rules()
             .into_iter()
-            .filter(|r| anchor(r, &g).is_none())
-            .map(|r| r.id)
+            .filter(|(r, ..)| anchor(r, &g).is_none())
+            .map(|(r, ..)| &r.id)
             .collect();
         assert!(stale.is_empty(), "{stale:?}");
+    }
+
+    /// Rules quoting other AWS pages fire for every target, also without the guide.
+    #[test]
+    fn doc_rules_fire_without_the_guide() {
+        let t = reader::parse_text(
+            r#"{"Resources":{
+                "F":{"Type":"AWS::Lambda::Function","Properties":{"Runtime":"python3.7"}},
+                "P":{"Type":"AWS::IAM::ManagedPolicy","Properties":{"PolicyDocument":
+                    {"Statement":[{"Condition":{"StringEquals":{"aws:RequestedRegion":"eu-west-1"}}}]}}}}}"#,
+        )
+        .unwrap();
+        let k = crate::provider::knowledge::tests::fixture();
+        let euw1 = partition::facts("eu-west-1").unwrap();
+        let (g, prov) = assess(&t, &[], None, &k, &euw1);
+        assert!(prov.is_none(), "no guide, no guide provenance");
+        assert_eq!(
+            g.deviations
+                .iter()
+                .map(|d| (d.rule.as_str(), d.decided_by))
+                .collect::<Vec<_>>(),
+            [("lambda-runtime-create-blocked", DecidedBy::Rule)]
+        );
+        assert!(g.deviations[0].blocks());
+        assert_eq!(g.dependencies.len(), 1);
+        assert_eq!(g.dependencies[0].rule, "iam-requested-region-condition");
+        let esc_guide = assess(&t, &[], Some(&guide::tests::fixture()), &k, &esc());
+        assert_eq!(esc_guide.0.deviations.len(), 1, "and for ESC as well");
+        assert!(esc_guide.1.is_some_and(|p| p.stale_rules.is_empty()));
     }
 
     #[test]
@@ -517,19 +480,6 @@ mod tests {
         let d = assessed(http);
         assert_eq!(d[0].conflict.as_deref(), Some("HTTP API"));
         assert!(!d[0].blocks());
-    }
-
-    #[test]
-    fn not_in_and_absent() {
-        let c: Cond = serde_json::from_str(r#"{"path":"V","not_in":["a","b"]}"#).unwrap();
-        assert!(c.matches(&serde_json::json!({"V": "c"})));
-        assert!(!c.matches(&serde_json::json!({"V": "A"})));
-        assert!(!c.matches(&serde_json::json!({"V": {"Ref": "P"}})));
-        assert!(!c.matches(&serde_json::json!({})));
-        let c: Cond = serde_json::from_str(r#"{"path":"V","absent":true}"#).unwrap();
-        assert!(c.matches(&serde_json::json!({})));
-        assert!(c.matches(&Value::Null));
-        assert!(!c.matches(&serde_json::json!({"V": "x"})));
     }
 
     #[test]

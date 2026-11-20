@@ -156,10 +156,7 @@ const CDK_HELPERS: [(&str, &str); 6] = [
 fn custom_resource(t: &str, props: &Value) -> Mapping {
     // `CDKBucketDeployment` carries a hash suffix.
     if let Some((_, prefix)) = CDK_HELPERS.iter().find(|(name, _)| t.starts_with(name)) {
-        let s = services::index()
-            .by_endpoint_prefix(prefix)
-            .expect("CDK helper service is in the bundled table");
-        return api(s, None);
+        return api(services::service(prefix), None);
     }
     let Some(call) = ["Create", "Update", "Delete"]
         .iter()

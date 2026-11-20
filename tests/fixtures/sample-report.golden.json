@@ -4,6 +4,7 @@
     "tool_version": "test",
     "source_format": "cloudformation",
     "target_region": "eusc-de-east-1",
+    "target_account": null,
     "input_environments": [],
     "partitions_version": "test",
     "knowledge": {
@@ -16,7 +17,8 @@
     },
     "fetched_at": "1970-01-01T00:00:00Z",
     "terraform": null,
-    "live": null
+    "live": null,
+    "schemas": null
   },
   "summary": {
     "resources": 8,
@@ -29,9 +31,11 @@
     "environment_literals": 0,
     "divergences": 0,
     "depth_blockers": 0,
+    "account_blockers": 0,
     "deviations": 0,
     "guide_conflicts": 0,
     "caveats": 0,
+    "dependencies": 0,
     "fixes": 2,
     "proposals": 1,
     "flags": 2
@@ -59,6 +63,7 @@
         "launch": null
       },
       "note": "Amazon Q Business is not expanding to the region. Not available in the target region. Remove the resource from the deployment there or replace it with a service the region offers.",
+      "decided_by": "knowledge",
       "depth": []
     },
     {
@@ -74,6 +79,7 @@
       },
       "roadmap": null,
       "note": null,
+      "decided_by": "knowledge",
       "depth": []
     },
     {
@@ -89,6 +95,7 @@
       },
       "roadmap": null,
       "note": null,
+      "decided_by": "knowledge",
       "depth": []
     },
     {
@@ -104,6 +111,7 @@
       },
       "roadmap": null,
       "note": null,
+      "decided_by": "knowledge",
       "depth": []
     },
     {
@@ -123,6 +131,7 @@
         "launch": "2026 Q4"
       },
       "note": "The Knowledge MCP data lists the resource type AWS::CloudFront::Distribution, but Amazon CloudFront is planned for 2026 Q4 in the target region. Check that the feature works before relying on it.",
+      "decided_by": "knowledge",
       "depth": []
     },
     {
@@ -138,6 +147,7 @@
       },
       "roadmap": null,
       "note": null,
+      "decided_by": "knowledge",
       "depth": []
     },
     {
@@ -153,6 +163,7 @@
       },
       "roadmap": null,
       "note": null,
+      "decided_by": "knowledge",
       "depth": []
     },
     {
@@ -168,6 +179,7 @@
       },
       "roadmap": null,
       "note": null,
+      "decided_by": "knowledge",
       "depth": []
     }
   ],
@@ -179,12 +191,14 @@
         {
           "kind": "dns-suffix",
           "value": "amazonaws.com",
-          "impact": "breaks"
+          "impact": "breaks",
+          "rule": null
         },
         {
           "kind": "region-literal",
           "value": "eu-central-1",
-          "impact": "breaks"
+          "impact": "breaks",
+          "rule": null
         }
       ]
     },
@@ -195,7 +209,8 @@
         {
           "kind": "arn-partition",
           "value": "arn:aws:",
-          "impact": "breaks"
+          "impact": "breaks",
+          "rule": null
         }
       ]
     },
@@ -206,12 +221,14 @@
         {
           "kind": "availability-zone",
           "value": "eu-central-1a",
-          "impact": "breaks"
+          "impact": "breaks",
+          "rule": null
         }
       ]
     }
   ],
   "deviations": [],
+  "dependencies": [],
   "documented_differences": [
     {
       "page": "ec2",
@@ -278,6 +295,7 @@
         "ids": []
       },
       "impact": null,
+      "decided_by": "knowledge",
       "reason": "AWS::QBusiness::Application is not available in eusc-de-east-1",
       "change": "Amazon Q Business is not expanding to the region. Not available in the target region. Remove the resource from the deployment there or replace it with a service the region offers.",
       "precondition": null,
@@ -297,6 +315,7 @@
         ]
       },
       "impact": "breaks",
+      "decided_by": "scanner",
       "reason": "hardcoded `amazonaws.com` at Properties.Environment.Variables.QUEUE_URL",
       "change": "Build the host name from the partition's DNS suffix instead of the literal.",
       "precondition": null,
@@ -326,6 +345,7 @@
         ]
       },
       "impact": "breaks",
+      "decided_by": "scanner",
       "reason": "hardcoded `eu-central-1` at Properties.Environment.Variables.QUEUE_URL",
       "change": "Use the deployment Region instead of `eu-central-1`.",
       "precondition": "The value means the Region the stack deploys to. The input does not say which Region it was written for.",
@@ -355,6 +375,7 @@
         ]
       },
       "impact": "breaks",
+      "decided_by": "scanner",
       "reason": "hardcoded `arn:aws:` at Properties.ManagedPolicyArns[1]",
       "change": "Build the ARN from the partition instead of the literal.",
       "precondition": null,
@@ -384,6 +405,7 @@
         ]
       },
       "impact": "breaks",
+      "decided_by": "scanner",
       "reason": "hardcoded `eu-central-1a` at Properties.AvailabilityZone",
       "change": "Choose the zone for `eu-central-1a` in the target. Run in live mode to compare with the target's zones.",
       "precondition": null,
@@ -394,5 +416,11 @@
     }
   ],
   "out_of_scope": [],
-  "warnings": []
+  "account": null,
+  "warnings": [
+    {
+      "code": "properties-unchecked",
+      "message": "eusc-de-east-1 publishes no CloudFormation schema bundle, so resource properties were not checked against it. Run in live mode to check them with cloudformation:DescribeType."
+    }
+  ]
 }

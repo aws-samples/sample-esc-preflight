@@ -1,0 +1,343 @@
+{
+  "$defs": {
+    "CompareProvenance": {
+      "properties": {
+        "fetched_at": {
+          "description": "When the public data was fetched.",
+          "type": "string"
+        },
+        "from_schemas": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SchemaProvenance"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The schemas read for each Region; both null when properties are not compared."
+        },
+        "knowledge_url": {
+          "type": "string"
+        },
+        "live_account_id": {
+          "description": "The account `to` was read from, when a profile was given.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "to_schemas": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SchemaProvenance"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tool_version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "fetched_at",
+        "from_schemas",
+        "knowledge_url",
+        "live_account_id",
+        "to_schemas",
+        "tool_version"
+      ],
+      "type": "object"
+    },
+    "CompareSummary": {
+      "properties": {
+        "config_values": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "products": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "properties": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "required": [
+          "format",
+          "minimum",
+          "type"
+        ],
+        "resource_types": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "config_values",
+        "products",
+        "properties",
+        "resource_types"
+      ],
+      "type": "object"
+    },
+    "CompareWarning": {
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/CompareWarningCode"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "CompareWarningCode": {
+      "oneOf": [
+        {
+          "const": "to-unlisted",
+          "description": "The Knowledge MCP server has no data for `to`: products and config values are\nnot compared.",
+          "type": "string"
+        },
+        {
+          "const": "properties-uncompared",
+          "description": "A Region without a schema bundle, and no live mode for it: properties are not\ncompared.",
+          "type": "string"
+        }
+      ]
+    },
+    "ConfigGap": {
+      "properties": {
+        "key": {
+          "description": "The parent key, such as `AWS::EC2::Instance::InstanceType`.",
+          "type": "string"
+        },
+        "missing": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "key",
+        "missing"
+      ],
+      "type": "object"
+    },
+    "ProductGap": {
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "to_launch": {
+          "description": "Quarter of a planned launch in `to`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "to_state": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/State"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The state in `to`; null when the server does not list the product there."
+        }
+      },
+      "required": [
+        "name",
+        "to_launch",
+        "to_state"
+      ],
+      "type": "object"
+    },
+    "PropertyGap": {
+      "properties": {
+        "missing": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "resource_type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "missing",
+        "resource_type"
+      ],
+      "type": "object"
+    },
+    "SchemaProvenance": {
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/SchemaSource"
+        },
+        "types": {
+          "description": "Resource types whose schema was read.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "url": {
+          "description": "The bundle read, for `bundle`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "source",
+        "types",
+        "url"
+      ],
+      "type": "object"
+    },
+    "SchemaSource": {
+      "oneOf": [
+        {
+          "const": "bundle",
+          "description": "The Region's public schema bundle.",
+          "type": "string"
+        },
+        {
+          "const": "live",
+          "description": "`cloudformation:DescribeType` in the target account.",
+          "type": "string"
+        }
+      ]
+    },
+    "State": {
+      "enum": [
+        "available",
+        "planned",
+        "planning",
+        "not-expanding",
+        "not-available"
+      ],
+      "type": "string"
+    },
+    "TypeGap": {
+      "properties": {
+        "product": {
+          "description": "The product the type belongs to, as `from` lists it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "resource_type": {
+          "type": "string"
+        },
+        "to_state": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/State"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The product's state in `to`; null when no product is known or `to` does not\nlist it."
+        }
+      },
+      "required": [
+        "product",
+        "resource_type",
+        "to_state"
+      ],
+      "type": "object"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "config_values": {
+      "description": "Config values, such as instance types, `from` offers and `to` does not.",
+      "items": {
+        "$ref": "#/$defs/ConfigGap"
+      },
+      "type": "array"
+    },
+    "data_provenance": {
+      "$ref": "#/$defs/CompareProvenance"
+    },
+    "from": {
+      "type": "string"
+    },
+    "products": {
+      "description": "Products and features available in `from` and not in `to`.",
+      "items": {
+        "$ref": "#/$defs/ProductGap"
+      },
+      "type": "array"
+    },
+    "properties": {
+      "description": "Top-level properties of types both offer that `to`'s schema lacks.",
+      "items": {
+        "$ref": "#/$defs/PropertyGap"
+      },
+      "type": "array"
+    },
+    "required": [
+      "description",
+      "items",
+      "type"
+    ],
+    "resource_types": {
+      "description": "CloudFormation resource types available in `from` and not in `to`.",
+      "items": {
+        "$ref": "#/$defs/TypeGap"
+      },
+      "type": "array"
+    },
+    "schema_version": {
+      "const": 1,
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "summary": {
+      "$ref": "#/$defs/CompareSummary"
+    },
+    "to": {
+      "type": "string"
+    },
+    "warnings": {
+      "items": {
+        "$ref": "#/$defs/CompareWarning"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "config_values",
+    "data_provenance",
+    "from",
+    "products",
+    "properties",
+    "resource_types",
+    "schema_version",
+    "summary",
+    "to",
+    "warnings"
+  ],
+  "title": "Comparison",
+  "type": "object"
+}

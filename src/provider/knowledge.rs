@@ -209,7 +209,7 @@ fn run(client: &Client, region: &str, job: &Job) -> Result<(Map, BTreeSet<String
         if let Some(t) = &token {
             args["next_token"] = json!(t);
         }
-        match parse(&call(client, &args)?, job.kind)? {
+        match parse(&call_tool(client, TOOL, &args)?, job.kind)? {
             Reply::Page { entries, next } => {
                 out.extend(entries);
                 match next {
@@ -234,10 +234,6 @@ fn run(client: &Client, region: &str, job: &Job) -> Result<(Map, BTreeSet<String
     }
 }
 
-fn call(client: &Client, args: &Value) -> Result<String> {
-    call_tool(client, TOOL, args)
-}
-
 fn call_tool(client: &Client, tool: &str, args: &Value) -> Result<String> {
     let body = json!({
         "jsonrpc": "2.0",
@@ -246,6 +242,13 @@ fn call_tool(client: &Client, tool: &str, args: &Value) -> Result<String> {
         "params": {"name": tool, "arguments": args},
     });
     client.post_json(URL, &body)
+}
+
+/// The error for a Region the server has no data for, without live mode.
+pub fn unlisted(region: &str) -> String {
+    format!(
+        "the AWS Knowledge MCP server has no data for {region}; run in live mode with --profile <name> or --role-arn <arn>"
+    )
 }
 
 /// The region ids the server has data for.
@@ -271,20 +274,28 @@ fn parse_regions(body: &str) -> Result<BTreeSet<String>> {
 
 /// The JSON a tool returned as text, from a JSON or event-stream reply.
 fn tool_text(body: &str) -> Result<Value> {
+    envelope(body)?.map_err(|m| ScanError::DataSource(format!("{URL}: {m}")))
+}
+
+/// The JSON a tool returned as text, or the message of a JSON-RPC error.
+fn envelope(body: &str) -> Result<std::result::Result<Value, String>> {
     let bad = |w: String| ScanError::DataSource(format!("{URL}: {w}"));
+    // A streamable-HTTP server may answer as an event stream with one data line.
     let json_text = body
         .lines()
         .find_map(|l| l.strip_prefix("data:"))
         .unwrap_or(body);
     let v: Value = serde_json::from_str(json_text.trim()).map_err(|e| bad(e.to_string()))?;
     if let Some(e) = v.get("error") {
-        return Err(bad(e["message"].as_str().unwrap_or("error").to_string()));
+        return Ok(Err(e["message"].as_str().unwrap_or("error").to_string()));
     }
     let text = v
         .pointer("/result/content/0/text")
         .and_then(Value::as_str)
         .ok_or_else(|| bad("no result content".into()))?;
-    serde_json::from_str(text).map_err(|e| bad(e.to_string()))
+    serde_json::from_str(text)
+        .map(Ok)
+        .map_err(|e| bad(e.to_string()))
 }
 
 #[derive(Debug, PartialEq)]
@@ -299,23 +310,10 @@ enum Reply {
 }
 
 fn parse(body: &str, kind: Kind) -> Result<Reply> {
-    let bad = |w: String| ScanError::DataSource(format!("{URL}: {w}"));
-    // A streamable-HTTP server may answer as an event stream with one data line.
-    let json_text = body
-        .lines()
-        .find_map(|l| l.strip_prefix("data:"))
-        .unwrap_or(body);
-    let v: Value = serde_json::from_str(json_text.trim()).map_err(|e| bad(e.to_string()))?;
-    if let Some(e) = v.get("error") {
-        return Ok(Reply::Error(
-            e["message"].as_str().unwrap_or("error").to_string(),
-        ));
-    }
-    let text = v
-        .pointer("/result/content/0/text")
-        .and_then(Value::as_str)
-        .ok_or_else(|| bad("no result content".into()))?;
-    let inner: Value = serde_json::from_str(text).map_err(|e| bad(e.to_string()))?;
+    let inner = match envelope(body)? {
+        Ok(v) => v,
+        Err(m) => return Ok(Reply::Error(m)),
+    };
     if let Some(m) = inner["errorMessage"].as_str() {
         return Ok(match m.split_once("do not exist:") {
             Some((_, rest)) => {
@@ -335,7 +333,7 @@ fn parse(body: &str, kind: Kind) -> Result<Reply> {
     let entries = result[kind.key()]
         .as_object()
         .cloned()
-        .ok_or_else(|| bad(format!("no {} in the result", kind.key())))?;
+        .ok_or_else(|| ScanError::DataSource(format!("{URL}: no {} in the result", kind.key())))?;
     Ok(Reply::Page {
         entries,
         next: result["next_token"].as_str().map(str::to_string),

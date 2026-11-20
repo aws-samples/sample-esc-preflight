@@ -4,6 +4,7 @@
     "tool_version": "test",
     "source_format": "cloudformation",
     "target_region": "eusc-de-east-1",
+    "target_account": null,
     "input_environments": [],
     "partitions_version": "test",
     "knowledge": {
@@ -16,7 +17,8 @@
     },
     "fetched_at": "1970-01-01T00:00:00Z",
     "terraform": null,
-    "live": null
+    "live": null,
+    "schemas": null
   },
   "summary": {
     "resources": 3,
@@ -29,9 +31,11 @@
     "environment_literals": 0,
     "divergences": 0,
     "depth_blockers": 0,
+    "account_blockers": 0,
     "deviations": 0,
     "guide_conflicts": 0,
     "caveats": 0,
+    "dependencies": 0,
     "fixes": 0,
     "proposals": 0,
     "flags": 0
@@ -59,6 +63,7 @@
         "launch": "2026 Q4"
       },
       "note": "The Knowledge MCP data lists CloudFront CreateInvalidation, but Amazon CloudFront is planned for 2026 Q4 in the target region. Check that the feature works before relying on it.",
+      "decided_by": "knowledge",
       "depth": []
     },
     {
@@ -74,6 +79,7 @@
       },
       "roadmap": null,
       "note": null,
+      "decided_by": "knowledge",
       "depth": []
     },
     {
@@ -85,11 +91,13 @@
       "evidence": null,
       "roadmap": null,
       "note": "Custom resource backed by its own code; the calls it makes cannot be read from the template. Its backing function is assessed separately.",
+      "decided_by": "scanner",
       "depth": []
     }
   ],
   "hazards": [],
   "deviations": [],
+  "dependencies": [],
   "documented_differences": [
     {
       "page": "cognito",
@@ -107,5 +115,6 @@
   "zones": null,
   "required_changes": [],
   "out_of_scope": [],
+  "account": null,
   "warnings": []
 }

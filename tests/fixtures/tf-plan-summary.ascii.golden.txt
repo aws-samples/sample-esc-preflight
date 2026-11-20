@@ -6,10 +6,11 @@ esc-preflight, 15 resources, eusc-de-east-1
   ok not available        0
 
   PORTABILITY
-  !  hardcoded fields     2   1 breaking, 2 resources: `arn:aws:`, +2 more
+  !  hardcoded fields     3   2 breaking, 3 resources: `arn:aws:`, +3 more
   x  depth blockers       1   values the region does not offer
 
-  REQUIRED CHANGES  2 propose, 2 fix
+  REQUIRED CHANGES  1 flag, 2 propose, 2 fix
+  x flag     hardcoded `ami-0123456789abcdef0`           -> look the resource up in the target
   * propose  RDS engine version `postgres 16.4` not of~  -> choose one of 5 offered
   * propose  hardcoded `111122223333`                    -> `${data.aws_caller_identity.current.account_id}`
   * fix      hardcoded `arn:aws-eusc:`                   -> `arn:${data.aws_partition.current.partition}:`

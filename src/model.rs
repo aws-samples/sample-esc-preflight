@@ -54,6 +54,24 @@ pub struct OutOfScope {
     pub provider: String,
 }
 
+/// The source that decided a finding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, schemars::JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum DecidedBy {
+    /// The AWS Knowledge MCP data.
+    Knowledge,
+    /// A read-only call to the target account.
+    Live,
+    /// A difference on the ESC User Guide.
+    Guide,
+    /// The target's CloudFormation resource schema.
+    Schema,
+    /// A rule of the bundled rules database with a quoted AWS source.
+    Rule,
+    /// The scanner itself, from the input and the bundled partition data.
+    Scanner,
+}
+
 /// `resource_type` of a CloudFormation output in [`Template::outputs`].
 pub const OUTPUT_TYPE: &str = "Output";
 
@@ -68,6 +86,14 @@ pub struct Template {
     /// Terraform only: every string written as a constant in the configuration. A
     /// literal found here was typed by hand, even when the plan's environment matches.
     pub constants: std::collections::BTreeSet<String>,
+    /// Transforms that rewrite resources at deployment, from `Transform` and from
+    /// `Fn::Transform` in resource properties; SAM and language extensions excluded.
+    pub macros: Vec<String>,
+    /// CloudFormation parameters of an `AWS::SSM::Parameter::Value<...>` type whose
+    /// default is an AWS public parameter (`/aws/service/...`): name to path.
+    pub ssm_defaults: BTreeMap<String, String>,
+    /// CloudFormation `DependsOn`, by logical id.
+    pub depends_on: BTreeMap<String, Vec<String>>,
 }
 
 impl Template {

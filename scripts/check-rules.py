@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Checks data/esc-guide-rules.json against the resource schemas.
+"""Checks the types and condition paths in data/rules.json against the resource schemas.
 
 Usage: python3 scripts/check-rules.py <CloudformationSchema.zip> <tf-schema.json>
 
@@ -8,7 +8,9 @@ CloudformationSchema.zip is the CloudFormation registry schema bundle
 tf-schema.json is `terraform providers schema -json` for the aws and awscc providers.
 
 Every type must exist, every condition path must resolve on at least one of the
-rule's types, and every type of a rule with conditions must be reached by one.
+rule's types, and every type of a rule with conditions must be reached by one. An
+exemption's paths are conditions without a test. AWS SAM types have no registry
+schema, so their paths are not checked.
 """
 
 import json
@@ -16,7 +18,8 @@ import sys
 import zipfile
 from pathlib import Path
 
-RULES = Path(__file__).resolve().parent.parent / "data" / "esc-guide-rules.json"
+RULES = Path(__file__).resolve().parent.parent / "data" / "rules.json"
+SAM_PREFIX = "AWS::Serverless::"
 
 
 def cfn_schemas(zip_path):
@@ -75,7 +78,7 @@ def cfn_resolves(schema, path, cond=None):
     return True
 
 
-def tf_resolves(schema, path, cond=None):
+def tf_resolves(schema, path):
     block = schema["block"]
     keys = path.split(".")
     for i, key in enumerate(keys):
@@ -116,25 +119,28 @@ def main():
     errors = []
     for r in json.load(open(RULES, encoding="utf-8"))["rules"]:
         known = {}
-        for t in r["types"]:
-            if t.startswith("AWS::"):
+        for t in r.get("types", []):
+            if t.startswith(SAM_PREFIX):
+                known[t] = lambda p, v: True
+            elif t.startswith("AWS::"):
                 if t in cfn:
                     known[t] = lambda p, v, s=cfn[t]: cfn_resolves(s, p, v)
                 else:
                     errors.append(f"{r['id']}: unknown CloudFormation type {t}")
             elif t in tf:
-                known[t] = lambda p, v, s=tf[t]: tf_resolves(s, p, v)
+                known[t] = lambda p, v, s=tf[t]: tf_resolves(s, p)
             else:
                 errors.append(f"{r['id']}: unknown Terraform type {t}")
         reached = set()
-        for group in leaves(r.get("when", [])):
+        conds = r.get("when", []) + [{"path": p} for p in r.get("paths", [])]
+        for group in leaves(conds):
             hits = [
                 t for t, ok in known.items() if all(ok(c["path"], c) for c in group)
             ]
             if not hits:
                 errors.append(f"{r['id']}: {[c['path'] for c in group]} resolves on none of its types")
             reached.update(hits)
-        if r.get("when"):
+        if conds:
             for t in sorted(set(known) - reached):
                 errors.append(f"{r['id']}: no condition reaches {t}")
     for e in errors:

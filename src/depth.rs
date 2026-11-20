@@ -23,6 +23,21 @@ pub enum DepthKind {
     NeptuneEngineVersion,
     DocumentDbEngineVersion,
     RedshiftNodeType,
+    /// A top-level resource property the target's CloudFormation schema lacks.
+    Property,
+}
+
+impl DepthKind {
+    /// An engine version, written and offered as `engine version`.
+    pub fn is_engine(self) -> bool {
+        matches!(
+            self,
+            DepthKind::RdsEngineVersion
+                | DepthKind::CacheEngineVersion
+                | DepthKind::NeptuneEngineVersion
+                | DepthKind::DocumentDbEngineVersion
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, schemars::JsonSchema)]
@@ -30,6 +45,8 @@ pub enum DepthKind {
 pub enum DepthSource {
     Knowledge,
     Live,
+    /// The target's CloudFormation resource schema.
+    Schema,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, schemars::JsonSchema)]
@@ -305,10 +322,7 @@ pub fn public_offered(k: &Knowledge) -> Offered {
         let Some(values) = k.config.get(*parent) else {
             continue;
         };
-        let engine = matches!(
-            kind,
-            RdsEngineVersion | CacheEngineVersion | NeptuneEngineVersion | DocumentDbEngineVersion
-        );
+        let engine = kind.is_engine();
         let set = values
             .iter()
             .filter_map(|v| {
@@ -343,10 +357,7 @@ pub fn resolve(
         };
         c.offered = Some(match c.kind {
             // `16` or `8.0` names a version family; any offered member satisfies it.
-            RdsEngineVersion
-            | CacheEngineVersion
-            | NeptuneEngineVersion
-            | DocumentDbEngineVersion => set
+            k if k.is_engine() => set
                 .iter()
                 .any(|o| *o == c.value || o.starts_with(&format!("{}.", c.value))),
             _ => set.contains(&c.value),

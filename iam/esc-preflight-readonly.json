@@ -6,20 +6,45 @@
       "Effect": "Allow",
       "Action": [
         "cloudformation:ListTypes",
+        "cloudformation:DescribeType",
         "ec2:DescribeAvailabilityZones",
         "ec2:DescribeInstanceTypeOfferings",
         "bedrock:ListFoundationModels",
         "bedrock:ListInferenceProfiles",
         "rds:DescribeDBEngineVersions",
-        "elasticache:DescribeCacheEngineVersions"
+        "elasticache:DescribeCacheEngineVersions",
+        "ec2:DescribeRegions",
+        "servicequotas:GetServiceQuota",
+        "servicequotas:GetAWSDefaultServiceQuota"
       ],
       "Resource": "*"
     },
     {
+      "Sid": "PublicParameters",
+      "Effect": "Allow",
+      "Action": [
+        "ssm:GetParameter"
+      ],
+      "Resource": "arn:*:ssm:*::parameter/aws/service/*"
+    },
+    {
       "Sid": "OwnRolePolicies",
       "Effect": "Allow",
-      "Action": ["iam:ListAttachedRolePolicies"],
+      "Action": [
+        "iam:ListAttachedRolePolicies"
+      ],
       "Resource": "arn:*:iam::*:role/*"
+    },
+    {
+      "Sid": "OrganizationsRead",
+      "Effect": "Allow",
+      "Action": [
+        "organizations:DescribeOrganization",
+        "organizations:ListParents",
+        "organizations:ListPoliciesForTarget",
+        "organizations:DescribePolicy"
+      ],
+      "Resource": "*"
     }
   ]
 }

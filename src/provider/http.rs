@@ -13,6 +13,14 @@ pub const ALLOWED_HOSTS: &[&str] = &[
     "raw.githubusercontent.com",
 ];
 
+/// CloudFormation resource schema bundles, one host per Region:
+/// `schema.cloudformation.<region>.amazonaws.com`, `.amazonaws.com.cn` in China.
+const SCHEMA_HOST_PREFIX: &str = "schema.cloudformation.";
+const SCHEMA_HOST_SUFFIXES: &[&str] = &[".amazonaws.com", ".amazonaws.com.cn"];
+
+/// The largest body read; the biggest schema bundle is about 3 MB.
+const MAX_BODY: usize = 64 << 20;
+
 const RETRIES: u32 = 3;
 /// Waits on HTTP 429 per request, each as long as `Retry-After` says, at most a minute.
 const THROTTLE_WAITS: u32 = 2;
@@ -37,17 +45,24 @@ impl Client {
 
     /// GETs `url` and returns the body.
     pub fn get_text(&self, url: &str) -> Result<String> {
+        String::from_utf8(self.get_bytes(url)?)
+            .map_err(|e| ScanError::DataSource(format!("{url}: {e}")))
+    }
+
+    /// GETs `url` and returns the body as bytes.
+    pub fn get_bytes(&self, url: &str) -> Result<Vec<u8>> {
         self.send(url, || self.inner.get(url))
     }
 
     /// POSTs a JSON body to `url` and returns the response body.
     pub fn post_json(&self, url: &str, body: &serde_json::Value) -> Result<String> {
-        self.send(url, || {
+        let bytes = self.send(url, || {
             self.inner
                 .post(url)
                 .header("Accept", "application/json, text/event-stream")
                 .json(body)
-        })
+        })?;
+        String::from_utf8(bytes).map_err(|e| ScanError::DataSource(format!("{url}: {e}")))
     }
 
     /// 404 is not retried. 429 waits as long as `Retry-After` says, twice at most;
@@ -56,15 +71,25 @@ impl Client {
         &self,
         url: &str,
         req: impl Fn() -> reqwest::blocking::RequestBuilder,
-    ) -> Result<String> {
+    ) -> Result<Vec<u8>> {
         check_allowed(url)?;
         let (mut last, mut attempt, mut waits) = (String::new(), 0, 0);
         while attempt < RETRIES {
             match req().send() {
                 Ok(resp) if resp.status().is_success() => {
-                    return resp
-                        .text()
-                        .map_err(|e| ScanError::DataSource(format!("{url}: {e}")));
+                    let too_big = || {
+                        ScanError::DataSource(format!("{url}: body larger than {MAX_BODY} bytes"))
+                    };
+                    if resp.content_length().is_some_and(|n| n > MAX_BODY as u64) {
+                        return Err(too_big());
+                    }
+                    let body = resp
+                        .bytes()
+                        .map_err(|e| ScanError::DataSource(format!("{url}: {e}")))?;
+                    if body.len() > MAX_BODY {
+                        return Err(too_big());
+                    }
+                    return Ok(body.to_vec());
                 }
                 Ok(resp) if resp.status() == reqwest::StatusCode::NOT_FOUND => {
                     return Err(ScanError::DataSource(format!("{url}: 404 Not Found")));
@@ -105,11 +130,26 @@ fn check_allowed(url: &str) -> Result<()> {
         .strip_prefix("https://")
         .and_then(|rest| rest.split('/').next())
         .ok_or_else(|| ScanError::DataSource(format!("not an https URL: {url}")))?;
-    if ALLOWED_HOSTS.contains(&host) {
+    if ALLOWED_HOSTS.contains(&host) || is_schema_host(host) {
         Ok(())
     } else {
         Err(ScanError::DataSource(format!("host not allowed: {host}")))
     }
+}
+
+/// `schema.cloudformation.<region>.amazonaws.com[.cn]` with a Region-shaped label.
+fn is_schema_host(host: &str) -> bool {
+    host.strip_prefix(SCHEMA_HOST_PREFIX).is_some_and(|rest| {
+        SCHEMA_HOST_SUFFIXES.iter().any(|sfx| {
+            rest.strip_suffix(sfx).is_some_and(|region| {
+                !region.is_empty()
+                    && region.split('-').count() >= 3
+                    && region
+                        .bytes()
+                        .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+            })
+        })
+    })
 }
 
 #[cfg(test)]
@@ -122,5 +162,18 @@ mod tests {
         assert!(check_allowed("https://example.com/x").is_err());
         assert!(check_allowed("http://docs.aws.eu/x").is_err());
         assert!(check_allowed("https://docs.aws.eu.evil.test/x").is_err());
+        let ok = "https://schema.cloudformation.eu-west-1.amazonaws.com/CloudformationSchema.zip";
+        assert!(check_allowed(ok).is_ok());
+        assert!(
+            check_allowed("https://schema.cloudformation.cn-north-1.amazonaws.com.cn/x").is_ok()
+        );
+        for bad in [
+            "https://schema.cloudformation.amazonaws.com/x",
+            "https://schema.cloudformation.evil.test.amazonaws.com/x",
+            "https://schema.cloudformation.eu-west-1.amazonaws.com.evil.test/x",
+            "https://xschema.cloudformation.eu-west-1.amazonaws.com/x",
+        ] {
+            assert!(check_allowed(bad).is_err(), "{bad}");
+        }
     }
 }

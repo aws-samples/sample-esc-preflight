@@ -18,3 +18,6 @@
   so region-specific values resolve as they will be deployed.
   For a CDK app without a hardcoded env:
     $ AWS_REGION=eusc-de-east-1 cdk synth
+
+⚠ eusc-de-east-1 publishes no CloudFormation schema bundle, so resource properties were not checked
+  against it. Run in live mode to check them with cloudformation:DescribeType.

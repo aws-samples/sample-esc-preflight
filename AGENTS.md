@@ -1,6 +1,6 @@
 # AGENTS.md
 
-`esc-preflight` is a Rust CLI that checks CloudFormation templates, CDK cloud assemblies and Terraform plans for the AWS European Sovereign Cloud. User docs: `README.md`. Contributor docs: `docs/DEVELOPMENT.md`.
+`esc-preflight` is a Rust CLI that checks CloudFormation templates, CDK cloud assemblies and Terraform plans for the AWS European Sovereign Cloud or any other target Region (`scan`), plans the move (`plan`) and compares two Regions (`compare`). User docs: `README.md`. Contributor docs: `docs/DEVELOPMENT.md`.
 
 ## Commands
 
@@ -13,14 +13,15 @@ UPDATE_GOLDEN=1 cargo test                  # after an intended report change; r
 
 ## Pipeline
 
-`reader` → `type_mapper` → `matcher` (availability) + `deviation` (documented differences) + `extractor` (hardcoded values) + `depth` (offered values) → `remediation` (fix, propose, flag) → `report`.
+`reader` → `type_mapper` → `matcher` (availability) + `deviation` (documented differences and dependencies) + `extractor` (hardcoded values) + `depth` (offered values and properties) + `account` (live account checks) → `remediation` (fix, propose, flag) → `report`. `plan` reads the report and the mechanism rules; `compare` reads two Regions' public data.
 
 | Path | Role |
 |---|---|
 | `src/reader.rs`, `src/reader/` | Parse templates, `cdk.out` and Terraform plan JSON into `src/model.rs` |
 | `src/provider/` | Fetch public data (AWS Knowledge MCP, ESC User Guide, Terraform provider data), read bundled partition facts, and run live-mode calls |
 | `src/remediation.rs` | Tier and edit for every required change |
-| `data/esc-guide-rules.json` | Deviation rules, see `docs/DEVELOPMENT.md` |
+| `src/plan.rs`, `src/compare.rs` | The `plan` and `compare` commands |
+| `data/rules.json` | Rules database, see `docs/DEVELOPMENT.md` |
 | `skills/esc-preflight/SKILL.md` | Skill that applies the report to a user's code |
 | `tests/fixtures/` | Test inputs and golden reports |
 
@@ -31,4 +32,5 @@ UPDATE_GOLDEN=1 cargo test                  # after an intended report change; r
 - Live mode is read-only: only List, Describe and Get calls (`probes_are_read_calls`).
 - The CLI never edits files and never calls a model.
 - Keep dependencies and flags minimal; prefer deleting code to adding it.
-- Every new or changed deviation rule needs a firing case and a near miss in `tests/fixtures/rule-cases.json`.
+- Every new or changed deviation or dependency rule with conditions needs a firing case and a near miss in `tests/fixtures/rule-cases.json`.
+- Every rule quotes its AWS source; `cargo test -- --ignored` checks the quotes.

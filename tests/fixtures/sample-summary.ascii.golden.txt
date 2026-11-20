@@ -16,3 +16,6 @@ esc-preflight, 8 resources, eusc-de-east-1
   * propose  hardcoded `eu-central-1`   -> `${AWS::Region}`
   * fix      hardcoded `amazonaws.com`  -> `${AWS::URLSuffix}`
   * fix      hardcoded `arn:aws:`       -> `arn:${AWS::Partition}:`
+
+! eusc-de-east-1 publishes no CloudFormation schema bundle, so resource properties were not checked
+  against it. Run in live mode to check them with cloudformation:DescribeType.

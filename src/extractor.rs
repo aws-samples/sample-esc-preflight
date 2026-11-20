@@ -30,6 +30,11 @@ pub struct PartitionFacts {
     pub region_partition: BTreeMap<String, String>,
     /// Regions in the target partition. With one, no cross-Region feature can exist.
     pub target_regions: usize,
+    /// The account the input moves to, when the move is to another account.
+    pub target_account: Option<String>,
+    /// The partition the input was produced for, when its environments name Regions of
+    /// one partition.
+    pub source_partition: Option<String>,
 }
 
 impl PartitionFacts {
@@ -38,6 +43,20 @@ impl PartitionFacts {
         self.dns_suffixes
             .get(suffix)
             .is_some_and(|ps| ps.contains(&self.target_partition))
+    }
+}
+
+/// The partition the input's environments are in, when they name Regions of exactly one.
+pub fn source_partition(template: &Template, facts: &PartitionFacts) -> Option<String> {
+    let found: BTreeSet<&String> = template
+        .envs()
+        .into_iter()
+        .filter_map(|e| e.region)
+        .filter_map(|r| facts.region_partition.get(&r))
+        .collect();
+    match found.len() {
+        1 => found.into_iter().next().cloned(),
+        _ => None,
     }
 }
 
@@ -56,8 +75,14 @@ pub enum HazardKind {
     RegionLiteral,
     /// An Availability Zone name or id.
     AvailabilityZone,
-    /// A 12-digit account id in an ARN.
+    /// A 12-digit account id: in an ARN, an AWS principal, an account condition key such
+    /// as `aws:SourceAccount`, or an ECR registry host.
     AccountId,
+    /// The id of a resource that exists in one Region and account, such as `ami-` or
+    /// `subnet-`.
+    ResourceId,
+    /// A form that works only in some Regions, from a literal rule (`rule`).
+    LegacyEndpoint,
 }
 
 /// What a hardcoded literal does when the input is deployed to the target.
@@ -89,6 +114,8 @@ pub struct Literal {
     pub kind: HazardKind,
     pub value: String,
     pub impact: Impact,
+    /// The literal rule that found it.
+    pub rule: Option<String>,
 }
 
 /// Values written for the environment the input was produced for.
@@ -119,7 +146,7 @@ pub fn hazards(template: &Template, facts: &PartitionFacts) -> Scan {
     };
     // Environments in the target still match, so their values are not hazards, but
     // they are not reported as environment literals.
-    let all_envs: Vec<DeployEnv> = template.envs();
+    let all_envs = template.envs();
     for r in template.resources.values().chain(template.outputs.values()) {
         let mut props = r.properties.clone();
         let root = if r.resource_type == OUTPUT_TYPE {
@@ -143,6 +170,9 @@ pub fn hazards(template: &Template, facts: &PartitionFacts) -> Scan {
             .collect();
         walk(&props, root, &mut |path, s| {
             let mut found = scan_literal(s, facts);
+            if is_account_position(path) && is_account_id(s) {
+                found.push((HazardKind::AccountId, s.to_string()));
+            }
             // An account next to another partition's ARN prefix belongs to that partition.
             let foreign_arn = found.iter().any(|(kind, lit)| {
                 *kind == HazardKind::ArnPartition
@@ -160,6 +190,18 @@ pub fn hazards(template: &Template, facts: &PartitionFacts) -> Scan {
                     })
             };
             found.retain(|(kind, lit)| {
+                // A Region the property requires, such as us-east-1 for a CloudFront
+                // certificate, is no hazard there.
+                if *kind == HazardKind::RegionLiteral
+                    && crate::rules::exempt(&r.resource_type, path, lit, facts)
+                {
+                    return false;
+                }
+                // A plan resolves references and lookups to ids; only typed ones count.
+                if *kind == HazardKind::ResourceId && r.origin != Origin::Cfn && !hand_written(lit)
+                {
+                    return false;
+                }
                 let env = envs.iter().find(|env| {
                     // A plan resolves `data.aws_partition` to a literal, so in a Terraform
                     // plan the planning partition's ARNs and hosts are indistinguishable
@@ -205,11 +247,7 @@ pub fn hazards(template: &Template, facts: &PartitionFacts) -> Scan {
             }
             let mut literals: Vec<Literal> = found
                 .into_iter()
-                .map(|(kind, value)| Literal {
-                    impact: impact(kind, &value, foreign_arn, facts),
-                    kind,
-                    value,
-                })
+                .map(|(kind, value)| literal(kind, value, s, foreign_arn, facts))
                 .collect();
             literals.sort();
             literals.dedup();
@@ -237,6 +275,33 @@ pub fn hazards(template: &Template, facts: &PartitionFacts) -> Scan {
     }
 }
 
+/// A literal found in `s`. A literal rule's match names its rule and Region within `s`.
+fn literal(
+    kind: HazardKind,
+    value: String,
+    s: &str,
+    foreign_arn: bool,
+    facts: &PartitionFacts,
+) -> Literal {
+    let by_rule = (kind == HazardKind::LegacyEndpoint)
+        .then(|| {
+            crate::rules::literals(s, facts)
+                .into_iter()
+                .find(|(_, lit, ..)| *lit == value)
+        })
+        .flatten();
+    Literal {
+        impact: match by_rule {
+            Some((_, _, region, _)) if region == facts.target_region => Impact::Portability,
+            Some(_) => Impact::Breaks,
+            None => impact(kind, &value, foreign_arn, facts),
+        },
+        rule: by_rule.map(|(r, ..)| r.id.clone()),
+        kind,
+        value,
+    }
+}
+
 fn from_env(
     kind: HazardKind,
     lit: &str,
@@ -246,11 +311,9 @@ fn from_env(
 ) -> bool {
     match kind {
         HazardKind::RegionLiteral => env.region.as_deref() == Some(lit),
-        HazardKind::AvailabilityZone => env.region.as_deref().is_some_and(|r| {
-            lit.strip_prefix(r)
-                .is_some_and(|z| z.len() == 1 && z.chars().all(|c| c.is_ascii_lowercase()))
-        }),
+        HazardKind::AvailabilityZone => env.region.as_deref().is_some_and(|r| zone_of(lit, r)),
         HazardKind::AccountId => env.account.as_deref() == Some(lit),
+        HazardKind::ResourceId | HazardKind::LegacyEndpoint => false,
         HazardKind::ArnPartition => partition.is_some_and(|p| lit == format!("arn:{p}:")),
         HazardKind::DnsSuffix | HazardKind::DualStackSuffix | HazardKind::ServicePrincipal => {
             partition
@@ -267,19 +330,29 @@ fn impact(kind: HazardKind, lit: &str, foreign_arn: bool, facts: &PartitionFacts
                 != Some(&facts.target_partition)
         }
         HazardKind::DnsSuffix | HazardKind::DualStackSuffix => !facts.is_target_suffix(lit),
-        HazardKind::ServicePrincipal => true,
+        HazardKind::ServicePrincipal | HazardKind::ResourceId | HazardKind::LegacyEndpoint => true,
         HazardKind::RegionLiteral => lit != facts.target_region,
         // A zone id does not name its Region.
-        HazardKind::AvailabilityZone => lit
-            .strip_prefix(facts.target_region.as_str())
-            .is_none_or(|z| !(z.len() == 1 && z.chars().all(|c| c.is_ascii_lowercase()))),
-        HazardKind::AccountId => foreign_arn,
+        HazardKind::AvailabilityZone => !zone_of(lit, &facts.target_region),
+        HazardKind::AccountId => {
+            foreign_arn || facts.target_account.as_deref().is_some_and(|a| a != lit)
+        }
     };
     if breaks {
         Impact::Breaks
     } else {
         Impact::Portability
     }
+}
+
+/// `lit` is a zone name of `region`: the Region and one zone letter.
+fn zone_of(lit: &str, region: &str) -> bool {
+    lit.strip_prefix(region)
+        .is_some_and(|z| z.len() == 1 && z.chars().all(|c| c.is_ascii_lowercase()))
+}
+
+pub fn is_account_id(s: &str) -> bool {
+    s.len() == 12 && s.bytes().all(|b| b.is_ascii_digit())
 }
 
 fn walk(v: &Value, path: &str, f: &mut dyn FnMut(&str, &str)) {
@@ -305,6 +378,17 @@ fn walk(v: &Value, path: &str, f: &mut dyn FnMut(&str, &str)) {
     }
 }
 
+/// `s` has a breaking Region or zone hazard (a Region or zone of another Region, or a
+/// zone id), so that hazard's fix changes `s`.
+pub fn names_other_region(s: &str, facts: &PartitionFacts) -> bool {
+    scan_literal(s, facts).iter().any(|(kind, lit)| {
+        matches!(
+            kind,
+            HazardKind::RegionLiteral | HazardKind::AvailabilityZone
+        ) && impact(*kind, lit, false, facts) == Impact::Breaks
+    })
+}
+
 fn scan_literal(s: &str, facts: &PartitionFacts) -> Vec<(HazardKind, String)> {
     let mut found = Vec::new();
     for p in &facts.partitions {
@@ -328,8 +412,19 @@ fn scan_literal(s: &str, facts: &PartitionFacts) -> Vec<(HazardKind, String)> {
             }
         }
     }
+    // A literal rule's match replaces its Region too, so the Region is not reported twice.
+    let rule_spans: Vec<std::ops::Range<usize>> = crate::rules::literals(s, facts)
+        .into_iter()
+        .map(|(_, lit, _, span)| {
+            found.push((HazardKind::LegacyEndpoint, lit.to_string()));
+            span
+        })
+        .collect();
     for region in facts.region_partition.keys() {
         for (start, end) in occurrences(s, region) {
+            if rule_spans.iter().any(|r| r.start <= start && end <= r.end) {
+                continue;
+            }
             let next = s[end..].chars().next();
             match next {
                 Some(c)
@@ -347,17 +442,51 @@ fn scan_literal(s: &str, facts: &PartitionFacts) -> Vec<(HazardKind, String)> {
         if is_az_id(token) {
             found.push((HazardKind::AvailabilityZone, token.to_string()));
         }
+        if is_resource_id(token) {
+            found.push((HazardKind::ResourceId, token.to_string()));
+        }
+    }
+    // The account of an ECR registry host, `<account>.dkr.ecr.<region>.<suffix>`.
+    for (i, _) in s.match_indices(".dkr.ecr") {
+        let account = s[..i]
+            .rsplit(|c: char| !c.is_ascii_digit())
+            .next()
+            .unwrap_or("");
+        if is_account_id(account) {
+            found.push((HazardKind::AccountId, account.to_string()));
+        }
     }
     // The account field of an ARN, also inside an `Fn::Join` piece such as
     // `:secretsmanager:us-east-1:111122223333:secret:x`.
     if s.contains(':') {
         for piece in s.split(':') {
-            if piece.len() == 12 && piece.bytes().all(|b| b.is_ascii_digit()) {
+            if is_account_id(piece) {
                 found.push((HazardKind::AccountId, piece.to_string()));
             }
         }
     }
     found
+}
+
+/// A position that holds a bare account ID: an AWS principal, a condition key that
+/// compares accounts (case-insensitive, as IAM reads them), or the principal and
+/// source account of a Lambda permission.
+fn is_account_position(path: &str) -> bool {
+    let bare = path.trim_end_matches(|c: char| c == ']' || c.is_ascii_digit());
+    let bare = bare.strip_suffix('[').unwrap_or(bare).to_ascii_lowercase();
+    [
+        "principal.aws",
+        "principal",
+        "sourceaccount",
+        "source_account",
+        "aws:sourceaccount",
+        "aws:sourceowner",
+        "aws:principalaccount",
+        "aws:resourceaccount",
+        "kms:calleraccount",
+    ]
+    .iter()
+    .any(|k| bare.ends_with(&format!(".{k}")))
 }
 
 fn suffix_kind(suffix: &str, facts: &PartitionFacts) -> HazardKind {
@@ -415,6 +544,23 @@ fn occurrences(s: &str, needle: &str) -> Vec<(usize, usize)> {
         .collect()
 }
 
+/// Prefixes of resource ids that name one resource in one Region and account.
+const RESOURCE_ID_PREFIXES: &[&str] = &[
+    "ami", "snap", "vol", "vpc", "subnet", "sg", "igw", "eipalloc", "rtb", "nat", "eni", "vpce",
+    "tgw", "pl", "lt", "acl", "dopt", "cgw", "vgw",
+];
+
+/// A resource id such as `ami-0abcdef1234567890`: a known prefix and 8 or 17 hex digits.
+fn is_resource_id(t: &str) -> bool {
+    t.split_once('-').is_some_and(|(p, hex)| {
+        RESOURCE_ID_PREFIXES.contains(&p)
+            && matches!(hex.len(), 8 | 17)
+            && hex
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    })
+}
+
 /// AZ id shape such as `euc1-az1` or `use1-az6`.
 fn is_az_id(t: &str) -> bool {
     let Some((head, tail)) = t.split_once("-az") else {
@@ -438,13 +584,34 @@ pub(crate) mod tests {
     }
 
     fn kinds(json: &str) -> Vec<(HazardKind, String)> {
-        let t = reader::parse_text(json).unwrap();
-        hazards(&t, &facts())
-            .hazards
+        lits(json, &facts())
             .into_iter()
-            .flat_map(|h| h.literals)
-            .map(|l| (l.kind, l.value))
+            .map(|(k, v, _)| (k, v))
             .collect()
+    }
+
+    /// The CDK container asset host of the stack's own environment is an environment
+    /// literal, re-synthesized for the target, not a hazard.
+    #[test]
+    fn a_cdk_asset_host_of_the_environment_is_an_environment_literal() {
+        let mut t = reader::parse_text(
+            r#"{"Resources":{"T":{"Type":"AWS::ECS::TaskDefinition","Properties":{"Image":
+            "444455556666.dkr.ecr.eu-central-1.amazonaws.com/cdk-hnb659fds-container-assets-444455556666-eu-central-1:abc"}}}}"#,
+        )
+        .unwrap();
+        t.resources.get_mut("T").unwrap().env = Some(DeployEnv {
+            region: Some("eu-central-1".into()),
+            account: Some("444455556666".into()),
+        });
+        let mut f = crate::provider::partition::facts("eu-west-1").unwrap();
+        f.target_account = Some("111122223333".into());
+        let scan = hazards(&t, &f);
+        let left: Vec<_> = scan.hazards.iter().flat_map(|h| &h.literals).collect();
+        assert!(
+            left.iter().all(|l| l.kind != HazardKind::AccountId),
+            "the environment's account, though another is the target: {left:?}"
+        );
+        assert_eq!(scan.env_literals.len(), 1);
     }
 
     /// CDK writes the partition as an `AWS::Partition` token, so a literal one was typed.
@@ -465,7 +632,8 @@ pub(crate) mod tests {
             [&Literal {
                 kind: HazardKind::ArnPartition,
                 value: "arn:aws-eusc:".into(),
-                impact: Impact::Portability
+                impact: Impact::Portability,
+                rule: None
             }]
         );
         assert!(scan.env_literals.is_empty());
@@ -498,26 +666,202 @@ pub(crate) mod tests {
         );
     }
 
+    fn lits(json: &str, f: &PartitionFacts) -> Vec<(HazardKind, String, Impact)> {
+        hazards(&reader::parse_text(json).unwrap(), f)
+            .hazards
+            .into_iter()
+            .flat_map(|h| h.literals)
+            .map(|l| (l.kind, l.value, l.impact))
+            .collect()
+    }
+
+    #[test]
+    fn resource_ids_name_one_region_and_account() {
+        let json = r#"{"Resources":{"R":{"Type":"AWS::EC2::Instance","Properties":{
+            "ImageId":"ami-0123456789abcdef0","SubnetId":"subnet-0abc1234",
+            "Name":"ami-builder","Tag":"sg-zzzzzzzz","Other":"vpc-0123"}}}}"#;
+        for f in [
+            facts(),
+            crate::provider::partition::facts("eu-west-1").unwrap(),
+        ] {
+            let l = lits(json, &f);
+            assert_eq!(
+                l,
+                [
+                    (
+                        HazardKind::ResourceId,
+                        "ami-0123456789abcdef0".into(),
+                        Impact::Breaks
+                    ),
+                    (
+                        HazardKind::ResourceId,
+                        "subnet-0abc1234".into(),
+                        Impact::Breaks
+                    )
+                ],
+                "{l:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn plan_resolved_ids_are_not_hazards() {
+        let plan = |constant: &str| {
+            format!(
+                r#"{{"format_version":"1.2","planned_values":{{"root_module":{{"resources":[
+                {{"address":"aws_instance.i","mode":"managed","type":"aws_instance",
+                 "provider_name":"registry.terraform.io/hashicorp/aws",
+                 "values":{{"ami":"ami-0123456789abcdef0","subnet_id":"subnet-0abc1234"}}}}]}}}},
+                "configuration":{{"root_module":{{"resources":[{{"expressions":{{"ami":{{"constant_value":"{constant}"}}}}}}]}}}}}}"#
+            )
+        };
+        let ids = |c: &str| -> Vec<String> {
+            lits(&plan(c), &facts())
+                .into_iter()
+                .filter(|(k, _, _)| *k == HazardKind::ResourceId)
+                .map(|(_, v, _)| v)
+                .collect()
+        };
+        assert_eq!(ids("ami-0123456789abcdef0"), ["ami-0123456789abcdef0"]);
+        assert!(
+            ids("x").is_empty(),
+            "looked-up and referenced ids are not typed"
+        );
+    }
+
+    #[test]
+    fn s3_dash_region_endpoints_get_the_standard_form() {
+        let f = crate::provider::partition::facts("eu-west-1").unwrap();
+        let l = lits(
+            r#"{"Resources":{"R":{"Type":"AWS::X::Y","Properties":{
+            "U":"b.s3-us-west-2.amazonaws.com/k","Own":"b.s3-eu-west-1.amazonaws.com/k",
+            "Logs":"archive-logs-s3-us-west-2"}}}}"#,
+            &f,
+        );
+        assert!(l.contains(&(
+            HazardKind::LegacyEndpoint,
+            "s3-us-west-2".into(),
+            Impact::Breaks
+        )));
+        assert!(l.contains(&(
+            HazardKind::LegacyEndpoint,
+            "s3-eu-west-1".into(),
+            Impact::Portability
+        )));
+        let regions: Vec<_> = l
+            .iter()
+            .filter(|(k, _, _)| *k == HazardKind::RegionLiteral)
+            .map(|(_, v, _)| v.as_str())
+            .collect();
+        assert_eq!(
+            regions,
+            ["us-west-2"],
+            "only the bucket name's Region: {l:?}"
+        );
+    }
+
+    #[test]
+    fn source_partition_needs_one_known_partition() {
+        let f = facts();
+        let with = |regions: &[&str]| {
+            let mut t = Template::default();
+            for (i, r) in regions.iter().enumerate() {
+                t.resources.insert(
+                    format!("R{i}"),
+                    crate::model::Resource {
+                        logical_id: format!("R{i}"),
+                        resource_type: "AWS::S3::Bucket".into(),
+                        properties: Value::Null,
+                        origin: Origin::Cfn,
+                        env: Some(DeployEnv {
+                            region: Some(r.to_string()),
+                            account: None,
+                        }),
+                        cdk_path: None,
+                    },
+                );
+            }
+            source_partition(&t, &f)
+        };
+        assert_eq!(with(&[]), None, "no environment");
+        assert_eq!(with(&["eu-west-1", "us-east-1"]).as_deref(), Some("aws"));
+        assert_eq!(
+            with(&["eu-west-1", "eusc-de-east-1"]),
+            None,
+            "two partitions"
+        );
+        assert_eq!(with(&["xx-nowhere-1"]), None, "an unknown Region");
+    }
+
+    /// CloudFront takes certificates from us-east-1 only, so that Region is required
+    /// there; elsewhere, and in other partitions, it stays a hazard.
+    #[test]
+    fn a_required_region_is_no_hazard_at_its_property() {
+        let euw1 = crate::provider::partition::facts("eu-west-1").unwrap();
+        let json = r#"{"Resources":{"D":{"Type":"AWS::CloudFront::Distribution","Properties":{
+            "DistributionConfig":{"ViewerCertificate":{
+                "AcmCertificateArn":"arn:aws:acm:us-east-1:111122223333:certificate/x"},
+              "Comment":"us-east-1"}}}}}"#;
+        let regions = |f: &PartitionFacts| -> Vec<String> {
+            lits(json, f)
+                .into_iter()
+                .filter(|(k, _, _)| *k == HazardKind::RegionLiteral)
+                .map(|(_, v, _)| v)
+                .collect()
+        };
+        assert_eq!(regions(&euw1), ["us-east-1"], "only the comment");
+        assert_eq!(regions(&facts()), ["us-east-1", "us-east-1"]);
+    }
+
+    /// Bare account IDs count where a policy names an account, and in ECR hosts.
+    #[test]
+    fn bare_account_ids_in_principals_conditions_and_registries() {
+        let mut f = crate::provider::partition::facts("eu-west-1").unwrap();
+        f.target_account = Some("111122223333".into());
+        let json = r#"{"Resources":{"R":{"Type":"AWS::IAM::Role","Properties":{
+            "AssumeRolePolicyDocument":{"Statement":[{"Principal":{"AWS":["444455556666"]},
+              "Condition":{"StringEquals":{"aws:SourceAccount":"111122223333"}}}]},
+            "Description":"444455556666",
+            "Image":"444455556666.dkr.ecr.eu-west-1.amazonaws.com/app:1"}},
+          "P":{"Type":"AWS::Lambda::Permission","Properties":{
+            "Principal":"444455556666","SourceAccount":"111122223333"}},
+          "Q":{"Type":"aws_lambda_permission","Properties":{
+            "principal":"444455556666","source_account":"111122223333","function_name":"444455556666"}},
+          "K":{"Type":"AWS::KMS::Key","Properties":{"KeyPolicy":{"Statement":[{
+            "Condition":{"StringEquals":{"kms:callerAccount":"444455556666"}}}]}}}}}"#;
+        let accounts: Vec<(String, Impact)> = lits(json, &f)
+            .into_iter()
+            .filter(|(k, _, _)| *k == HazardKind::AccountId)
+            .map(|(_, v, i)| (v, i))
+            .collect();
+        assert_eq!(
+            accounts,
+            // Sorted by resource and path.
+            [
+                ("444455556666".to_string(), Impact::Breaks),
+                ("444455556666".to_string(), Impact::Breaks),
+                ("111122223333".to_string(), Impact::Portability),
+                ("444455556666".to_string(), Impact::Breaks),
+                ("111122223333".to_string(), Impact::Portability),
+                ("111122223333".to_string(), Impact::Portability),
+                ("444455556666".to_string(), Impact::Breaks),
+                ("444455556666".to_string(), Impact::Breaks),
+            ],
+            "not the description"
+        );
+    }
+
     #[test]
     fn other_regions_of_the_target_partition_break() {
         let mut f = crate::provider::partition::facts("eu-west-1").unwrap();
-        let t = reader::parse_text(
+        let lits = lits(
             r#"{"Resources":{"R":{"Type":"AWS::X::Y","Properties":{
             "Q":"https://sqs.eu-central-1.amazonaws.com/111122223333/q",
             "Arn":"arn:aws:sqs:eu-west-1:111122223333:q",
             "Z":"eu-central-1a","Own":"eu-west-1",
             "P":{"Service":["lambda.amazonaws.com","s3.ap-east-1.amazonaws.com"]}}}}}"#,
-        )
-        .unwrap();
-        let by = |f: &PartitionFacts| -> Vec<(HazardKind, String, Impact)> {
-            hazards(&t, f)
-                .hazards
-                .into_iter()
-                .flat_map(|h| h.literals)
-                .map(|l| (l.kind, l.value, l.impact))
-                .collect()
-        };
-        let lits = by(&f);
+            &f,
+        );
         use HazardKind::*;
         use Impact::*;
         for want in [

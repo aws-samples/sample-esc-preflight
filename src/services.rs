@@ -64,6 +64,13 @@ pub fn index() -> &'static Index {
     })
 }
 
+/// A service the code calls by its endpoint prefix, such as `sts`.
+pub fn service(prefix: &str) -> &'static Service {
+    index()
+        .by_endpoint_prefix(prefix)
+        .expect("service is in the bundled table")
+}
+
 impl Index {
     /// By botocore `serviceId`, e.g. `Elastic Load Balancing v2`.
     pub fn by_service_id(&self, id: &str) -> Option<&Service> {

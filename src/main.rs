@@ -1,14 +1,18 @@
+mod account;
 mod cli;
+mod compare;
 mod depth;
 mod deviation;
 mod error;
 mod extractor;
 mod matcher;
 mod model;
+mod plan;
 mod provider;
 mod reader;
 mod remediation;
 mod report;
+mod rules;
 mod services;
 #[cfg(test)]
 mod test_inputs;
