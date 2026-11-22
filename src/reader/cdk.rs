@@ -113,6 +113,18 @@ impl Walk {
         let doc: Value = serde_json::from_str(&text)
             .map_err(|e| ScanError::Input(format!("{}: {e}", path.display())))?;
         let parsed = super::from_value(&doc, env.clone())?;
+        self.t.macros.extend(parsed.macros);
+        self.t.macros.sort();
+        self.t.macros.dedup();
+        for (param, path) in parsed.ssm_defaults {
+            self.t.ssm_defaults.insert(format!("{id}/{param}"), path);
+        }
+        for (r, deps) in parsed.depends_on {
+            self.t.depends_on.insert(
+                format!("{id}/{r}"),
+                deps.into_iter().map(|d| format!("{id}/{d}")).collect(),
+            );
+        }
         for (name, mut o) in parsed.outputs {
             let full = format!("{id}/{name}");
             o.logical_id.clone_from(&full);

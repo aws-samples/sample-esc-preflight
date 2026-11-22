@@ -1,5 +1,54 @@
 {
   "$defs": {
+    "AccountChecks": {
+      "properties": {
+        "quotas": {
+          "description": "One entry per quota the input counts against.",
+          "items": {
+            "$ref": "#/$defs/QuotaCheck"
+          },
+          "type": "array"
+        },
+        "region_opt_in": {
+          "description": "`opt-in-not-required`, `opted-in` or `not-opted-in`, as EC2 reports it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scp": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScpCheck"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "skipped": {
+          "items": {
+            "$ref": "#/$defs/Skipped"
+          },
+          "type": "array"
+        },
+        "ssm_parameters": {
+          "description": "AWS public SSM parameters the input resolves.",
+          "items": {
+            "$ref": "#/$defs/SsmParameterCheck"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "quotas",
+        "region_opt_in",
+        "scp",
+        "skipped",
+        "ssm_parameters"
+      ],
+      "type": "object"
+    },
     "Cause": {
       "description": "`ids` names what fired: hazard kinds, the depth kind, or the guide rule.",
       "properties": {
@@ -29,7 +78,12 @@
         },
         {
           "const": "deviation",
-          "description": "The ESC User Guide documents the feature as not available.",
+          "description": "The ESC User Guide or another AWS page documents the feature as not available.",
+          "type": "string"
+        },
+        {
+          "const": "dependency",
+          "description": "Something the resource needs stays outside the target (a dependency rule).",
           "type": "string"
         },
         {
@@ -51,8 +105,81 @@
           "const": "environment",
           "description": "Values written for the input's own environment.",
           "type": "string"
+        },
+        {
+          "const": "account",
+          "description": "The target account: Region opt-in, quotas, SCPs, public SSM parameters.",
+          "type": "string"
         }
       ]
+    },
+    "DecidedBy": {
+      "description": "The source that decided a finding.",
+      "oneOf": [
+        {
+          "const": "knowledge",
+          "description": "The AWS Knowledge MCP data.",
+          "type": "string"
+        },
+        {
+          "const": "live",
+          "description": "A read-only call to the target account.",
+          "type": "string"
+        },
+        {
+          "const": "guide",
+          "description": "A difference on the ESC User Guide.",
+          "type": "string"
+        },
+        {
+          "const": "schema",
+          "description": "The target's CloudFormation resource schema.",
+          "type": "string"
+        },
+        {
+          "const": "rule",
+          "description": "A rule of the bundled rules database with a quoted AWS source.",
+          "type": "string"
+        },
+        {
+          "const": "scanner",
+          "description": "The scanner itself, from the input and the bundled partition data.",
+          "type": "string"
+        }
+      ]
+    },
+    "Dependency": {
+      "description": "Something a resource needs that stays outside the target, or that the move cannot\ntake along, from a dependency rule. The owner decides.",
+      "properties": {
+        "decided_by": {
+          "$ref": "#/$defs/DecidedBy"
+        },
+        "documented": {
+          "description": "The documented sentence the dependency rests on.",
+          "type": "string"
+        },
+        "logical_id": {
+          "type": "string"
+        },
+        "resource_type": {
+          "type": "string"
+        },
+        "rule": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "decided_by",
+        "documented",
+        "logical_id",
+        "resource_type",
+        "rule",
+        "source"
+      ],
+      "type": "object"
     },
     "DeployEnv": {
       "description": "Where the input was synthesized (CDK) or planned (Terraform). Values written for\nthis environment are not hardcoded by hand; they change when the input is\nproduced for the target instead.",
@@ -116,26 +243,44 @@
       "type": "object"
     },
     "DepthKind": {
-      "enum": [
-        "instance-type",
-        "availability-zone",
-        "foundation-model",
-        "inference-profile",
-        "rds-engine-version",
-        "cache-engine-version",
-        "cache-node-type",
-        "neptune-engine-version",
-        "document-db-engine-version",
-        "redshift-node-type"
-      ],
-      "type": "string"
+      "oneOf": [
+        {
+          "enum": [
+            "instance-type",
+            "availability-zone",
+            "foundation-model",
+            "inference-profile",
+            "rds-engine-version",
+            "cache-engine-version",
+            "cache-node-type",
+            "neptune-engine-version",
+            "document-db-engine-version",
+            "redshift-node-type"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "property",
+          "description": "A top-level resource property the target's CloudFormation schema lacks.",
+          "type": "string"
+        }
+      ]
     },
     "DepthSource": {
-      "enum": [
-        "knowledge",
-        "live"
-      ],
-      "type": "string"
+      "oneOf": [
+        {
+          "enum": [
+            "knowledge",
+            "live"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "schema",
+          "description": "The target's CloudFormation resource schema.",
+          "type": "string"
+        }
+      ]
     },
     "Deviation": {
       "properties": {
@@ -146,8 +291,11 @@
             "null"
           ]
         },
+        "decided_by": {
+          "$ref": "#/$defs/DecidedBy"
+        },
         "documented": {
-          "description": "The documented difference, as the guide states it.",
+          "description": "The documented difference, as the guide or the AWS page states it.",
           "type": "string"
         },
         "logical_id": {
@@ -168,6 +316,7 @@
       },
       "required": [
         "conflict",
+        "decided_by",
         "documented",
         "logical_id",
         "resource_type",
@@ -287,6 +436,10 @@
             "null"
           ]
         },
+        "decided_by": {
+          "$ref": "#/$defs/DecidedBy",
+          "description": "The source that decided whether the resource is offered. Roadmap states always\ncome from the Knowledge MCP data."
+        },
         "depth": {
           "description": "Property values checked against what the target region offers.",
           "items": {
@@ -338,6 +491,7 @@
       },
       "required": [
         "cdk_path",
+        "decided_by",
         "depth",
         "evidence",
         "logical_id",
@@ -425,7 +579,17 @@
         },
         {
           "const": "account-id",
-          "description": "A 12-digit account id in an ARN.",
+          "description": "A 12-digit account id: in an ARN, an AWS principal, an account condition key such\nas `aws:SourceAccount`, or an ECR registry host.",
+          "type": "string"
+        },
+        {
+          "const": "resource-id",
+          "description": "The id of a resource that exists in one Region and account, such as `ami-` or\n`subnet-`.",
+          "type": "string"
+        },
+        {
+          "const": "legacy-endpoint",
+          "description": "A form that works only in some Regions, from a literal rule (`rule`).",
           "type": "string"
         }
       ]
@@ -480,6 +644,13 @@
         "kind": {
           "$ref": "#/$defs/HazardKind"
         },
+        "rule": {
+          "description": "The literal rule that found it.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "value": {
           "type": "string"
         }
@@ -487,6 +658,7 @@
       "required": [
         "impact",
         "kind",
+        "rule",
         "value"
       ],
       "type": "object"
@@ -509,6 +681,10 @@
           },
           "type": "array"
         },
+        "fetched_at": {
+          "description": "When the account was read.",
+          "type": "string"
+        },
         "read_only_access": {
           "description": "The caller's role has ReadOnlyAccess (or AdministratorAccess) attached, so an\nAccessDenied from a service means the service is not offered.",
           "type": [
@@ -520,6 +696,7 @@
       "required": [
         "account_id",
         "depth_probes",
+        "fetched_at",
         "read_only_access"
       ],
       "type": "object"
@@ -548,7 +725,7 @@
       "description": "What `--fail-on` decides, per category, from the summary.",
       "properties": {
         "blocker": {
-          "description": "Not available, a depth value the target does not offer, or a feature the ESC\nUser Guide documents as not available.",
+          "description": "Not available, a depth value the target does not offer, a feature the ESC\nUser Guide or another AWS page documents as not available, or an account check\nthat fails.",
           "type": "boolean"
         },
         "disputed": {
@@ -556,7 +733,7 @@
           "type": "boolean"
         },
         "hazard": {
-          "description": "A hardcoded literal or an environment literal.",
+          "description": "A hardcoded literal, an environment literal or a documented dependency.",
           "type": "boolean"
         }
       },
@@ -570,6 +747,7 @@
     "Provenance": {
       "properties": {
         "fetched_at": {
+          "description": "When the public data was fetched; `live.fetched_at` is when the account was read.",
           "type": "string"
         },
         "input_environments": {
@@ -604,8 +782,26 @@
           "description": "botocore release of the bundled partition data.",
           "type": "string"
         },
+        "schemas": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SchemaProvenance"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The target's CloudFormation resource schemas the property checks read. Null when\nnone were read: the input has no CloudFormation resource types, or the target\npublishes no schema bundle and live mode is off."
+        },
         "source_format": {
           "$ref": "#/$defs/SourceFormat"
+        },
+        "target_account": {
+          "description": "The account the input moves to, when `--account` is given.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "target_region": {
           "type": "string"
@@ -641,13 +837,77 @@
         "knowledge",
         "live",
         "partitions_version",
+        "schemas",
         "source_format",
+        "target_account",
         "target_region",
         "terraform",
         "tool_version",
         "user_guide"
       ],
       "type": "object"
+    },
+    "QuotaCheck": {
+      "properties": {
+        "doc": {
+          "type": "string"
+        },
+        "exceeded": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "needed": {
+          "description": "What the input alone needs, without what the account already uses.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "quota": {
+          "format": "double",
+          "type": "number"
+        },
+        "quota_code": {
+          "type": "string"
+        },
+        "rule": {
+          "type": "string"
+        },
+        "service_code": {
+          "type": "string"
+        },
+        "uncounted": {
+          "description": "Values the input sets with a reference or function, so they are not counted.\nNegative values (Terraform's `-1`, no reservation) count as zero.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "value_source": {
+          "$ref": "#/$defs/QuotaSource",
+          "description": "`applied` for the account's own value, `default` when none is applied."
+        }
+      },
+      "required": [
+        "doc",
+        "exceeded",
+        "name",
+        "needed",
+        "quota",
+        "quota_code",
+        "rule",
+        "service_code",
+        "uncounted",
+        "value_source"
+      ],
+      "type": "object"
+    },
+    "QuotaSource": {
+      "enum": [
+        "applied",
+        "default"
+      ],
+      "type": "string"
     },
     "Replacement": {
       "properties": {
@@ -695,6 +955,9 @@
             "null"
           ]
         },
+        "decided_by": {
+          "$ref": "#/$defs/DecidedBy"
+        },
         "doc": {
           "type": [
             "string",
@@ -741,6 +1004,7 @@
         "cdk_path",
         "change",
         "consequence",
+        "decided_by",
         "doc",
         "edits",
         "impact",
@@ -774,6 +1038,128 @@
       ],
       "type": "object"
     },
+    "SchemaProvenance": {
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/SchemaSource"
+        },
+        "types": {
+          "description": "Resource types whose schema was read.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "url": {
+          "description": "The bundle read, for `bundle`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "source",
+        "types",
+        "url"
+      ],
+      "type": "object"
+    },
+    "SchemaSource": {
+      "oneOf": [
+        {
+          "const": "bundle",
+          "description": "The Region's public schema bundle.",
+          "type": "string"
+        },
+        {
+          "const": "live",
+          "description": "`cloudformation:DescribeType` in the target account.",
+          "type": "string"
+        }
+      ]
+    },
+    "ScpCheck": {
+      "properties": {
+        "policies": {
+          "description": "Service control policies that apply to the account, through its OUs and root.",
+          "items": {
+            "$ref": "#/$defs/ScpPolicy"
+          },
+          "type": "array"
+        },
+        "status": {
+          "$ref": "#/$defs/ScpStatus"
+        }
+      },
+      "required": [
+        "policies",
+        "status"
+      ],
+      "type": "object"
+    },
+    "ScpPolicy": {
+      "properties": {
+        "conditional": {
+          "description": "The denying statement has further conditions, such as exempted principals, or\ndenies only some actions.",
+          "type": "boolean"
+        },
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "verdict": {
+          "$ref": "#/$defs/ScpVerdict"
+        }
+      },
+      "required": [
+        "conditional",
+        "id",
+        "name",
+        "verdict"
+      ],
+      "type": "object"
+    },
+    "ScpStatus": {
+      "oneOf": [
+        {
+          "enum": [
+            "evaluated"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "not-in-organization",
+          "description": "The account is in no organization, so no SCP applies.",
+          "type": "string"
+        },
+        {
+          "const": "management-account",
+          "description": "SCPs do not affect the management account.",
+          "type": "string"
+        }
+      ]
+    },
+    "ScpVerdict": {
+      "oneOf": [
+        {
+          "const": "denies-target",
+          "description": "A Deny statement's `aws:RequestedRegion` condition matches the target.",
+          "type": "string"
+        },
+        {
+          "const": "allows-target",
+          "description": "Its `aws:RequestedRegion` conditions leave the target out of every Deny.",
+          "type": "string"
+        },
+        {
+          "const": "not-evaluated",
+          "description": "No `aws:RequestedRegion` condition the scanner can evaluate.",
+          "type": "string"
+        }
+      ]
+    },
     "Severity": {
       "oneOf": [
         {
@@ -783,10 +1169,25 @@
         },
         {
           "const": "caveat",
-          "description": "The feature works with an ESC difference.",
+          "description": "The feature works with a documented difference.",
           "type": "string"
         }
       ]
+    },
+    "Skipped": {
+      "properties": {
+        "check": {
+          "type": "string"
+        },
+        "reason": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "check",
+        "reason"
+      ],
+      "type": "object"
     },
     "SourceFormat": {
       "enum": [
@@ -794,6 +1195,29 @@
         "terraform-plan"
       ],
       "type": "string"
+    },
+    "SsmParameterCheck": {
+      "properties": {
+        "exists": {
+          "type": "boolean"
+        },
+        "name": {
+          "type": "string"
+        },
+        "used_by": {
+          "description": "Where the input uses it: resource logical ids or `Parameters/<name>`.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "exists",
+        "name",
+        "used_by"
+      ],
+      "type": "object"
     },
     "State": {
       "enum": [
@@ -807,6 +1231,12 @@
     },
     "Summary": {
       "properties": {
+        "account_blockers": {
+          "description": "Account checks that block deployment (see `account`).",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
         "available": {
           "format": "uint",
           "minimum": 0,
@@ -818,7 +1248,13 @@
           "type": "integer"
         },
         "caveats": {
-          "description": "Features that work with an ESC difference the guide documents.",
+          "description": "Features that work with a documented difference.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "dependencies": {
+          "description": "Documented dependencies outside the target, one per resource and rule (see\n`dependencies`).",
           "format": "uint",
           "minimum": 0,
           "type": "integer"
@@ -830,7 +1266,7 @@
           "type": "integer"
         },
         "deviations": {
-          "description": "Resources that use a feature the ESC User Guide documents as not available.",
+          "description": "Resources that use a feature the ESC User Guide or another AWS page documents as\nnot available.",
           "format": "uint",
           "minimum": 0,
           "type": "integer"
@@ -897,9 +1333,11 @@
         }
       },
       "required": [
+        "account_blockers",
         "available",
         "cannot_assess",
         "caveats",
+        "dependencies",
         "depth_blockers",
         "deviations",
         "disputed",
@@ -1001,6 +1439,16 @@
           "const": "stale-rules",
           "description": "Rules matched, but the guide no longer contains their sentence.",
           "type": "string"
+        },
+        {
+          "const": "properties-unchecked",
+          "description": "No schema of the target was read, so properties were not checked.",
+          "type": "string"
+        },
+        {
+          "const": "account-checks-skipped",
+          "description": "Live mode could not run some account checks.",
+          "type": "string"
         }
       ]
     },
@@ -1028,8 +1476,25 @@
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
+    "account": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AccountChecks"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "description": "Live mode's checks of the target account; null in public mode."
+    },
     "data_provenance": {
       "$ref": "#/$defs/Provenance"
+    },
+    "dependencies": {
+      "items": {
+        "$ref": "#/$defs/Dependency"
+      },
+      "type": "array"
     },
     "deviations": {
       "items": {
@@ -1105,7 +1570,9 @@
     }
   },
   "required": [
+    "account",
     "data_provenance",
+    "dependencies",
     "deviations",
     "documented_differences",
     "environment_literals",

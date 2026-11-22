@@ -11,6 +11,7 @@ pub mod http;
 pub mod knowledge;
 pub mod live;
 pub mod partition;
+pub mod schema;
 pub mod terraform;
 
 use crate::error::Result;

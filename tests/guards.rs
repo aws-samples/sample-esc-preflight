@@ -11,6 +11,8 @@ const ALLOWED_HOSTS: &[&str] = &[
     "docs.aws.eu",
     "registry.terraform.io",
     "raw.githubusercontent.com",
+    // CloudFormation schema bundles: `schema.cloudformation.<region>.<suffix>`.
+    "schema.cloudformation.",
 ];
 
 /// Hosts of documentation links written into the report, never fetched.
@@ -22,6 +24,12 @@ const TEST_ONLY_HOSTS: &[&str] = &[
     "docs.aws.eu.evil.test",
     "sqs.eu-central-1.amazonaws.com",
     "sqs.eusc-de-east-1.amazonaws.eu",
+    "schema.cloudformation.eu-west-1.amazonaws.com",
+    "schema.cloudformation.cn-north-1.amazonaws.com.cn",
+    "schema.cloudformation.amazonaws.com",
+    "schema.cloudformation.evil.test.amazonaws.com",
+    "schema.cloudformation.eu-west-1.amazonaws.com.evil.test",
+    "xschema.cloudformation.eu-west-1.amazonaws.com",
 ];
 
 fn sources() -> Vec<(String, String)> {

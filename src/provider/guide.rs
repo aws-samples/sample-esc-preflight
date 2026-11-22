@@ -1,7 +1,7 @@
 //! The ESC User Guide service pages.
 //!
 //! Each page's "How X differs" section lists feature differences, attached to findings
-//! as notes and matched to resources by the rules in `data/esc-guide-rules.json`.
+//! as notes and matched to resources by the rules in `data/rules.json`.
 
 use std::collections::BTreeMap;
 
@@ -112,7 +112,7 @@ pub fn fetch(client: &Client) -> Result<GuideData> {
 }
 
 /// `(slug, title)` of every page under the guide's Services node.
-pub fn service_pages(toc_json: &str) -> Result<Vec<(String, String)>> {
+fn service_pages(toc_json: &str) -> Result<Vec<(String, String)>> {
     let bad = |w: &str| ScanError::DataSource(format!("ESC User Guide table of contents: {w}"));
     let v: Value = serde_json::from_str(toc_json).map_err(|e| bad(&e.to_string()))?;
     let services = v["contents"]
@@ -130,22 +130,19 @@ pub fn service_pages(toc_json: &str) -> Result<Vec<(String, String)>> {
 }
 
 /// Builds the guide data from fetched pages. Minimum counts are checked by `fetch`.
-pub fn from_pages(pages: Vec<(String, String, String)>) -> GuideData {
+fn from_pages(pages: Vec<(String, String, String)>) -> GuideData {
     #[derive(Deserialize)]
     struct Table {
         pages: BTreeMap<String, Mapping>,
     }
-    let table = serde_json::from_str::<Table>(PAGES_JSON)
+    let mut table = serde_json::from_str::<Table>(PAGES_JSON)
         .expect("bundled page table is valid")
         .pages;
     let pages = pages
         .into_iter()
         .map(|(slug, title, html)| {
-            let m = match table.get(&slug) {
-                Some(m) => Mapping {
-                    services: m.services.clone(),
-                    types: m.types.clone(),
-                },
+            let m = match table.remove(&slug) {
+                Some(m) => m,
                 None if services::index().by_endpoint_prefix(&slug).is_some() => Mapping {
                     services: vec![slug.clone()],
                     types: Vec::new(),

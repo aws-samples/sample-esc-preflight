@@ -9,7 +9,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::Serialize;
 
 use crate::depth::DepthCheck;
-use crate::model::Template;
+use crate::model::{DecidedBy, Template};
 use crate::provider::knowledge::{Knowledge, State};
 use crate::provider::terraform::TfMaps;
 use crate::type_mapper::{Check, Mapping, TypeMapper};
@@ -120,6 +120,9 @@ pub struct Finding {
     pub evidence: Option<Evidence>,
     pub roadmap: Option<Roadmap>,
     pub note: Option<String>,
+    /// The source that decided whether the resource is offered. Roadmap states always
+    /// come from the Knowledge MCP data.
+    pub decided_by: DecidedBy,
     /// The live check contradicted the Knowledge MCP data (an AWS data-staleness signal).
     /// Visible in the JSON as `evidence.knowledge` against `evidence.live`.
     #[serde(skip)]
@@ -152,6 +155,7 @@ pub fn assess(
             evidence: None,
             roadmap: None,
             note,
+            decided_by: DecidedBy::Scanner,
             divergence: false,
             depth: depth.clone(),
             type_gap: false,
@@ -238,6 +242,11 @@ pub fn assess(
             }),
             roadmap,
             note: join(notes),
+            decided_by: if live_listed.is_some() || refused {
+                DecidedBy::Live
+            } else {
+                DecidedBy::Knowledge
+            },
             divergence,
             type_gap,
             ..base(verdict, None)
@@ -458,6 +467,11 @@ mod tests {
         let f = one("AWS::Lambda::Function", Some(&registry(&[])));
         assert_eq!(f.verdict, Verdict::NotAvailable);
         assert!(f.divergence);
+        assert_eq!(f.decided_by, DecidedBy::Live);
+        assert_eq!(
+            one("AWS::Lambda::Function", None).decided_by,
+            DecidedBy::Knowledge
+        );
         let f = one(
             "AWS::QBusiness::Application",
             Some(&registry(&["AWS::QBusiness::Application"])),

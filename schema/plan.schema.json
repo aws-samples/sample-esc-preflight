@@ -1,0 +1,392 @@
+{
+  "$defs": {
+    "Boundary": {
+      "enum": [
+        "global",
+        "regional",
+        "zonal"
+      ],
+      "type": "string"
+    },
+    "Content": {
+      "oneOf": [
+        {
+          "enum": [
+            "configuration",
+            "code",
+            "data"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "supplemental",
+          "description": "Logs, metrics and similar records that stay where they were written.",
+          "type": "string"
+        }
+      ]
+    },
+    "DataDecision": {
+      "oneOf": [
+        {
+          "const": "migrate",
+          "description": "Move the data with the resource.",
+          "type": "string"
+        },
+        {
+          "const": "recreate",
+          "description": "Create new content in the target, such as a new key.",
+          "type": "string"
+        },
+        {
+          "const": "drain",
+          "description": "Let the source empty before switching over.",
+          "type": "string"
+        },
+        {
+          "const": "leave",
+          "description": "Keep the history in the source.",
+          "type": "string"
+        }
+      ]
+    },
+    "Layer": {
+      "enum": [
+        "foundation",
+        "shared",
+        "workload"
+      ],
+      "type": "string"
+    },
+    "MovePath": {
+      "oneOf": [
+        {
+          "const": "redeploy",
+          "description": "Deploy the input again in the target.",
+          "type": "string"
+        },
+        {
+          "const": "replicate",
+          "description": "A service mechanism copies the content continuously.",
+          "type": "string"
+        },
+        {
+          "const": "restore",
+          "description": "Copy a backup, snapshot or export and restore it in the target.",
+          "type": "string"
+        },
+        {
+          "const": "blocked",
+          "description": "A scan finding blocks the resource in the target.",
+          "type": "string"
+        },
+        {
+          "const": "unknown",
+          "description": "No rule says how the resource moves.",
+          "type": "string"
+        }
+      ]
+    },
+    "PlanEntry": {
+      "properties": {
+        "blocked_by": {
+          "description": "Scan findings that block the resource in the target, as cause ids.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "boundary": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Boundary"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cdk_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "content": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Content"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "crosses_partition": {
+          "description": "Whether `via` works across partitions; null where the documentation does not say.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "data": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DataDecision"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "doc": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "layer": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Layer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "logical_id": {
+          "type": "string"
+        },
+        "note": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "path": {
+          "$ref": "#/$defs/MovePath"
+        },
+        "resource_type": {
+          "type": "string"
+        },
+        "rule": {
+          "description": "The mechanism rule, and the AWS page it rests on.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "via": {
+          "description": "The named mechanism.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "wave": {
+          "description": "1-based. A resource is in a later wave than everything it references, and\nfoundation, shared and workload resources start at waves 1, 2 and 3.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "blocked_by",
+        "boundary",
+        "cdk_path",
+        "content",
+        "crosses_partition",
+        "data",
+        "doc",
+        "layer",
+        "logical_id",
+        "note",
+        "path",
+        "resource_type",
+        "rule",
+        "via",
+        "wave"
+      ],
+      "type": "object"
+    },
+    "PlanProvenance": {
+      "properties": {
+        "crosses_partition": {
+          "description": "The move goes to another partition; null when the source is unknown.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "source_format": {
+          "$ref": "#/$defs/SourceFormat"
+        },
+        "source_region": {
+          "description": "The input's environment, else `--from`; null when neither names a Region.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "target_region": {
+          "type": "string"
+        },
+        "tool_version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "crosses_partition",
+        "source_format",
+        "source_region",
+        "target_region",
+        "tool_version"
+      ],
+      "type": "object"
+    },
+    "PlanSummary": {
+      "properties": {
+        "blocked": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "data_to_move": {
+          "description": "Resources whose content is replicated or restored.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "redeploy": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "replicate": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "resources": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "restore": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "unknown": {
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "waves": {
+          "description": "Waves that have resources.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "blocked",
+        "data_to_move",
+        "redeploy",
+        "replicate",
+        "resources",
+        "restore",
+        "unknown",
+        "waves"
+      ],
+      "type": "object"
+    },
+    "PlanWarning": {
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/PlanWarningCode"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
+    },
+    "PlanWarningCode": {
+      "oneOf": [
+        {
+          "const": "no-source-region",
+          "description": "No source Region: partition limits are not applied.",
+          "type": "string"
+        },
+        {
+          "const": "source-is-target",
+          "description": "The source Region is the target, as for an input produced for the target.",
+          "type": "string"
+        },
+        {
+          "const": "source-mismatch",
+          "description": "The input was produced for another Region than `--from`; `--from` is used.",
+          "type": "string"
+        },
+        {
+          "const": "blocks-whole-input",
+          "description": "Scan findings on the whole input, such as a quota, block every resource.",
+          "type": "string"
+        },
+        {
+          "const": "layers-only",
+          "description": "Terraform waves follow the layers only.",
+          "type": "string"
+        }
+      ]
+    },
+    "SourceFormat": {
+      "enum": [
+        "cloudformation",
+        "terraform-plan"
+      ],
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "data_provenance": {
+      "$ref": "#/$defs/PlanProvenance"
+    },
+    "resources": {
+      "items": {
+        "$ref": "#/$defs/PlanEntry"
+      },
+      "type": "array"
+    },
+    "schema_version": {
+      "const": 1,
+      "format": "uint32",
+      "minimum": 0,
+      "type": "integer"
+    },
+    "summary": {
+      "$ref": "#/$defs/PlanSummary"
+    },
+    "warnings": {
+      "items": {
+        "$ref": "#/$defs/PlanWarning"
+      },
+      "type": "array"
+    }
+  },
+  "required": [
+    "data_provenance",
+    "resources",
+    "schema_version",
+    "summary",
+    "warnings"
+  ],
+  "title": "Plan",
+  "type": "object"
+}

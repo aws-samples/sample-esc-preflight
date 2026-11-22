@@ -2,9 +2,9 @@
 name: esc-preflight
 description: Prepare CDK, CloudFormation or Terraform code for another AWS Region or partition, such as the AWS European Sovereign Cloud (ESC), AWS GovCloud (US) or another Region of the global partition. Runs the esc-preflight scanner, applies the changes it marks as safe, asks before the ones it proposes, and records the rest for the owner. Use when the user wants to check, migrate, port or make infrastructure code ready for a target Region or partition, or remove hardcoded Regions, zones, partitions or account IDs.
 license: MIT-0
-compatibility: Needs the esc-preflight CLI 0.2.2 or later (cargo install --locked --git https://github.com/aws-samples/sample-esc-preflight --tag 0.2.2) and HTTPS access to knowledge-mcp.global.api.aws; for ESC targets also docs.aws.eu.
+compatibility: Needs the esc-preflight CLI 0.3.0 or later (cargo install --locked --git https://github.com/aws-samples/sample-esc-preflight --tag 0.3.0) and HTTPS access to knowledge-mcp.global.api.aws; for ESC targets also docs.aws.eu; for property checks in public mode schema.cloudformation.<region>.amazonaws.com (.amazonaws.com.cn in China).
 metadata:
-  version: "0.2.2"
+  version: "0.3.0"
 ---
 
 # esc-preflight
@@ -21,7 +21,7 @@ The `esc-preflight` CLI decides what changes; you apply its decisions in the sou
 
 ## 1. Target and input
 
-Ask for the target Region if the user did not name one; the CLI defaults to `eusc-de-east-1` (ESC). Run `esc-preflight --version`; if it is missing or older than 0.2.2, give the user the install command from `compatibility` above and stop.
+Ask for the target Region if the user did not name one; the CLI defaults to `eusc-de-east-1` (ESC). Run `esc-preflight --version`; if it is missing or older than 0.3.0, give the user the install command from `compatibility` above and stop.
 
 Produce the input for the target, then scan:
 
@@ -37,7 +37,7 @@ esc-preflight scan <input> --region <target> -q --out preflight-report.json
 
 Scan one input per run: a directory with several templates exits 1 and lists them.
 
-Ask once whether the user has an AWS profile for an account in the target; with one, add `--profile <name>` (live mode, the final word on types, instance types, versions and zones). Never ask for credentials.
+Ask once whether the user has an AWS profile for an account in the target; with one, add `--profile <name>` (live mode, the final word on types, instance types, versions, properties and zones, and it checks the account's quotas, SCPs and public SSM parameters). Never ask for credentials. Ask whether the input moves to another account; if the user gives its ID, add `--account <id>`.
 
 Exit 1: invalid input or Region. If the message names live mode, the Region needs `--profile`. Exit 3 (data source failed) or 4 (live authentication failed): stop and report. Stop if `schema_version` is not 1.
 
@@ -51,11 +51,14 @@ Handle `warnings` by `code` before editing:
 | `knowledge-unknown` | Offer live mode; otherwise list the affected resources under Verify. |
 | `knowledge-region-unlisted` | Verdicts come from live mode alone, without roadmap states; note it in the register header. |
 | `guide-conflict`, `stale-rules` | List under Verify. |
+| `properties-unchecked` | Offer live mode, or the processed template if the message names a transform; otherwise note in the register header that properties were not checked. |
+| `account-checks-skipped` | List each skipped check and its reason under Verify. |
 
 Then work `required_changes`, the `environment` entry first:
 
 - `cause.type` `environment` (`logical_id` `*`): values written by synth or plan for the input's own environment. Once the user agrees, set the CDK stack `env` or Terraform provider to the target, or make the stack environment-agnostic, then scan again.
-- `cause.type` `hazard`: hardcoded literals. `impact` `breaks` means the value names another Region or partition; `portability` means it is right for the target but hardcoded. Treat both by tier.
+- `cause.type` `hazard`: hardcoded literals. `impact` `breaks` means the value names another Region, partition, account or resource; `portability` means it is right for the target but hardcoded. Treat both by tier. A `resource-id` (an `ami-`, `subnet-` or similar ID) is always a flag: the owner looks the resource up in the target or passes it as a parameter.
+- `cause.type` `dependency`, `account`, and `depth` with id `property`: flags. Record them; never request a quota increase, change an SCP or remove a property yourself.
 - Every other entry by tier: a `propose` with `candidates` needs the user's pick; a `propose` without `edits`, such as replacing a global table with a table, is applied from its `change` after a yes; every `flag` goes to the gap register.
 
 Only a `fix` or an approved `propose` is edited. For a `flag`, never write an edit from its `change` text. Findings with verdict `disputed` or `cannot-assess`, deviations with `severity` `caveat` or a `conflict`, and `out_of_scope` resources go under Verify, with `roadmap` state where present.
@@ -80,7 +83,9 @@ Produce the input again and scan with the same flags. Retry a `fix` that remains
 
 Report: target, mode (`live` when `data_provenance.live` is set), `summary` and `outcome` before and after, files changed, fixes and proposals by `impact`, proposals declined, and the register path. Delete `tfplan` and `plan.json`; keep the report and the register. An empty `required_changes` list does not prove the input deploys; the register remains the owner's work.
 
-For CI, suggest `esc-preflight scan --region <target> --fail-on blocker -q`; `--fail-on hazard` also fails on `portability` literals. Change no pipeline unless asked.
+For CI, suggest `esc-preflight scan --region <target> --fail-on blocker -q`; `--fail-on hazard` also fails on `portability` literals and dependencies. Change no pipeline unless asked.
+
+If the user plans to move a running workload, offer `esc-preflight plan <input> --region <target> --from <source> --out preflight-plan.json`, with the Region the workload runs in today as `--from`: how each resource moves, in waves. It changes nothing; summarize it in the report and edit nothing because of it.
 
 ## Optional: AWS Knowledge MCP server
 

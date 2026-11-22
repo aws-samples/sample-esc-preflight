@@ -1,0 +1,5582 @@
+{
+  "_comment": "One rule set for every command. A rule needs an AWS-documented deviation or a deterministic target state. Kinds: deviation, dependency, literal, exemption, quota, mechanism; see docs/DEVELOPMENT.md. `source.guide` quotes a difference on the ESC User Guide, checked against the live guide on every run for ESC targets; `source.doc` quotes a sentence on another AWS page, checked by the ignored network test. Availability itself never comes from rules.",
+  "rules": [
+    {
+      "id": "lambda-function-urls",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "lambda",
+          "text": "Function URLs is not available"
+        }
+      },
+      "feature": "Function URLs",
+      "types": [
+        "aws_lambda_function_url"
+      ]
+    },
+    {
+      "id": "apigateway-http-api",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "apigateway",
+          "text": "HTTP API is not available"
+        }
+      },
+      "feature": "HTTP API",
+      "types": [
+        "AWS::ApiGatewayV2::Api",
+        "aws_apigatewayv2_api",
+        "awscc_apigatewayv2_api"
+      ],
+      "when": [
+        {
+          "path": "ProtocolType",
+          "equals": "HTTP"
+        },
+        {
+          "path": "protocol_type",
+          "equals": "HTTP"
+        }
+      ]
+    },
+    {
+      "id": "apigateway-websocket-api",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "apigateway",
+          "text": "WebSockets API is not available"
+        }
+      },
+      "feature": "WebSockets API",
+      "types": [
+        "AWS::ApiGatewayV2::Api",
+        "aws_apigatewayv2_api",
+        "awscc_apigatewayv2_api"
+      ],
+      "when": [
+        {
+          "path": "ProtocolType",
+          "equals": "WEBSOCKET"
+        },
+        {
+          "path": "protocol_type",
+          "equals": "WEBSOCKET"
+        }
+      ]
+    },
+    {
+      "id": "eks-fargate",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "eks",
+          "text": "EKS support for Fargate is not available"
+        }
+      },
+      "feature": "EKS on Fargate",
+      "types": [
+        "aws_eks_fargate_profile"
+      ]
+    },
+    {
+      "id": "s3-express-one-zone",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "s3",
+          "text": "S3 Express One Zone is not available"
+        }
+      },
+      "feature": "S3 Express One Zone",
+      "types": [
+        "aws_s3_directory_bucket"
+      ]
+    },
+    {
+      "id": "s3-multi-region-access-points",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "s3",
+          "text": "S3 Multi-Region Access Points is not available"
+        }
+      },
+      "feature": "S3 Multi-Region Access Points",
+      "types": [
+        "aws_s3control_multi_region_access_point"
+      ]
+    },
+    {
+      "id": "s3-object-lambda",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "s3",
+          "text": "S3 Object Lambda is not available"
+        }
+      },
+      "types": [
+        "aws_s3control_object_lambda_access_point"
+      ]
+    },
+    {
+      "id": "s3-tables",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "s3",
+          "text": "S3 Tables is not available"
+        }
+      },
+      "feature": "S3 Tables",
+      "types": [
+        "aws_s3tables_table_bucket"
+      ]
+    },
+    {
+      "id": "dynamodb-global-tables",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "dynamodb",
+          "text": "Global Tables and Cross-Region Restore"
+        }
+      },
+      "feature": "Global Tables - Multi-Region Eventual Consistency",
+      "types": [
+        "AWS::DynamoDB::GlobalTable",
+        "aws_dynamodb_table_replica",
+        "awscc_dynamodb_global_table"
+      ],
+      "remediation": {
+        "action": "use AWS::DynamoDB::Table (single Region)",
+        "change": "Replace the global table with a single-Region table: AWS::DynamoDB::GlobalTable becomes AWS::DynamoDB::Table (CDK TableV2 becomes Table, awscc_dynamodb_global_table becomes aws_dynamodb_table) and aws_dynamodb_table_replica resources are removed. Carry the keys, indexes, stream, TTL and encryption settings over, and set the billing mode explicitly.",
+        "consequence": "The new resource type replaces the table, so an existing table's data must be migrated. CDK Table defaults to provisioned capacity, TableV2 to on-demand.",
+        "doc": "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-dynamodb-table.html"
+      }
+    },
+    {
+      "id": "dynamodb-table-replica",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "dynamodb",
+          "text": "Global Tables and Cross-Region Restore"
+        }
+      },
+      "feature": "Global Tables - Multi-Region Eventual Consistency",
+      "types": [
+        "aws_dynamodb_table"
+      ],
+      "when": [
+        {
+          "path": "replica"
+        }
+      ],
+      "remediation": {
+        "action": "remove the replica blocks",
+        "change": "Remove the replica blocks from the table.",
+        "consequence": "Writes are no longer replicated to other Regions.",
+        "doc": "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-dynamodb-table.html"
+      }
+    },
+    {
+      "id": "secretsmanager-multi-region",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "secretsmanager",
+          "text": "Multi-Region secrets are not available"
+        }
+      },
+      "types": [
+        "AWS::SecretsManager::Secret",
+        "aws_secretsmanager_secret"
+      ],
+      "when": [
+        {
+          "path": "ReplicaRegions"
+        },
+        {
+          "path": "replica"
+        }
+      ],
+      "remediation": {
+        "action": "remove the secret replicas",
+        "change": "Remove ReplicaRegions (Terraform: the replica blocks) from the secret.",
+        "consequence": "No copies of the secret exist in other Regions.",
+        "doc": "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-secretsmanager-secret.html"
+      }
+    },
+    {
+      "id": "vpc-inter-region-peering",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "vpc",
+          "text": "Inter-Region VPC Peering is not available"
+        }
+      },
+      "feature": "inter-Region Peering",
+      "types": [
+        "AWS::EC2::VPCPeeringConnection",
+        "aws_vpc_peering_connection"
+      ],
+      "when": [
+        {
+          "path": "PeerRegion"
+        },
+        {
+          "path": "peer_region"
+        }
+      ]
+    },
+    {
+      "id": "msk-serverless",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "msk",
+          "text": "MSK Serverless is not available"
+        }
+      },
+      "feature": "MSK Serverless",
+      "types": [
+        "aws_msk_serverless_cluster"
+      ]
+    },
+    {
+      "id": "msk-connect",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "msk",
+          "text": "MSK Connect is not available"
+        }
+      },
+      "feature": "MSK Connect",
+      "types": [
+        "aws_mskconnect_connector"
+      ]
+    },
+    {
+      "id": "opensearch-serverless",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "opensearch-service",
+          "text": "Amazon OpenSearch Serverless is not available"
+        }
+      },
+      "feature": "Amazon OpenSearch Serverless",
+      "types": [
+        "aws_opensearchserverless_collection"
+      ]
+    },
+    {
+      "id": "documentdb-elastic-clusters",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "documentdb",
+          "text": "Amazon DocumentDB elastic clusters are not available"
+        }
+      },
+      "feature": "Elastic Clusters",
+      "types": [
+        "aws_docdbelastic_cluster"
+      ]
+    },
+    {
+      "id": "cloudtrail-lake",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "cloudtrail",
+          "text": "AWS CloudTrail Lake is not available"
+        }
+      },
+      "feature": "AWS CloudTrail Lake",
+      "types": [
+        "aws_cloudtrail_event_data_store"
+      ]
+    },
+    {
+      "id": "cognito-custom-domain",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "cognito",
+          "text": "Custom domains for user pools are not available"
+        }
+      },
+      "types": [
+        "AWS::Cognito::UserPoolDomain",
+        "aws_cognito_user_pool_domain"
+      ],
+      "when": [
+        {
+          "path": "CustomDomainConfig"
+        },
+        {
+          "path": "certificate_arn"
+        }
+      ]
+    },
+    {
+      "id": "autoscaling-predictive",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "autoscaling",
+          "text": "Predictive scaling policies are not available"
+        }
+      },
+      "feature": "Predictive Scaling",
+      "types": [
+        "AWS::AutoScaling::ScalingPolicy",
+        "aws_autoscaling_policy"
+      ],
+      "when": [
+        {
+          "path": "PolicyType",
+          "equals": "PredictiveScaling"
+        },
+        {
+          "path": "policy_type",
+          "equals": "PredictiveScaling"
+        }
+      ]
+    },
+    {
+      "id": "elb-trust-store",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "elasticloadbalancing",
+          "text": "ALB Trust Store, ALB mTLS are not available"
+        }
+      },
+      "feature": "ALB mTLS",
+      "types": [
+        "aws_lb_trust_store"
+      ]
+    },
+    {
+      "id": "efs-one-zone",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "efs",
+          "text": "EFS One Zone file systems"
+        }
+      },
+      "types": [
+        "AWS::EFS::FileSystem",
+        "aws_efs_file_system"
+      ],
+      "when": [
+        {
+          "path": "AvailabilityZoneName"
+        },
+        {
+          "path": "availability_zone_name"
+        }
+      ]
+    },
+    {
+      "id": "mq-activemq",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "amazon-mq",
+          "text": "Amazon MQ for ActiveMQ is not available"
+        }
+      },
+      "types": [
+        "AWS::AmazonMQ::Broker",
+        "aws_mq_broker"
+      ],
+      "when": [
+        {
+          "path": "EngineType",
+          "equals": "ACTIVEMQ"
+        },
+        {
+          "path": "engine_type",
+          "equals": "ActiveMQ"
+        }
+      ]
+    },
+    {
+      "id": "appautoscaling-predictive",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "application-auto-scaling",
+          "text": "Predictive scaling is not available"
+        }
+      },
+      "feature": "Predictive Scaling",
+      "types": [
+        "AWS::ApplicationAutoScaling::ScalingPolicy",
+        "aws_appautoscaling_policy"
+      ],
+      "when": [
+        {
+          "path": "PredictiveScalingPolicyConfiguration"
+        },
+        {
+          "path": "PolicyType",
+          "equals": "PredictiveScaling"
+        },
+        {
+          "path": "policy_type",
+          "equals": "PredictiveScaling"
+        }
+      ]
+    },
+    {
+      "id": "appautoscaling-unsupported-target",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "application-auto-scaling",
+          "text": "Only the following resources are supported"
+        }
+      },
+      "types": [
+        "AWS::ApplicationAutoScaling::ScalableTarget",
+        "aws_appautoscaling_target"
+      ],
+      "when": [
+        {
+          "path": "ServiceNamespace",
+          "equals": "appstream"
+        },
+        {
+          "path": "service_namespace",
+          "equals": "appstream"
+        },
+        {
+          "path": "ServiceNamespace",
+          "equals": "cassandra"
+        },
+        {
+          "path": "service_namespace",
+          "equals": "cassandra"
+        },
+        {
+          "path": "ServiceNamespace",
+          "equals": "comprehend"
+        },
+        {
+          "path": "service_namespace",
+          "equals": "comprehend"
+        },
+        {
+          "path": "ServiceNamespace",
+          "equals": "kafka"
+        },
+        {
+          "path": "service_namespace",
+          "equals": "kafka"
+        },
+        {
+          "path": "ServiceNamespace",
+          "equals": "neptune"
+        },
+        {
+          "path": "service_namespace",
+          "equals": "neptune"
+        },
+        {
+          "path": "ServiceNamespace",
+          "equals": "sagemaker"
+        },
+        {
+          "path": "service_namespace",
+          "equals": "sagemaker"
+        },
+        {
+          "path": "ServiceNamespace",
+          "equals": "workspaces"
+        },
+        {
+          "path": "service_namespace",
+          "equals": "workspaces"
+        }
+      ]
+    },
+    {
+      "id": "athena-capacity-reservation",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "athena",
+          "text": "Capacity reservations is not available"
+        }
+      },
+      "types": [
+        "aws_athena_capacity_reservation"
+      ]
+    },
+    {
+      "id": "backup-audit-manager",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "aws-backup",
+          "text": "Backup Audit Manager is not available"
+        }
+      },
+      "feature": "Backup Audit Manager",
+      "types": [
+        "aws_backup_framework",
+        "aws_backup_report_plan"
+      ]
+    },
+    {
+      "id": "backup-air-gapped-vault",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "aws-backup",
+          "text": "Logically air-gapped vault is not available"
+        }
+      },
+      "feature": "Logically air-gapped vault",
+      "types": [
+        "aws_backup_logically_air_gapped_vault"
+      ]
+    },
+    {
+      "id": "backup-restore-testing",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "aws-backup",
+          "text": "Restore testing is not available"
+        }
+      },
+      "feature": "Restore testing",
+      "types": [
+        "aws_backup_restore_testing_plan",
+        "aws_backup_restore_testing_selection"
+      ]
+    },
+    {
+      "id": "logs-data-protection",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "cloudwatch-logs",
+          "text": "Data protection with masking is not available"
+        }
+      },
+      "feature": "Amazon CloudWatch Logs Data Protection",
+      "types": [
+        "AWS::Logs::LogGroup",
+        "AWS::Logs::AccountPolicy",
+        "aws_cloudwatch_log_account_policy"
+      ],
+      "when": [
+        {
+          "path": "DataProtectionPolicy"
+        },
+        {
+          "path": "PolicyType",
+          "equals": "DATA_PROTECTION_POLICY"
+        },
+        {
+          "path": "policy_type",
+          "equals": "DATA_PROTECTION_POLICY"
+        }
+      ]
+    },
+    {
+      "id": "logs-data-protection-policy",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "cloudwatch-logs",
+          "text": "Data protection with masking is not available"
+        }
+      },
+      "feature": "Amazon CloudWatch Logs Data Protection",
+      "types": [
+        "aws_cloudwatch_log_data_protection_policy"
+      ]
+    },
+    {
+      "id": "logs-field-indexing",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "cloudwatch-logs",
+          "text": "Field indexing is not available"
+        }
+      },
+      "feature": "Amazon CloudWatch Logs Field Indexing",
+      "types": [
+        "AWS::Logs::LogGroup",
+        "AWS::Logs::AccountPolicy",
+        "aws_cloudwatch_log_account_policy"
+      ],
+      "when": [
+        {
+          "path": "FieldIndexPolicies"
+        },
+        {
+          "path": "PolicyType",
+          "equals": "FIELD_INDEX_POLICY"
+        },
+        {
+          "path": "policy_type",
+          "equals": "FIELD_INDEX_POLICY"
+        }
+      ]
+    },
+    {
+      "id": "logs-index-policy",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "cloudwatch-logs",
+          "text": "Field indexing is not available"
+        }
+      },
+      "feature": "Amazon CloudWatch Logs Field Indexing",
+      "types": [
+        "aws_cloudwatch_log_index_policy"
+      ]
+    },
+    {
+      "id": "logs-transformation",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "cloudwatch-logs",
+          "text": "Log transformation is not available"
+        }
+      },
+      "feature": "Amazon CloudWatch Logs transformation and enrichment",
+      "types": [
+        "AWS::Logs::Transformer",
+        "AWS::Logs::AccountPolicy",
+        "aws_cloudwatch_log_account_policy"
+      ],
+      "when": [
+        {
+          "path": "TransformerConfig"
+        },
+        {
+          "path": "PolicyType",
+          "equals": "TRANSFORMER_POLICY"
+        },
+        {
+          "path": "policy_type",
+          "equals": "TRANSFORMER_POLICY"
+        }
+      ]
+    },
+    {
+      "id": "codepipeline-source-actions",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "codepipeline",
+          "text": "The AWS CodeConnections source action is not available"
+        }
+      },
+      "types": [
+        "AWS::CodePipeline::Pipeline",
+        "aws_codepipeline"
+      ],
+      "when": [
+        {
+          "path": "Stages.Actions.ActionTypeId.Provider",
+          "equals": "CodeStarSourceConnection"
+        },
+        {
+          "path": "stage.action.provider",
+          "equals": "CodeStarSourceConnection"
+        }
+      ]
+    },
+    {
+      "id": "codepipeline-build-actions",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "codepipeline",
+          "text": "The following build and test actions are not available",
+          "also": [
+            "ECRBuildAndPublish",
+            "AWS Device Farm"
+          ]
+        }
+      },
+      "types": [
+        "AWS::CodePipeline::Pipeline",
+        "aws_codepipeline"
+      ],
+      "when": [
+        {
+          "path": "Stages.Actions.ActionTypeId.Provider",
+          "equals": "ECRBuildAndPublish"
+        },
+        {
+          "path": "stage.action.provider",
+          "equals": "ECRBuildAndPublish"
+        },
+        {
+          "path": "Stages.Actions.ActionTypeId.Provider",
+          "equals": "DeviceFarm"
+        },
+        {
+          "path": "stage.action.provider",
+          "equals": "DeviceFarm"
+        }
+      ]
+    },
+    {
+      "id": "codepipeline-commands",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "codepipeline",
+          "text": "The Commands action and the Commands rule are not available"
+        }
+      },
+      "types": [
+        "AWS::CodePipeline::Pipeline",
+        "aws_codepipeline"
+      ],
+      "when": [
+        {
+          "path": "Stages.Actions.ActionTypeId.Provider",
+          "equals": "Commands"
+        },
+        {
+          "path": "stage.action.provider",
+          "equals": "Commands"
+        }
+      ]
+    },
+    {
+      "id": "codepipeline-deploy-actions",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "codepipeline",
+          "text": "The following deploy actions are not available",
+          "also": [
+            "Alexa Skills Kit",
+            "Amazon EC2",
+            "Amazon EKS",
+            "AWS AppConfig",
+            "AWS CloudFormation StackInstances",
+            "AWS CloudFormation StackSets",
+            "AWS Elastic Beanstalk",
+            "AWS OpsWorks",
+            "AWS Service Catalog"
+          ]
+        }
+      },
+      "types": [
+        "AWS::CodePipeline::Pipeline",
+        "aws_codepipeline"
+      ],
+      "when": [
+        {
+          "path": "Stages.Actions.ActionTypeId.Provider",
+          "equals": "AlexaSkillsKit"
+        },
+        {
+          "path": "stage.action.provider",
+          "equals": "AlexaSkillsKit"
+        },
+        {
+          "path": "Stages.Actions.ActionTypeId.Provider",
+          "equals": "EC2"
+        },
+        {
+          "path": "stage.action.provider",
+          "equals": "EC2"
+        },
+        {
+          "path": "Stages.Actions.ActionTypeId.Provider",
+          "equals": "EKS"
+        },
+        {
+          "path": "stage.action.provider",
+          "equals": "EKS"
+        },
+        {
+          "path": "Stages.Actions.ActionTypeId.Provider",
+          "equals": "AppConfig"
+        },
+        {
+          "path": "stage.action.provider",
+          "equals": "AppConfig"
+        },
+        {
+          "path": "Stages.Actions.ActionTypeId.Provider",
+          "equals": "CloudFormationStackInstances"
+        },
+        {
+          "path": "stage.action.provider",
+          "equals": "CloudFormationStackInstances"
+        },
+        {
+          "path": "Stages.Actions.ActionTypeId.Provider",
+          "equals": "CloudFormationStackSet"
+        },
+        {
+          "path": "stage.action.provider",
+          "equals": "CloudFormationStackSet"
+        },
+        {
+          "path": "Stages.Actions.ActionTypeId.Provider",
+          "equals": "ElasticBeanstalk"
+        },
+        {
+          "path": "stage.action.provider",
+          "equals": "ElasticBeanstalk"
+        },
+        {
+          "path": "Stages.Actions.ActionTypeId.Provider",
+          "equals": "OpsWorks"
+        },
+        {
+          "path": "stage.action.provider",
+          "equals": "OpsWorks"
+        },
+        {
+          "path": "Stages.Actions.ActionTypeId.Provider",
+          "equals": "ServiceCatalog"
+        },
+        {
+          "path": "stage.action.provider",
+          "equals": "ServiceCatalog"
+        }
+      ]
+    },
+    {
+      "id": "codepipeline-invoke-actions",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "codepipeline",
+          "text": "The following invoke actions are not available",
+          "also": [
+            "InspectorScan",
+            "AWS Step Functions"
+          ]
+        }
+      },
+      "types": [
+        "AWS::CodePipeline::Pipeline",
+        "aws_codepipeline"
+      ],
+      "when": [
+        {
+          "path": "Stages.Actions.ActionTypeId.Provider",
+          "equals": "InspectorScan"
+        },
+        {
+          "path": "stage.action.provider",
+          "equals": "InspectorScan"
+        },
+        {
+          "path": "Stages.Actions.ActionTypeId.Provider",
+          "equals": "StepFunctions"
+        },
+        {
+          "path": "stage.action.provider",
+          "equals": "StepFunctions"
+        }
+      ]
+    },
+    {
+      "id": "config-proactive-evaluation",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "config",
+          "text": "AWS Config Rules support for Proactive Evaluation mode is not available"
+        }
+      },
+      "types": [
+        "AWS::Config::ConfigRule",
+        "aws_config_config_rule"
+      ],
+      "when": [
+        {
+          "path": "EvaluationModes.Mode",
+          "equals": "PROACTIVE"
+        },
+        {
+          "path": "evaluation_mode.mode",
+          "equals": "PROACTIVE"
+        }
+      ]
+    },
+    {
+      "id": "config-privatelink",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "config",
+          "text": "PrivateLink Support is not available"
+        }
+      },
+      "types": [
+        "AWS::EC2::VPCEndpoint",
+        "aws_vpc_endpoint"
+      ],
+      "when": [
+        {
+          "path": "ServiceName",
+          "contains": ".config"
+        },
+        {
+          "path": "service_name",
+          "contains": ".config"
+        }
+      ]
+    },
+    {
+      "id": "dms-serverless",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "dms",
+          "text": "AWS DMS Serverless is not available"
+        }
+      },
+      "types": [
+        "aws_dms_replication_config"
+      ]
+    },
+    {
+      "id": "documentdb-global-clusters",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "documentdb",
+          "text": "Amazon DocumentDB global clusters are not available"
+        }
+      },
+      "feature": "Global Clusters",
+      "types": [
+        "aws_docdb_global_cluster"
+      ]
+    },
+    {
+      "id": "documentdb-serverless",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "documentdb",
+          "text": "Amazon DocumentDB serverless is not available"
+        }
+      },
+      "types": [
+        "AWS::DocDB::DBCluster",
+        "AWS::DocDB::DBInstance",
+        "aws_docdb_cluster",
+        "aws_docdb_cluster_instance"
+      ],
+      "when": [
+        {
+          "path": "ServerlessV2ScalingConfiguration"
+        },
+        {
+          "path": "serverless_v2_scaling_configuration"
+        },
+        {
+          "path": "DBInstanceClass",
+          "equals": "db.serverless"
+        },
+        {
+          "path": "instance_class",
+          "equals": "db.serverless"
+        }
+      ]
+    },
+    {
+      "id": "documentdb-engine-versions",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "documentdb",
+          "text": "Engine versions 3.6 and 8.0 are not available"
+        }
+      },
+      "types": [
+        "AWS::DocDB::DBCluster",
+        "aws_docdb_cluster"
+      ],
+      "when": [
+        {
+          "path": "EngineVersion",
+          "prefix": "3.6"
+        },
+        {
+          "path": "engine_version",
+          "prefix": "3.6"
+        },
+        {
+          "path": "EngineVersion",
+          "prefix": "8.0"
+        },
+        {
+          "path": "engine_version",
+          "prefix": "8.0"
+        }
+      ]
+    },
+    {
+      "id": "documentdb-instance-classes",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "documentdb",
+          "text": "instance classes are not available",
+          "also": [
+            "db.r4",
+            "db.r5",
+            "db.r8g",
+            "db.r6gd",
+            "db.t3"
+          ]
+        }
+      },
+      "types": [
+        "AWS::DocDB::DBInstance",
+        "aws_docdb_cluster_instance"
+      ],
+      "when": [
+        {
+          "path": "DBInstanceClass",
+          "prefix": "db.r4."
+        },
+        {
+          "path": "instance_class",
+          "prefix": "db.r4."
+        },
+        {
+          "path": "DBInstanceClass",
+          "prefix": "db.r5."
+        },
+        {
+          "path": "instance_class",
+          "prefix": "db.r5."
+        },
+        {
+          "path": "DBInstanceClass",
+          "prefix": "db.r8g."
+        },
+        {
+          "path": "instance_class",
+          "prefix": "db.r8g."
+        },
+        {
+          "path": "DBInstanceClass",
+          "prefix": "db.r6gd."
+        },
+        {
+          "path": "instance_class",
+          "prefix": "db.r6gd."
+        },
+        {
+          "path": "DBInstanceClass",
+          "prefix": "db.t3."
+        },
+        {
+          "path": "instance_class",
+          "prefix": "db.t3."
+        }
+      ]
+    },
+    {
+      "id": "ec2-nitro-enclaves",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "ec2",
+          "text": "Nitro enclaves are not available"
+        }
+      },
+      "feature": "Nitro Enclaves",
+      "types": [
+        "AWS::EC2::Instance",
+        "AWS::EC2::LaunchTemplate",
+        "aws_instance",
+        "aws_launch_template"
+      ],
+      "when": [
+        {
+          "path": "EnclaveOptions.Enabled"
+        },
+        {
+          "path": "LaunchTemplateData.EnclaveOptions.Enabled"
+        },
+        {
+          "path": "enclave_options.enabled"
+        }
+      ]
+    },
+    {
+      "id": "ec2-sev-snp",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "ec2",
+          "text": "(SEV-SNP) is not available"
+        }
+      },
+      "feature": "AMD SEV-SNP",
+      "types": [
+        "AWS::EC2::LaunchTemplate",
+        "aws_instance",
+        "aws_launch_template"
+      ],
+      "when": [
+        {
+          "path": "LaunchTemplateData.CpuOptions.AmdSevSnp",
+          "equals": "enabled"
+        },
+        {
+          "path": "cpu_options.amd_sev_snp",
+          "equals": "enabled"
+        }
+      ]
+    },
+    {
+      "id": "ec2-nitro-tpm",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "ec2",
+          "text": "Nitro Trusted Platform Module (NitroTPM) is not available"
+        }
+      },
+      "feature": "NitroTPM",
+      "types": [
+        "aws_ami"
+      ],
+      "when": [
+        {
+          "path": "tpm_support",
+          "equals": "v2.0"
+        }
+      ]
+    },
+    {
+      "id": "ec2-instance-connect",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "ec2",
+          "text": "EC2 Instance Connect is not available"
+        }
+      },
+      "feature": "EC2 Instance Connect",
+      "types": [
+        "aws_ec2_instance_connect_endpoint"
+      ]
+    },
+    {
+      "id": "ec2-serial-console",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "ec2",
+          "text": "EC2 Serial Console is not available"
+        }
+      },
+      "types": [
+        "aws_ec2_serial_console_access"
+      ],
+      "when": [
+        {
+          "path": "enabled"
+        }
+      ]
+    },
+    {
+      "id": "ec2-imds-ipv6",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "ec2",
+          "text": "The IPv6 endpoint for the instance metadata service (IMDS) is not available"
+        }
+      },
+      "types": [
+        "AWS::EC2::Instance",
+        "AWS::EC2::LaunchTemplate",
+        "aws_instance",
+        "aws_launch_template"
+      ],
+      "when": [
+        {
+          "path": "MetadataOptions.HttpProtocolIpv6",
+          "equals": "enabled"
+        },
+        {
+          "path": "LaunchTemplateData.MetadataOptions.HttpProtocolIpv6",
+          "equals": "enabled"
+        },
+        {
+          "path": "metadata_options.http_protocol_ipv6",
+          "equals": "enabled"
+        }
+      ]
+    },
+    {
+      "id": "autoscaling-capacity-reservation",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "autoscaling",
+          "text": "Capacity Reservation preference is not available"
+        }
+      },
+      "types": [
+        "AWS::AutoScaling::AutoScalingGroup",
+        "aws_autoscaling_group"
+      ],
+      "when": [
+        {
+          "path": "CapacityReservationSpecification"
+        },
+        {
+          "path": "capacity_reservation_specification"
+        }
+      ]
+    },
+    {
+      "id": "ecr-enhanced-scanning",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "ecr",
+          "text": "Amazon ECR Enhanced scanning is not available"
+        }
+      },
+      "types": [
+        "AWS::ECR::RegistryScanningConfiguration",
+        "aws_ecr_registry_scanning_configuration"
+      ],
+      "when": [
+        {
+          "path": "ScanType",
+          "equals": "ENHANCED"
+        },
+        {
+          "path": "scan_type",
+          "equals": "ENHANCED"
+        }
+      ]
+    },
+    {
+      "id": "ecs-deployment-strategy",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "ecs",
+          "text": "Only Rolling or External Deployments are supported for ECS services"
+        }
+      },
+      "types": [
+        "AWS::ECS::Service",
+        "aws_ecs_service"
+      ],
+      "when": [
+        {
+          "path": "DeploymentController.Type",
+          "equals": "CODE_DEPLOY"
+        },
+        {
+          "path": "deployment_controller.type",
+          "equals": "CODE_DEPLOY"
+        },
+        {
+          "path": "DeploymentConfiguration.Strategy",
+          "equals": "BLUE_GREEN"
+        },
+        {
+          "path": "deployment_configuration.strategy",
+          "equals": "BLUE_GREEN"
+        },
+        {
+          "path": "DeploymentConfiguration.Strategy",
+          "equals": "LINEAR"
+        },
+        {
+          "path": "deployment_configuration.strategy",
+          "equals": "LINEAR"
+        },
+        {
+          "path": "DeploymentConfiguration.Strategy",
+          "equals": "CANARY"
+        },
+        {
+          "path": "deployment_configuration.strategy",
+          "equals": "CANARY"
+        }
+      ]
+    },
+    {
+      "id": "ecs-windows-fargate",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "ecs",
+          "text": "Windows containers are not available on Fargate"
+        }
+      },
+      "types": [
+        "AWS::ECS::TaskDefinition",
+        "aws_ecs_task_definition"
+      ],
+      "when": [
+        {
+          "all": [
+            {
+              "path": "RuntimePlatform.OperatingSystemFamily",
+              "prefix": "WINDOWS"
+            },
+            {
+              "path": "RequiresCompatibilities",
+              "equals": "FARGATE"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "path": "runtime_platform.operating_system_family",
+              "prefix": "WINDOWS"
+            },
+            {
+              "path": "requires_compatibilities",
+              "equals": "FARGATE"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "elb-mtls",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "elasticloadbalancing",
+          "text": "ALB Trust Store, ALB mTLS are not available"
+        }
+      },
+      "feature": "ALB mTLS",
+      "types": [
+        "AWS::ElasticLoadBalancingV2::Listener",
+        "aws_lb_listener",
+        "aws_alb_listener"
+      ],
+      "when": [
+        {
+          "path": "MutualAuthentication.Mode",
+          "equals": "verify"
+        },
+        {
+          "path": "mutual_authentication.mode",
+          "equals": "verify"
+        },
+        {
+          "path": "MutualAuthentication.Mode",
+          "equals": "passthrough"
+        },
+        {
+          "path": "mutual_authentication.mode",
+          "equals": "passthrough"
+        }
+      ]
+    },
+    {
+      "id": "elasticache-global-datastore",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "elasticache",
+          "text": "The following ElastiCache features are not available",
+          "also": [
+            "Global Datastore"
+          ]
+        }
+      },
+      "types": [
+        "aws_elasticache_global_replication_group"
+      ]
+    },
+    {
+      "id": "elasticache-data-tiering",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "elasticache",
+          "text": "The following ElastiCache features are not available",
+          "also": [
+            "Data tiering"
+          ]
+        }
+      },
+      "feature": "Amazon ElastiCache Data tiering",
+      "types": [
+        "AWS::ElastiCache::ReplicationGroup",
+        "aws_elasticache_replication_group"
+      ],
+      "when": [
+        {
+          "path": "DataTieringEnabled"
+        },
+        {
+          "path": "data_tiering_enabled"
+        }
+      ]
+    },
+    {
+      "id": "emr-managed-scaling",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "emr",
+          "text": "Managed scaling is not available"
+        }
+      },
+      "types": [
+        "AWS::EMR::Cluster"
+      ],
+      "when": [
+        {
+          "path": "ManagedScalingPolicy"
+        }
+      ]
+    },
+    {
+      "id": "emr-managed-scaling-policy",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "emr",
+          "text": "Managed scaling is not available"
+        }
+      },
+      "types": [
+        "aws_emr_managed_scaling_policy"
+      ]
+    },
+    {
+      "id": "events-private-api-destinations",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "eventbridge",
+          "text": "The Private APIs feature for Amazon EventBridge API Destinations is not available"
+        }
+      },
+      "types": [
+        "AWS::Events::Connection",
+        "aws_cloudwatch_event_connection"
+      ],
+      "when": [
+        {
+          "path": "InvocationConnectivityParameters"
+        },
+        {
+          "path": "invocation_connectivity_parameters"
+        }
+      ]
+    },
+    {
+      "id": "events-schema-discovery",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "eventbridge",
+          "text": "The Schema Discovery feature for Amazon EventBridge Schemas is not available"
+        }
+      },
+      "types": [
+        "aws_schemas_discoverer"
+      ]
+    },
+    {
+      "id": "firehose-msk-source",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "firehose",
+          "text": "Amazon MSK is not available as a source"
+        }
+      },
+      "types": [
+        "AWS::KinesisFirehose::DeliveryStream",
+        "aws_kinesis_firehose_delivery_stream"
+      ],
+      "when": [
+        {
+          "path": "MSKSourceConfiguration"
+        },
+        {
+          "path": "msk_source_configuration"
+        }
+      ]
+    },
+    {
+      "id": "firehose-opensearch-serverless",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "firehose",
+          "text": "Amazon OpenSearch Serverless is not available as a destination"
+        }
+      },
+      "types": [
+        "AWS::KinesisFirehose::DeliveryStream",
+        "aws_kinesis_firehose_delivery_stream"
+      ],
+      "when": [
+        {
+          "path": "AmazonOpenSearchServerlessDestinationConfiguration"
+        },
+        {
+          "path": "destination",
+          "equals": "opensearchserverless"
+        }
+      ]
+    },
+    {
+      "id": "firehose-snowflake",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "firehose",
+          "text": "Snowflake is not available as a destination"
+        }
+      },
+      "feature": "Snowflake Destination",
+      "types": [
+        "AWS::KinesisFirehose::DeliveryStream",
+        "aws_kinesis_firehose_delivery_stream"
+      ],
+      "when": [
+        {
+          "path": "SnowflakeDestinationConfiguration"
+        },
+        {
+          "path": "destination",
+          "equals": "snowflake"
+        }
+      ]
+    },
+    {
+      "id": "iam-signin-privatelink",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "iam",
+          "text": "PrivateLink for AWS Sign-In is not available"
+        }
+      },
+      "types": [
+        "AWS::EC2::VPCEndpoint",
+        "aws_vpc_endpoint"
+      ],
+      "when": [
+        {
+          "path": "ServiceName",
+          "contains": ".signin"
+        },
+        {
+          "path": "service_name",
+          "contains": ".signin"
+        }
+      ]
+    },
+    {
+      "id": "kms-cloudhsm-key-store",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "kms",
+          "text": "The AWS CloudHSM key stores feature is not available"
+        }
+      },
+      "types": [
+        "aws_kms_custom_key_store"
+      ],
+      "when": [
+        {
+          "path": "cloud_hsm_cluster_id"
+        }
+      ]
+    },
+    {
+      "id": "kms-ml-kem",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "kms",
+          "text": "The ML-KEM post-quantum key encapsulation mechanism is not available"
+        }
+      },
+      "types": [
+        "AWS::KMS::Key",
+        "aws_kms_key"
+      ],
+      "when": [
+        {
+          "path": "KeySpec",
+          "prefix": "ML_KEM"
+        },
+        {
+          "path": "customer_master_key_spec",
+          "prefix": "ML_KEM"
+        }
+      ]
+    },
+    {
+      "id": "lakeformation-privatelink",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "lake-formation",
+          "text": "Support for AWS PrivateLink is not available"
+        }
+      },
+      "types": [
+        "AWS::EC2::VPCEndpoint",
+        "aws_vpc_endpoint"
+      ],
+      "when": [
+        {
+          "path": "ServiceName",
+          "contains": ".lakeformation"
+        },
+        {
+          "path": "service_name",
+          "contains": ".lakeformation"
+        }
+      ]
+    },
+    {
+      "id": "lambda-privatelink",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "lambda",
+          "text": "Lambda support for AWS PrivateLink is not available"
+        }
+      },
+      "types": [
+        "AWS::EC2::VPCEndpoint",
+        "aws_vpc_endpoint"
+      ],
+      "when": [
+        {
+          "path": "ServiceName",
+          "contains": ".lambda"
+        },
+        {
+          "path": "service_name",
+          "contains": ".lambda"
+        }
+      ]
+    },
+    {
+      "id": "lambda-xray",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "lambda",
+          "text": "X-Ray Integration is not available"
+        }
+      },
+      "types": [
+        "AWS::Lambda::Function",
+        "aws_lambda_function"
+      ],
+      "when": [
+        {
+          "path": "TracingConfig.Mode",
+          "equals": "Active"
+        },
+        {
+          "path": "tracing_config.mode",
+          "equals": "Active"
+        }
+      ]
+    },
+    {
+      "id": "lambda-kafka-event-source",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "lambda",
+          "text": "The following event sources are not available",
+          "also": [
+            "Apache Kafka"
+          ]
+        }
+      },
+      "types": [
+        "AWS::Lambda::EventSourceMapping",
+        "aws_lambda_event_source_mapping"
+      ],
+      "when": [
+        {
+          "path": "Topics"
+        },
+        {
+          "path": "SelfManagedEventSource"
+        },
+        {
+          "path": "topics"
+        },
+        {
+          "path": "self_managed_event_source"
+        }
+      ]
+    },
+    {
+      "id": "lambda-mq-event-source",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "lambda",
+          "text": "The following event sources are not available",
+          "also": [
+            "Amazon MQ for ActiveMQ and Rabbit MQ"
+          ]
+        }
+      },
+      "types": [
+        "AWS::Lambda::EventSourceMapping",
+        "aws_lambda_event_source_mapping"
+      ],
+      "when": [
+        {
+          "path": "Queues"
+        },
+        {
+          "path": "queues"
+        }
+      ]
+    },
+    {
+      "id": "lambda-documentdb-event-source",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "lambda",
+          "text": "The following event sources are not available",
+          "also": [
+            "Amazon DocumentDB"
+          ]
+        }
+      },
+      "types": [
+        "AWS::Lambda::EventSourceMapping",
+        "aws_lambda_event_source_mapping"
+      ],
+      "when": [
+        {
+          "path": "DocumentDBEventSourceConfig"
+        },
+        {
+          "path": "document_db_event_source_config"
+        }
+      ]
+    },
+    {
+      "id": "lambda-snapstart-runtime",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "lambda",
+          "text": "Python and .NET runtimes are not available when using Lambda SnapStart"
+        }
+      },
+      "types": [
+        "AWS::Lambda::Function",
+        "aws_lambda_function"
+      ],
+      "when": [
+        {
+          "all": [
+            {
+              "path": "SnapStart.ApplyOn",
+              "equals": "PublishedVersions"
+            },
+            {
+              "path": "Runtime",
+              "prefix": "python"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "path": "SnapStart.ApplyOn",
+              "equals": "PublishedVersions"
+            },
+            {
+              "path": "Runtime",
+              "prefix": "dotnet"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "path": "snap_start.apply_on",
+              "equals": "PublishedVersions"
+            },
+            {
+              "path": "runtime",
+              "prefix": "python"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "path": "snap_start.apply_on",
+              "equals": "PublishedVersions"
+            },
+            {
+              "path": "runtime",
+              "prefix": "dotnet"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "msk-express-brokers",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "msk",
+          "text": "MSK Provisioned Express Brokers is not available"
+        }
+      },
+      "feature": "MSK Provisioned Express Brokers",
+      "types": [
+        "AWS::MSK::Cluster",
+        "aws_msk_cluster"
+      ],
+      "when": [
+        {
+          "path": "BrokerNodeGroupInfo.InstanceType",
+          "prefix": "express."
+        },
+        {
+          "path": "broker_node_group_info.instance_type",
+          "prefix": "express."
+        }
+      ]
+    },
+    {
+      "id": "msk-replicator",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "msk",
+          "text": "MSK Replicator is not available"
+        }
+      },
+      "feature": "MSK Replicator",
+      "types": [
+        "aws_msk_replicator"
+      ]
+    },
+    {
+      "id": "neptune-global-databases",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "neptune",
+          "text": "Global databases are not available"
+        }
+      },
+      "types": [
+        "aws_neptune_global_cluster"
+      ]
+    },
+    {
+      "id": "opensearch-cognito-auth",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "opensearch-service",
+          "text": "Kibana Authentication with Amazon Cognito is not available"
+        }
+      },
+      "types": [
+        "AWS::OpenSearchService::Domain",
+        "AWS::Elasticsearch::Domain",
+        "aws_opensearch_domain",
+        "aws_elasticsearch_domain"
+      ],
+      "when": [
+        {
+          "path": "CognitoOptions.Enabled"
+        },
+        {
+          "path": "cognito_options.enabled"
+        }
+      ]
+    },
+    {
+      "id": "opensearch-coordinator-nodes",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "opensearch-service",
+          "text": "Dedicated Coordinator nodes are not available"
+        }
+      },
+      "types": [
+        "AWS::OpenSearchService::Domain",
+        "aws_opensearch_domain"
+      ],
+      "when": [
+        {
+          "path": "ClusterConfig.NodeOptions.NodeType",
+          "equals": "coordinator"
+        },
+        {
+          "path": "cluster_config.node_options.node_type",
+          "equals": "coordinator"
+        }
+      ]
+    },
+    {
+      "id": "opensearch-ingestion",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "opensearch-service",
+          "text": "OpenSearch Ingestion is not available"
+        }
+      },
+      "feature": "OpenSearch Ingestion",
+      "types": [
+        "aws_osis_pipeline"
+      ]
+    },
+    {
+      "id": "organizations-policy-types",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "organizations",
+          "text": "Tag policies, AI services opt-out policies, and chat applications policies are not available"
+        }
+      },
+      "types": [
+        "AWS::Organizations::Policy",
+        "aws_organizations_policy"
+      ],
+      "when": [
+        {
+          "path": "Type",
+          "equals": "TAG_POLICY"
+        },
+        {
+          "path": "type",
+          "equals": "TAG_POLICY"
+        },
+        {
+          "path": "Type",
+          "equals": "AISERVICES_OPT_OUT_POLICY"
+        },
+        {
+          "path": "type",
+          "equals": "AISERVICES_OPT_OUT_POLICY"
+        },
+        {
+          "path": "Type",
+          "equals": "CHATBOT_POLICY"
+        },
+        {
+          "path": "type",
+          "equals": "CHATBOT_POLICY"
+        }
+      ]
+    },
+    {
+      "id": "rds-cross-region-backup",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "rds",
+          "text": "RDS Snapshot cross-Region auto backup is not available"
+        }
+      },
+      "types": [
+        "AWS::RDS::DBInstance"
+      ],
+      "when": [
+        {
+          "path": "AutomaticBackupReplicationRegion"
+        }
+      ],
+      "remediation": {
+        "action": "remove AutomaticBackupReplicationRegion",
+        "change": "Remove AutomaticBackupReplicationRegion from the DB instance.",
+        "consequence": "Automated backups stay in the deployment Region.",
+        "doc": "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-rds-dbinstance.html"
+      }
+    },
+    {
+      "id": "rds-cross-region-backup-replication",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "rds",
+          "text": "RDS Snapshot cross-Region auto backup is not available"
+        }
+      },
+      "types": [
+        "aws_db_instance_automated_backups_replication"
+      ],
+      "remediation": {
+        "action": "remove the backup replication resource",
+        "change": "Remove the aws_db_instance_automated_backups_replication resource.",
+        "consequence": "Automated backups stay in the deployment Region.",
+        "doc": "https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-resource-rds-dbinstance.html"
+      }
+    },
+    {
+      "id": "rds-cross-region-replica",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "rds",
+          "text": "RDS Cross Region Read Replicas are not available"
+        }
+      },
+      "feature": "Cross-Region Read Replicas",
+      "types": [
+        "AWS::RDS::DBInstance",
+        "aws_db_instance"
+      ],
+      "when": [
+        {
+          "path": "SourceRegion"
+        },
+        {
+          "path": "SourceDBInstanceIdentifier",
+          "prefix": "arn:"
+        },
+        {
+          "path": "replicate_source_db",
+          "prefix": "arn:"
+        }
+      ]
+    },
+    {
+      "id": "rds-dedicated-log-volume",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "rds",
+          "text": "Dedicated Log Volume is not available"
+        }
+      },
+      "types": [
+        "AWS::RDS::DBInstance",
+        "aws_db_instance"
+      ],
+      "when": [
+        {
+          "path": "DedicatedLogVolume"
+        },
+        {
+          "path": "dedicated_log_volume"
+        }
+      ]
+    },
+    {
+      "id": "rds-dual-stack",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "rds",
+          "text": "Dual-stack mode (IPv4 and IPv6) is not available"
+        }
+      },
+      "types": [
+        "AWS::RDS::DBInstance",
+        "AWS::RDS::DBCluster",
+        "aws_db_instance",
+        "aws_rds_cluster"
+      ],
+      "when": [
+        {
+          "path": "NetworkType",
+          "equals": "DUAL"
+        },
+        {
+          "path": "network_type",
+          "equals": "DUAL"
+        }
+      ]
+    },
+    {
+      "id": "rds-custom-sqlserver",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "rds",
+          "text": "Amazon RDS Custom for SQL Server is not available"
+        }
+      },
+      "feature": "Amazon RDS Custom for SQL Server",
+      "types": [
+        "AWS::RDS::DBInstance",
+        "aws_db_instance"
+      ],
+      "when": [
+        {
+          "path": "Engine",
+          "prefix": "custom-sqlserver"
+        },
+        {
+          "path": "engine",
+          "prefix": "custom-sqlserver"
+        }
+      ]
+    },
+    {
+      "id": "rds-custom-oracle",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "rds",
+          "text": "Amazon RDS Custom for Oracle is not available"
+        }
+      },
+      "feature": "Amazon RDS Custom for Oracle",
+      "types": [
+        "AWS::RDS::DBInstance",
+        "aws_db_instance"
+      ],
+      "when": [
+        {
+          "path": "Engine",
+          "prefix": "custom-oracle"
+        },
+        {
+          "path": "engine",
+          "prefix": "custom-oracle"
+        }
+      ]
+    },
+    {
+      "id": "rds-db2",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "rds",
+          "text": "Amazon Relational Database Service for Db2 is not available"
+        }
+      },
+      "feature": "Amazon RDS for Db2",
+      "types": [
+        "AWS::RDS::DBInstance",
+        "aws_db_instance"
+      ],
+      "when": [
+        {
+          "path": "Engine",
+          "prefix": "db2"
+        },
+        {
+          "path": "engine",
+          "prefix": "db2"
+        }
+      ]
+    },
+    {
+      "id": "rds-activity-stream",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "rds",
+          "text": "Database Activity Stream is not available"
+        }
+      },
+      "types": [
+        "aws_rds_cluster_activity_stream"
+      ]
+    },
+    {
+      "id": "rds-zero-etl",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "rds",
+          "text": "Zero-ETL is not available"
+        }
+      },
+      "types": [
+        "aws_rds_integration"
+      ]
+    },
+    {
+      "id": "rds-postgres-extended-support",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "rds",
+          "text": "Amazon RDS for PostgreSQL - RDS Extended Support is not available"
+        }
+      },
+      "types": [
+        "AWS::RDS::DBInstance",
+        "aws_db_instance"
+      ],
+      "when": [
+        {
+          "all": [
+            {
+              "path": "EngineLifecycleSupport",
+              "equals": "open-source-rds-extended-support"
+            },
+            {
+              "path": "Engine",
+              "equals": "postgres"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "path": "engine_lifecycle_support",
+              "equals": "open-source-rds-extended-support"
+            },
+            {
+              "path": "engine",
+              "equals": "postgres"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "aurora-global-databases",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "rds",
+          "text": "Global Databases (eusc-de-east-1 is in a single region partition)"
+        }
+      },
+      "feature": "Global Databases",
+      "types": [
+        "aws_rds_global_cluster"
+      ]
+    },
+    {
+      "id": "aurora-io-optimized",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "rds",
+          "text": "I/O-Optimized cluster storage configuration"
+        }
+      },
+      "types": [
+        "AWS::RDS::DBCluster",
+        "aws_rds_cluster"
+      ],
+      "when": [
+        {
+          "path": "StorageType",
+          "equals": "aurora-iopt1"
+        },
+        {
+          "path": "storage_type",
+          "equals": "aurora-iopt1"
+        }
+      ]
+    },
+    {
+      "id": "aurora-secrets-manager",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "rds",
+          "text": "AWS Secrets Manager Integration"
+        }
+      },
+      "types": [
+        "AWS::RDS::DBCluster",
+        "aws_rds_cluster"
+      ],
+      "when": [
+        {
+          "all": [
+            {
+              "path": "ManageMasterUserPassword"
+            },
+            {
+              "path": "Engine",
+              "prefix": "aurora"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "path": "manage_master_user_password"
+            },
+            {
+              "path": "engine",
+              "prefix": "aurora"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "aurora-kerberos",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "rds",
+          "text": "Kerberos/Active Directory integration"
+        }
+      },
+      "types": [
+        "AWS::RDS::DBCluster",
+        "aws_rds_cluster"
+      ],
+      "when": [
+        {
+          "all": [
+            {
+              "path": "Domain"
+            },
+            {
+              "path": "Engine",
+              "prefix": "aurora"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "path": "domain"
+            },
+            {
+              "path": "engine",
+              "prefix": "aurora"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "aurora-postgresql-extended-support",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "rds",
+          "text": "Aurora PostgreSQL - RDS Extended Support"
+        }
+      },
+      "types": [
+        "AWS::RDS::DBCluster",
+        "aws_rds_cluster"
+      ],
+      "when": [
+        {
+          "all": [
+            {
+              "path": "EngineLifecycleSupport",
+              "equals": "open-source-rds-extended-support"
+            },
+            {
+              "path": "Engine",
+              "equals": "aurora-postgresql"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "path": "engine_lifecycle_support",
+              "equals": "open-source-rds-extended-support"
+            },
+            {
+              "path": "engine",
+              "equals": "aurora-postgresql"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "aurora-mysql-extended-support",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "rds",
+          "text": "Aurora MySQL - RDS Extended Support"
+        }
+      },
+      "types": [
+        "AWS::RDS::DBCluster",
+        "aws_rds_cluster"
+      ],
+      "when": [
+        {
+          "all": [
+            {
+              "path": "EngineLifecycleSupport",
+              "equals": "open-source-rds-extended-support"
+            },
+            {
+              "path": "Engine",
+              "equals": "aurora-mysql"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "path": "engine_lifecycle_support",
+              "equals": "open-source-rds-extended-support"
+            },
+            {
+              "path": "engine",
+              "equals": "aurora-mysql"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "route53-traffic-flow",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "route53",
+          "text": "Traffic flow is not available"
+        }
+      },
+      "feature": "Amazon Route 53 Traffic Flow",
+      "types": [
+        "aws_route53_traffic_policy",
+        "aws_route53_traffic_policy_instance"
+      ]
+    },
+    {
+      "id": "route53-domain-registration",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "route53",
+          "text": "Registering domain names is not available"
+        }
+      },
+      "feature": "Route 53 Domains",
+      "types": [
+        "aws_route53domains_registered_domain",
+        "aws_route53domains_domain"
+      ]
+    },
+    {
+      "id": "s3-metadata",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "s3",
+          "text": "S3 Metadata is not available"
+        }
+      },
+      "feature": "S3 Metadata",
+      "types": [
+        "AWS::S3::Bucket"
+      ],
+      "when": [
+        {
+          "path": "MetadataTableConfiguration"
+        },
+        {
+          "path": "MetadataConfiguration"
+        }
+      ]
+    },
+    {
+      "id": "s3-metadata-configuration",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "s3",
+          "text": "S3 Metadata is not available"
+        }
+      },
+      "feature": "S3 Metadata",
+      "types": [
+        "aws_s3_bucket_metadata_configuration"
+      ]
+    },
+    {
+      "id": "servicequotas-privatelink",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "servicequotas",
+          "text": "PrivateLink Support is not available"
+        }
+      },
+      "types": [
+        "AWS::EC2::VPCEndpoint",
+        "aws_vpc_endpoint"
+      ],
+      "when": [
+        {
+          "path": "ServiceName",
+          "contains": ".servicequotas"
+        },
+        {
+          "path": "service_name",
+          "contains": ".servicequotas"
+        }
+      ]
+    },
+    {
+      "id": "sns-mobile-push",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "sns",
+          "text": "Mobile push notifications are not available for Amazon SNS"
+        }
+      },
+      "types": [
+        "aws_sns_platform_application"
+      ]
+    },
+    {
+      "id": "sfn-bedrock",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "step-functions",
+          "text": "Integration with the following AWS services or service features is not available",
+          "also": [
+            "Amazon Bedrock"
+          ]
+        }
+      },
+      "types": [
+        "AWS::StepFunctions::StateMachine",
+        "aws_sfn_state_machine"
+      ],
+      "when": [
+        {
+          "path": "DefinitionString",
+          "contains": "states:::bedrock:"
+        },
+        {
+          "path": "Definition",
+          "contains": "states:::bedrock:"
+        },
+        {
+          "path": "definition",
+          "contains": "states:::bedrock:"
+        }
+      ]
+    },
+    {
+      "id": "sfn-emr-serverless",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "step-functions",
+          "text": "Integration with the following AWS services or service features is not available",
+          "also": [
+            "EMR Serverless"
+          ]
+        }
+      },
+      "types": [
+        "AWS::StepFunctions::StateMachine",
+        "aws_sfn_state_machine"
+      ],
+      "when": [
+        {
+          "path": "DefinitionString",
+          "contains": "states:::emr-serverless:"
+        },
+        {
+          "path": "Definition",
+          "contains": "states:::emr-serverless:"
+        },
+        {
+          "path": "definition",
+          "contains": "states:::emr-serverless:"
+        }
+      ]
+    },
+    {
+      "id": "sfn-emr-on-eks",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "step-functions",
+          "text": "Integration with the following AWS services or service features is not available",
+          "also": [
+            "EMR on EKS"
+          ]
+        }
+      },
+      "types": [
+        "AWS::StepFunctions::StateMachine",
+        "aws_sfn_state_machine"
+      ],
+      "when": [
+        {
+          "path": "DefinitionString",
+          "contains": "states:::emr-containers:"
+        },
+        {
+          "path": "Definition",
+          "contains": "states:::emr-containers:"
+        },
+        {
+          "path": "definition",
+          "contains": "states:::emr-containers:"
+        }
+      ]
+    },
+    {
+      "id": "sfn-mediaconvert",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "step-functions",
+          "text": "Integration with the following AWS services or service features is not available",
+          "also": [
+            "AWS Elemental MediaConvert"
+          ]
+        }
+      },
+      "types": [
+        "AWS::StepFunctions::StateMachine",
+        "aws_sfn_state_machine"
+      ],
+      "when": [
+        {
+          "path": "DefinitionString",
+          "contains": "states:::mediaconvert:"
+        },
+        {
+          "path": "Definition",
+          "contains": "states:::mediaconvert:"
+        },
+        {
+          "path": "definition",
+          "contains": "states:::mediaconvert:"
+        }
+      ]
+    },
+    {
+      "id": "ssm-session-manager",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "systems-manager",
+          "text": "Session Manager is not available"
+        }
+      },
+      "feature": "Session Manager",
+      "types": [
+        "AWS::SSM::Document",
+        "aws_ssm_document"
+      ],
+      "when": [
+        {
+          "path": "DocumentType",
+          "equals": "Session"
+        },
+        {
+          "path": "document_type",
+          "equals": "Session"
+        }
+      ]
+    },
+    {
+      "id": "transfer-vpc-endpoint-type",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "transfer",
+          "text": "VPC_ENDPOINT endpoint type is not available"
+        }
+      },
+      "types": [
+        "AWS::Transfer::Server",
+        "aws_transfer_server"
+      ],
+      "when": [
+        {
+          "path": "EndpointType",
+          "equals": "VPC_ENDPOINT"
+        },
+        {
+          "path": "endpoint_type",
+          "equals": "VPC_ENDPOINT"
+        }
+      ]
+    },
+    {
+      "id": "vpc-route-server",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "vpc",
+          "text": "VPC Route Server is not available"
+        }
+      },
+      "feature": "VPC Route Server",
+      "types": [
+        "aws_vpc_route_server",
+        "aws_vpc_route_server_endpoint",
+        "aws_vpc_route_server_peer",
+        "aws_vpc_route_server_vpc_association",
+        "aws_vpc_route_server_propagation"
+      ]
+    },
+    {
+      "id": "vpc-reachability-analyzer",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "vpc",
+          "text": "Reachability Analyzer is not available"
+        }
+      },
+      "feature": "VPC Reachability Analyzer",
+      "types": [
+        "aws_ec2_network_insights_path",
+        "aws_ec2_network_insights_analysis"
+      ]
+    },
+    {
+      "id": "vpn-accelerated",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "vpn",
+          "text": "Accelerated VPN is not available"
+        }
+      },
+      "feature": "Accelerated VPN",
+      "types": [
+        "AWS::EC2::VPNConnection",
+        "aws_vpn_connection"
+      ],
+      "when": [
+        {
+          "path": "EnableAcceleration"
+        },
+        {
+          "path": "enable_acceleration"
+        }
+      ]
+    },
+    {
+      "id": "vpn-certificate-based",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "vpn",
+          "text": "Certificated-Based VPN is not available"
+        }
+      },
+      "feature": "Certificated-Based VPN",
+      "types": [
+        "AWS::EC2::CustomerGateway",
+        "aws_customer_gateway"
+      ],
+      "when": [
+        {
+          "path": "CertificateArn"
+        },
+        {
+          "path": "certificate_arn"
+        }
+      ]
+    },
+    {
+      "id": "vpn-psk-secrets-manager",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "vpn",
+          "text": "S2S VPN integration with Secrets Manager for PSK is not available"
+        }
+      },
+      "types": [
+        "AWS::EC2::VPNConnection",
+        "aws_vpn_connection"
+      ],
+      "when": [
+        {
+          "path": "PreSharedKeyStorage",
+          "equals": "SecretsManager"
+        },
+        {
+          "path": "preshared_key_storage",
+          "equals": "SecretsManager"
+        }
+      ]
+    },
+    {
+      "id": "waf-cloudfront-scope",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "waf",
+          "text": "AWS WAF web ACL association with AWS App Runner, AWS AppSync, AWS Verified Access, Amazon CloudFront, and AWS Amplify is not available"
+        }
+      },
+      "types": [
+        "AWS::WAFv2::WebACL",
+        "aws_wafv2_web_acl"
+      ],
+      "when": [
+        {
+          "path": "Scope",
+          "equals": "CLOUDFRONT"
+        },
+        {
+          "path": "scope",
+          "equals": "CLOUDFRONT"
+        }
+      ]
+    },
+    {
+      "id": "waf-association",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "waf",
+          "text": "AWS WAF web ACL association with AWS App Runner, AWS AppSync, AWS Verified Access, Amazon CloudFront, and AWS Amplify is not available"
+        }
+      },
+      "types": [
+        "AWS::WAFv2::WebACLAssociation",
+        "aws_wafv2_web_acl_association"
+      ],
+      "when": [
+        {
+          "path": "ResourceArn",
+          "contains": ":apprunner:"
+        },
+        {
+          "path": "resource_arn",
+          "contains": ":apprunner:"
+        },
+        {
+          "path": "ResourceArn",
+          "contains": ":appsync:"
+        },
+        {
+          "path": "resource_arn",
+          "contains": ":appsync:"
+        },
+        {
+          "path": "ResourceArn",
+          "contains": ":amplify:"
+        },
+        {
+          "path": "resource_arn",
+          "contains": ":amplify:"
+        },
+        {
+          "path": "ResourceArn",
+          "contains": "verified-access-instance"
+        },
+        {
+          "path": "resource_arn",
+          "contains": "verified-access-instance"
+        }
+      ]
+    },
+    {
+      "id": "emr-release-7",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "emr",
+          "text": "7.8.0 Additional 7.x release versions"
+        }
+      },
+      "types": [
+        "AWS::EMR::Cluster",
+        "aws_emr_cluster"
+      ],
+      "when": [
+        {
+          "all": [
+            {
+              "path": "ReleaseLabel",
+              "prefix": "emr-7"
+            },
+            {
+              "path": "ReleaseLabel",
+              "not_in": [
+                "emr-7.8.0"
+              ]
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "path": "release_label",
+              "prefix": "emr-7"
+            },
+            {
+              "path": "release_label",
+              "not_in": [
+                "emr-7.8.0"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "emr-release-6",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "emr",
+          "text": "6.15.0 Additional 6.x release versions"
+        }
+      },
+      "types": [
+        "AWS::EMR::Cluster",
+        "aws_emr_cluster"
+      ],
+      "when": [
+        {
+          "all": [
+            {
+              "path": "ReleaseLabel",
+              "prefix": "emr-6"
+            },
+            {
+              "path": "ReleaseLabel",
+              "not_in": [
+                "emr-6.15.0"
+              ]
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "path": "release_label",
+              "prefix": "emr-6"
+            },
+            {
+              "path": "release_label",
+              "not_in": [
+                "emr-6.15.0"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "emr-release-5",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "emr",
+          "text": "5.36.2 Additional 5.x release versions"
+        }
+      },
+      "types": [
+        "AWS::EMR::Cluster",
+        "aws_emr_cluster"
+      ],
+      "when": [
+        {
+          "all": [
+            {
+              "path": "ReleaseLabel",
+              "prefix": "emr-5"
+            },
+            {
+              "path": "ReleaseLabel",
+              "not_in": [
+                "emr-5.36.2"
+              ]
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "path": "release_label",
+              "prefix": "emr-5"
+            },
+            {
+              "path": "release_label",
+              "not_in": [
+                "emr-5.36.2"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "opensearch-versions",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "opensearch-service",
+          "text": "Available OpenSearch Versions Include: 1.0, 1.1, 1.2, 1.3, 2.3, 2.5, 2.7, 2.9, 2.11, 2.13, 2.15, 2.17, 2.19"
+        }
+      },
+      "types": [
+        "AWS::OpenSearchService::Domain",
+        "aws_opensearch_domain",
+        "awscc_opensearchservice_domain"
+      ],
+      "when": [
+        {
+          "all": [
+            {
+              "path": "EngineVersion",
+              "prefix": "OpenSearch_"
+            },
+            {
+              "path": "EngineVersion",
+              "not_in": [
+                "OpenSearch_1.0",
+                "OpenSearch_1.1",
+                "OpenSearch_1.2",
+                "OpenSearch_1.3",
+                "OpenSearch_2.3",
+                "OpenSearch_2.5",
+                "OpenSearch_2.7",
+                "OpenSearch_2.9",
+                "OpenSearch_2.11",
+                "OpenSearch_2.13",
+                "OpenSearch_2.15",
+                "OpenSearch_2.17",
+                "OpenSearch_2.19"
+              ]
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "path": "engine_version",
+              "prefix": "OpenSearch_"
+            },
+            {
+              "path": "engine_version",
+              "not_in": [
+                "OpenSearch_1.0",
+                "OpenSearch_1.1",
+                "OpenSearch_1.2",
+                "OpenSearch_1.3",
+                "OpenSearch_2.3",
+                "OpenSearch_2.5",
+                "OpenSearch_2.7",
+                "OpenSearch_2.9",
+                "OpenSearch_2.11",
+                "OpenSearch_2.13",
+                "OpenSearch_2.15",
+                "OpenSearch_2.17",
+                "OpenSearch_2.19"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "opensearch-elasticsearch-versions",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "opensearch-service",
+          "text": "Available Elasticsearch Versions Include: 5.1, 5.3, 5.5, 5.6, 6.0, 6.2, 6.3, 6.4, 6.5, 6.7, 6.8, 7.1, 7.4, 7.7, 7.8, 7.9, 7.10"
+        }
+      },
+      "types": [
+        "AWS::OpenSearchService::Domain",
+        "aws_opensearch_domain",
+        "awscc_opensearchservice_domain",
+        "AWS::Elasticsearch::Domain",
+        "aws_elasticsearch_domain"
+      ],
+      "when": [
+        {
+          "all": [
+            {
+              "path": "EngineVersion",
+              "prefix": "Elasticsearch_"
+            },
+            {
+              "path": "EngineVersion",
+              "not_in": [
+                "Elasticsearch_5.1",
+                "Elasticsearch_5.3",
+                "Elasticsearch_5.5",
+                "Elasticsearch_5.6",
+                "Elasticsearch_6.0",
+                "Elasticsearch_6.2",
+                "Elasticsearch_6.3",
+                "Elasticsearch_6.4",
+                "Elasticsearch_6.5",
+                "Elasticsearch_6.7",
+                "Elasticsearch_6.8",
+                "Elasticsearch_7.1",
+                "Elasticsearch_7.4",
+                "Elasticsearch_7.7",
+                "Elasticsearch_7.8",
+                "Elasticsearch_7.9",
+                "Elasticsearch_7.10"
+              ]
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "path": "engine_version",
+              "prefix": "Elasticsearch_"
+            },
+            {
+              "path": "engine_version",
+              "not_in": [
+                "Elasticsearch_5.1",
+                "Elasticsearch_5.3",
+                "Elasticsearch_5.5",
+                "Elasticsearch_5.6",
+                "Elasticsearch_6.0",
+                "Elasticsearch_6.2",
+                "Elasticsearch_6.3",
+                "Elasticsearch_6.4",
+                "Elasticsearch_6.5",
+                "Elasticsearch_6.7",
+                "Elasticsearch_6.8",
+                "Elasticsearch_7.1",
+                "Elasticsearch_7.4",
+                "Elasticsearch_7.7",
+                "Elasticsearch_7.8",
+                "Elasticsearch_7.9",
+                "Elasticsearch_7.10"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "ElasticsearchVersion",
+          "not_in": [
+            "5.1",
+            "5.3",
+            "5.5",
+            "5.6",
+            "6.0",
+            "6.2",
+            "6.3",
+            "6.4",
+            "6.5",
+            "6.7",
+            "6.8",
+            "7.1",
+            "7.4",
+            "7.7",
+            "7.8",
+            "7.9",
+            "7.10"
+          ]
+        },
+        {
+          "path": "elasticsearch_version",
+          "not_in": [
+            "5.1",
+            "5.3",
+            "5.5",
+            "5.6",
+            "6.0",
+            "6.2",
+            "6.3",
+            "6.4",
+            "6.5",
+            "6.7",
+            "6.8",
+            "7.1",
+            "7.4",
+            "7.7",
+            "7.8",
+            "7.9",
+            "7.10"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "signer-platforms",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "signer",
+          "text": "AWS Signer only supports the container image signing feature",
+          "also": [
+            "Notation-OCI-SHA384-ECDSA",
+            "AWSLambda-SHA384-ECDSA"
+          ]
+        }
+      },
+      "types": [
+        "AWS::Signer::SigningProfile",
+        "aws_signer_signing_profile"
+      ],
+      "when": [
+        {
+          "path": "PlatformId",
+          "not_in": [
+            "Notation-OCI-SHA384-ECDSA",
+            "AWSLambda-SHA384-ECDSA"
+          ]
+        },
+        {
+          "path": "platform_id",
+          "not_in": [
+            "Notation-OCI-SHA384-ECDSA",
+            "AWSLambda-SHA384-ECDSA"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "signer-trust-policy",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "signer",
+          "text": "you must set signingAuthority to aws-eusc-signer-ts"
+        }
+      },
+      "severity": "caveat",
+      "types": [
+        "AWS::Signer::SigningProfile",
+        "aws_signer_signing_profile"
+      ],
+      "when": [
+        {
+          "path": "PlatformId",
+          "equals": "Notation-OCI-SHA384-ECDSA"
+        },
+        {
+          "path": "platform_id",
+          "equals": "Notation-OCI-SHA384-ECDSA"
+        }
+      ]
+    },
+    {
+      "id": "mq-engine-version",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "amazon-mq",
+          "text": "RabbitMQ 4.2 is the only supported engine version"
+        }
+      },
+      "types": [
+        "AWS::AmazonMQ::Broker",
+        "aws_mq_broker"
+      ],
+      "when": [
+        {
+          "all": [
+            {
+              "path": "EngineType",
+              "equals": "RABBITMQ"
+            },
+            {
+              "path": "EngineVersion",
+              "not_in": [
+                "4.2"
+              ]
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "path": "engine_type",
+              "equals": "RabbitMQ"
+            },
+            {
+              "path": "engine_version",
+              "not_in": [
+                "4.2"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mq-instance-types",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "amazon-mq",
+          "text": "Only m7g instance types"
+        }
+      },
+      "types": [
+        "AWS::AmazonMQ::Broker",
+        "aws_mq_broker"
+      ],
+      "when": [
+        {
+          "path": "HostInstanceType",
+          "not_in": [
+            "mq.m7g.medium",
+            "mq.m7g.large",
+            "mq.m7g.xlarge",
+            "mq.m7g.2xlarge",
+            "mq.m7g.4xlarge",
+            "mq.m7g.8xlarge",
+            "mq.m7g.12xlarge",
+            "mq.m7g.16xlarge"
+          ]
+        },
+        {
+          "path": "host_instance_type",
+          "not_in": [
+            "mq.m7g.medium",
+            "mq.m7g.large",
+            "mq.m7g.xlarge",
+            "mq.m7g.2xlarge",
+            "mq.m7g.4xlarge",
+            "mq.m7g.8xlarge",
+            "mq.m7g.12xlarge",
+            "mq.m7g.16xlarge"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "route53-alias-targets",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "route53",
+          "text": "You cannot alias to other AWS resources"
+        }
+      },
+      "types": [
+        "AWS::Route53::RecordSet",
+        "AWS::Route53::RecordSetGroup",
+        "aws_route53_record"
+      ],
+      "when": [
+        {
+          "path": "AliasTarget.DNSName",
+          "contains": "cloudfront.net"
+        },
+        {
+          "path": "AliasTarget.DNSName",
+          "contains": "awsglobalaccelerator.com"
+        },
+        {
+          "path": "AliasTarget.DNSName",
+          "contains": "elasticbeanstalk.com"
+        },
+        {
+          "path": "RecordSets.AliasTarget.DNSName",
+          "contains": "cloudfront.net"
+        },
+        {
+          "path": "RecordSets.AliasTarget.DNSName",
+          "contains": "awsglobalaccelerator.com"
+        },
+        {
+          "path": "RecordSets.AliasTarget.DNSName",
+          "contains": "elasticbeanstalk.com"
+        },
+        {
+          "path": "alias.name",
+          "contains": "cloudfront.net"
+        },
+        {
+          "path": "alias.name",
+          "contains": "awsglobalaccelerator.com"
+        },
+        {
+          "path": "alias.name",
+          "contains": "elasticbeanstalk.com"
+        }
+      ]
+    },
+    {
+      "id": "elb-lcu-reservation",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "elasticloadbalancing",
+          "text": "NLB and GWLB: not enabled"
+        }
+      },
+      "types": [
+        "AWS::ElasticLoadBalancingV2::LoadBalancer",
+        "aws_lb"
+      ],
+      "when": [
+        {
+          "all": [
+            {
+              "path": "Type",
+              "equals": "network"
+            },
+            {
+              "path": "MinimumLoadBalancerCapacity"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "path": "Type",
+              "equals": "gateway"
+            },
+            {
+              "path": "MinimumLoadBalancerCapacity"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "path": "load_balancer_type",
+              "equals": "network"
+            },
+            {
+              "path": "minimum_load_balancer_capacity"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "path": "load_balancer_type",
+              "equals": "gateway"
+            },
+            {
+              "path": "minimum_load_balancer_capacity"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "codebuild-windows",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "codebuild",
+          "text": "The following compute options are not available",
+          "also": [
+            "Windows build environments"
+          ]
+        }
+      },
+      "types": [
+        "AWS::CodeBuild::Project",
+        "aws_codebuild_project"
+      ],
+      "when": [
+        {
+          "path": "Environment.Type",
+          "prefix": "WINDOWS"
+        },
+        {
+          "path": "environment.type",
+          "prefix": "WINDOWS"
+        }
+      ]
+    },
+    {
+      "id": "codebuild-gpu",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "codebuild",
+          "text": "The following compute options are not available",
+          "also": [
+            "GPU build environments"
+          ]
+        }
+      },
+      "types": [
+        "AWS::CodeBuild::Project",
+        "aws_codebuild_project"
+      ],
+      "when": [
+        {
+          "path": "Environment.Type",
+          "contains": "GPU"
+        },
+        {
+          "path": "environment.type",
+          "contains": "GPU"
+        }
+      ]
+    },
+    {
+      "id": "codebuild-lambda",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "codebuild",
+          "text": "The following compute options are not available",
+          "also": [
+            "AWS Lambda compute"
+          ]
+        }
+      },
+      "types": [
+        "AWS::CodeBuild::Project",
+        "aws_codebuild_project"
+      ],
+      "when": [
+        {
+          "path": "Environment.Type",
+          "contains": "LAMBDA"
+        },
+        {
+          "path": "environment.type",
+          "contains": "LAMBDA"
+        }
+      ]
+    },
+    {
+      "id": "codebuild-docker-server",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "codebuild",
+          "text": "Docker server is not supported"
+        }
+      },
+      "types": [
+        "AWS::CodeBuild::Project",
+        "aws_codebuild_project"
+      ],
+      "when": [
+        {
+          "path": "Environment.DockerServer"
+        },
+        {
+          "path": "environment.docker_server"
+        }
+      ]
+    },
+    {
+      "id": "codebuild-public-builds",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "codebuild",
+          "text": "Public builds are not available"
+        }
+      },
+      "types": [
+        "AWS::CodeBuild::Project",
+        "aws_codebuild_project"
+      ],
+      "when": [
+        {
+          "path": "Visibility",
+          "equals": "PUBLIC_READ"
+        },
+        {
+          "path": "project_visibility",
+          "equals": "PUBLIC_READ"
+        }
+      ]
+    },
+    {
+      "id": "fsx-lustre-features",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "fsx",
+          "text": "For Amazon FSx for Lustre, the following features aren’t available",
+          "also": [
+            "Elastic Fabric Adapter (EFA)",
+            "HDD storage class",
+            "Intelligent-Tiering storage class",
+            "Scratch deployment type"
+          ]
+        }
+      },
+      "types": [
+        "AWS::FSx::FileSystem",
+        "aws_fsx_lustre_file_system"
+      ],
+      "when": [
+        {
+          "all": [
+            {
+              "path": "FileSystemType",
+              "equals": "LUSTRE"
+            },
+            {
+              "path": "StorageType",
+              "equals": "HDD"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "path": "FileSystemType",
+              "equals": "LUSTRE"
+            },
+            {
+              "path": "StorageType",
+              "equals": "INTELLIGENT_TIERING"
+            }
+          ]
+        },
+        {
+          "path": "LustreConfiguration.DeploymentType",
+          "prefix": "SCRATCH"
+        },
+        {
+          "path": "LustreConfiguration.EfaEnabled"
+        },
+        {
+          "path": "storage_type",
+          "equals": "HDD"
+        },
+        {
+          "path": "storage_type",
+          "equals": "INTELLIGENT_TIERING"
+        },
+        {
+          "path": "deployment_type",
+          "prefix": "SCRATCH"
+        },
+        {
+          "path": "efa_enabled"
+        }
+      ]
+    },
+    {
+      "id": "fsx-openzfs-intelligent-tiering",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "fsx",
+          "text": "For Amazon FSx for OpenZFS, the following features aren’t available",
+          "also": [
+            "Intelligent-Tiering storage class"
+          ]
+        }
+      },
+      "types": [
+        "AWS::FSx::FileSystem",
+        "aws_fsx_openzfs_file_system"
+      ],
+      "when": [
+        {
+          "all": [
+            {
+              "path": "FileSystemType",
+              "equals": "OPENZFS"
+            },
+            {
+              "path": "StorageType",
+              "equals": "INTELLIGENT_TIERING"
+            }
+          ]
+        },
+        {
+          "path": "storage_type",
+          "equals": "INTELLIGENT_TIERING"
+        }
+      ]
+    },
+    {
+      "id": "sagemaker-async-inference",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "sagemaker-ai",
+          "text": "Real-time Inference - The following features are not supported",
+          "also": [
+            "Asynchronous Inference"
+          ]
+        }
+      },
+      "feature": "Amazon SageMaker Asynchronous Inference",
+      "types": [
+        "AWS::SageMaker::EndpointConfig",
+        "aws_sagemaker_endpoint_configuration"
+      ],
+      "when": [
+        {
+          "path": "AsyncInferenceConfig"
+        },
+        {
+          "path": "async_inference_config"
+        }
+      ]
+    },
+    {
+      "id": "sagemaker-serverless-inference",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "sagemaker-ai",
+          "text": "Real-time Inference - The following features are not supported",
+          "also": [
+            "Serverless Inference"
+          ]
+        }
+      },
+      "feature": "Amazon SageMaker Serverless Inference",
+      "types": [
+        "AWS::SageMaker::EndpointConfig",
+        "aws_sagemaker_endpoint_configuration"
+      ],
+      "when": [
+        {
+          "path": "ProductionVariants.ServerlessConfig"
+        },
+        {
+          "path": "production_variants.serverless_config"
+        }
+      ]
+    },
+    {
+      "id": "rds-default-backup-window",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "rds",
+          "text": "uses the following time block as the default backup window"
+        }
+      },
+      "severity": "caveat",
+      "types": [
+        "AWS::RDS::DBInstance",
+        "aws_db_instance"
+      ],
+      "when": [
+        {
+          "all": [
+            {
+              "path": "PreferredBackupWindow",
+              "absent": true
+            },
+            {
+              "path": "DBClusterIdentifier",
+              "absent": true
+            },
+            {
+              "path": "Engine"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "path": "backup_window",
+              "absent": true
+            },
+            {
+              "path": "instance_class"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "aurora-default-backup-window",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "rds",
+          "text": "uses the following time block as the default backup window"
+        }
+      },
+      "severity": "caveat",
+      "types": [
+        "AWS::RDS::DBCluster",
+        "aws_rds_cluster"
+      ],
+      "when": [
+        {
+          "all": [
+            {
+              "path": "PreferredBackupWindow",
+              "absent": true
+            },
+            {
+              "path": "Engine"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "path": "preferred_backup_window",
+              "absent": true
+            },
+            {
+              "path": "cluster_identifier"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "rds-default-maintenance-window",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "rds",
+          "text": "uses the following time block as the default maintenance window"
+        }
+      },
+      "severity": "caveat",
+      "types": [
+        "AWS::RDS::DBInstance",
+        "AWS::RDS::DBCluster",
+        "aws_db_instance",
+        "aws_rds_cluster"
+      ],
+      "when": [
+        {
+          "all": [
+            {
+              "path": "PreferredMaintenanceWindow",
+              "absent": true
+            },
+            {
+              "path": "Engine"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "path": "maintenance_window",
+              "absent": true
+            },
+            {
+              "path": "instance_class"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "path": "preferred_maintenance_window",
+              "absent": true
+            },
+            {
+              "path": "cluster_identifier"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "iam-service-linked-roles",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "iam",
+          "text": "Only some AWS services support service-linked roles"
+        }
+      },
+      "severity": "caveat",
+      "types": [
+        "AWS::IAM::ServiceLinkedRole",
+        "aws_iam_service_linked_role",
+        "awscc_iam_service_linked_role"
+      ]
+    },
+    {
+      "id": "ecr-pull-through-cache-partition",
+      "kind": "deviation",
+      "scope": {
+        "partitions": [
+          "aws-eusc"
+        ]
+      },
+      "source": {
+        "guide": {
+          "page": "ecr",
+          "text": "pull through cache rules are available only within the same partition"
+        }
+      },
+      "severity": "caveat",
+      "types": [
+        "AWS::ECR::PullThroughCacheRule",
+        "aws_ecr_pull_through_cache_rule",
+        "awscc_ecr_pull_through_cache_rule"
+      ]
+    },
+    {
+      "id": "s3-dash-region-endpoint",
+      "kind": "literal",
+      "scope": {},
+      "source": {
+        "doc": {
+          "url": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/VirtualHosting.html",
+          "quote": "Some older Amazon S3 Regions support endpoints that contain a dash"
+        }
+      },
+      "pattern": "(?:^|[^a-z0-9-])(s3-([a-z]{2,4}(?:-[a-z]+)+-[0-9]+))\\.amazonaws\\.com",
+      "replace": {
+        "cloudformation": "s3.${AWS::Region}",
+        "cdk": "s3.${Aws.REGION}",
+        "terraform": "s3.${data.aws_region.current.region}"
+      }
+    },
+    {
+      "id": "lambda-runtime-create-blocked",
+      "kind": "deviation",
+      "scope": {},
+      "source": {
+        "doc": {
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/runtime-support-policy.html",
+          "quote": "Lambda begins blocking creation of new functions"
+        }
+      },
+      "types": [
+        "AWS::Lambda::Function",
+        "AWS::Serverless::Function",
+        "aws_lambda_function",
+        "awscc_lambda_function"
+      ],
+      "when": [
+        {
+          "path": "Runtime",
+          "one_of": [
+            "java8",
+            "go1.x",
+            "provided",
+            "ruby2.7",
+            "nodejs14.x",
+            "python3.7",
+            "dotnetcore3.1",
+            "nodejs12.x",
+            "python3.6",
+            "dotnetcore2.1",
+            "nodejs10.x",
+            "ruby2.5",
+            "python2.7",
+            "nodejs8.10",
+            "nodejs4.3",
+            "nodejs4.3-edge",
+            "nodejs6.10",
+            "dotnetcore1.0",
+            "dotnetcore2.0",
+            "nodejs"
+          ]
+        },
+        {
+          "path": "runtime",
+          "one_of": [
+            "java8",
+            "go1.x",
+            "provided",
+            "ruby2.7",
+            "nodejs14.x",
+            "python3.7",
+            "dotnetcore3.1",
+            "nodejs12.x",
+            "python3.6",
+            "dotnetcore2.1",
+            "nodejs10.x",
+            "ruby2.5",
+            "python2.7",
+            "nodejs8.10",
+            "nodejs4.3",
+            "nodejs4.3-edge",
+            "nodejs6.10",
+            "dotnetcore1.0",
+            "dotnetcore2.0",
+            "nodejs"
+          ]
+        }
+      ],
+      "remediation": {
+        "action": "move to a supported runtime",
+        "change": "Lambda no longer creates functions with this deprecated runtime, so the function cannot be created in the target. Move it to a supported runtime of the same language from the Lambda runtimes table.",
+        "consequence": "Code and dependencies may need changes between language versions.",
+        "doc": "https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtimes.html"
+      }
+    },
+    {
+      "id": "lambda-runtime-deprecated",
+      "kind": "deviation",
+      "scope": {},
+      "severity": "caveat",
+      "source": {
+        "doc": {
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtimes.html",
+          "quote": "For new AWS Regions, Lambda doesn't support runtimes that are set to be deprecated within the next 6 months."
+        }
+      },
+      "types": [
+        "AWS::Lambda::Function",
+        "AWS::Serverless::Function",
+        "aws_lambda_function",
+        "awscc_lambda_function"
+      ],
+      "when": [
+        {
+          "path": "Runtime",
+          "one_of": [
+            "dotnet8",
+            "python3.10",
+            "provided.al2",
+            "nodejs20.x",
+            "ruby3.2",
+            "python3.9",
+            "nodejs18.x",
+            "dotnet6",
+            "python3.8",
+            "nodejs16.x"
+          ]
+        },
+        {
+          "path": "runtime",
+          "one_of": [
+            "dotnet8",
+            "python3.10",
+            "provided.al2",
+            "nodejs20.x",
+            "ruby3.2",
+            "python3.9",
+            "nodejs18.x",
+            "dotnet6",
+            "python3.8",
+            "nodejs16.x"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cloudfront-certificate-in-us-east-1",
+      "kind": "exemption",
+      "scope": {
+        "partitions": [
+          "aws"
+        ]
+      },
+      "source": {
+        "doc": {
+          "url": "https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/cnames-and-https-requirements.html",
+          "quote": "To use an ACM certificate with a CloudFront distribution, make sure you request (or import) the certificate in the US East (N. Virginia) Region (us-east-1)."
+        }
+      },
+      "types": [
+        "AWS::CloudFront::Distribution",
+        "aws_cloudfront_distribution"
+      ],
+      "paths": [
+        "DistributionConfig.ViewerCertificate.AcmCertificateArn",
+        "viewer_certificate.acm_certificate_arn"
+      ],
+      "literal": "us-east-1"
+    },
+    {
+      "id": "cloudfront-certificate-stays-in-us-east-1",
+      "kind": "dependency",
+      "scope": {
+        "partitions": [
+          "aws"
+        ],
+        "except_regions": [
+          "us-east-1"
+        ]
+      },
+      "source": {
+        "doc": {
+          "url": "https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/cnames-and-https-requirements.html",
+          "quote": "To use an ACM certificate with a CloudFront distribution, make sure you request (or import) the certificate in the US East (N. Virginia) Region (us-east-1)."
+        }
+      },
+      "types": [
+        "AWS::CloudFront::Distribution",
+        "aws_cloudfront_distribution"
+      ],
+      "when": [
+        {
+          "path": "DistributionConfig.ViewerCertificate.AcmCertificateArn"
+        },
+        {
+          "path": "viewer_certificate.acm_certificate_arn"
+        }
+      ],
+      "remediation": {
+        "action": "keep the certificate in us-east-1",
+        "change": "CloudFront takes ACM certificates from us-east-1 only, so the certificate does not move with the input. Request or import it in us-east-1 and pass its ARN to the distribution.",
+        "consequence": "The input keeps a dependency on us-east-1.",
+        "doc": "https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/cnames-and-https-requirements.html"
+      }
+    },
+    {
+      "id": "iam-requested-region-condition",
+      "kind": "dependency",
+      "scope": {},
+      "source": {
+        "doc": {
+          "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_condition-keys.html",
+          "quote": "You can use this context key to limit access to AWS services within a given set of Regions."
+        }
+      },
+      "types": [
+        "AWS::IAM::Policy",
+        "AWS::IAM::ManagedPolicy",
+        "AWS::IAM::Role",
+        "AWS::IAM::User",
+        "AWS::IAM::Group",
+        "AWS::Organizations::Policy",
+        "aws_iam_policy",
+        "aws_iam_role_policy",
+        "aws_iam_user_policy",
+        "aws_iam_group_policy",
+        "aws_iam_role",
+        "aws_organizations_policy",
+        "AWS::S3::BucketPolicy",
+        "AWS::KMS::Key",
+        "AWS::EC2::VPCEndpoint",
+        "aws_s3_bucket_policy",
+        "aws_kms_key",
+        "aws_vpc_endpoint"
+      ],
+      "when": [
+        {
+          "path": "PolicyDocument",
+          "contains": "aws:RequestedRegion"
+        },
+        {
+          "path": "Policies",
+          "contains": "aws:RequestedRegion"
+        },
+        {
+          "path": "Content",
+          "contains": "aws:RequestedRegion"
+        },
+        {
+          "path": "policy",
+          "contains": "aws:RequestedRegion"
+        },
+        {
+          "path": "inline_policy",
+          "contains": "aws:RequestedRegion"
+        },
+        {
+          "path": "content",
+          "contains": "aws:RequestedRegion"
+        },
+        {
+          "path": "KeyPolicy",
+          "contains": "aws:RequestedRegion"
+        }
+      ],
+      "remediation": {
+        "action": "allow the target in aws:RequestedRegion",
+        "change": "The policy limits the Regions requests may go to with the aws:RequestedRegion condition key. Make sure the condition allows the target Region, for example by taking the Region list from a parameter.",
+        "consequence": "A condition that leaves the target out denies, or fails to allow, the requests there.",
+        "doc": "https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_policies_condition-keys.html"
+      }
+    },
+    {
+      "id": "s3-bucket-name-taken",
+      "kind": "dependency",
+      "scope": {
+        "within_partition": true
+      },
+      "source": {
+        "doc": {
+          "url": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucketnamingrules.html",
+          "quote": "each bucket name must be unique across all AWS accounts in all the AWS Regions within a partition"
+        }
+      },
+      "types": [
+        "AWS::S3::Bucket",
+        "aws_s3_bucket"
+      ],
+      "when": [
+        {
+          "path": "BucketName",
+          "no_other_region": true
+        },
+        {
+          "path": "bucket",
+          "no_other_region": true
+        }
+      ],
+      "remediation": {
+        "action": "let the bucket name be generated",
+        "change": "Bucket names are unique across all accounts and Regions of a partition, so this fixed name is taken while the source bucket exists. Leave the name out so it is generated, or derive it from the account and Region.",
+        "consequence": "Code and policies that use the name must take it from the input instead.",
+        "doc": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucketnamingrules.html"
+      }
+    },
+    {
+      "id": "quota-vpcs-per-region",
+      "kind": "quota",
+      "scope": {},
+      "source": {
+        "doc": {
+          "url": "https://docs.aws.amazon.com/vpc/latest/userguide/amazon-vpc-limits.html",
+          "quote": "You can increase this limit so that you can have hundreds of VPCs per Region."
+        }
+      },
+      "types": [
+        "AWS::EC2::VPC",
+        "aws_vpc",
+        "awscc_ec2_vpc"
+      ],
+      "quota": {
+        "service_code": "vpc",
+        "quota_code": "L-F678F1CE",
+        "name": "VPCs per Region"
+      }
+    },
+    {
+      "id": "quota-internet-gateways-per-region",
+      "kind": "quota",
+      "scope": {},
+      "source": {
+        "doc": {
+          "url": "https://docs.aws.amazon.com/vpc/latest/userguide/amazon-vpc-limits.html",
+          "quote": "To increase this quota, increase the quota for VPCs per Region."
+        }
+      },
+      "types": [
+        "AWS::EC2::InternetGateway",
+        "aws_internet_gateway",
+        "awscc_ec2_internet_gateway"
+      ],
+      "quota": {
+        "service_code": "vpc",
+        "quota_code": "L-A4707A72",
+        "name": "Internet gateways per Region"
+      }
+    },
+    {
+      "id": "quota-elastic-ips-per-region",
+      "kind": "quota",
+      "scope": {},
+      "source": {
+        "doc": {
+          "url": "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/elastic-ip-addresses-eip.html",
+          "quote": "By default, all AWS accounts have a quota of five (5) Elastic IP addresses per Region"
+        }
+      },
+      "types": [
+        "AWS::EC2::EIP",
+        "aws_eip",
+        "awscc_ec2_eip"
+      ],
+      "quota": {
+        "service_code": "ec2",
+        "quota_code": "L-0263D0A3",
+        "name": "EC2-VPC Elastic IPs"
+      }
+    },
+    {
+      "id": "quota-lambda-reserved-concurrency",
+      "kind": "quota",
+      "scope": {},
+      "source": {
+        "doc": {
+          "url": "https://docs.aws.amazon.com/lambda/latest/dg/configuration-concurrency.html",
+          "quote": "You can reserve up to the Unreserved account concurrency value minus 100."
+        }
+      },
+      "types": [
+        "AWS::Lambda::Function",
+        "AWS::Serverless::Function",
+        "aws_lambda_function",
+        "awscc_lambda_function"
+      ],
+      "paths": [
+        "ReservedConcurrentExecutions",
+        "reserved_concurrent_executions"
+      ],
+      "quota": {
+        "service_code": "lambda",
+        "quota_code": "L-B99A9384",
+        "name": "Concurrent executions",
+        "reserve": 100
+      }
+    },
+    {
+      "id": "move-network",
+      "kind": "mechanism",
+      "scope": {},
+      "source": {
+        "doc": {
+          "url": "https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/best-practices.html",
+          "quote": "After you have your stacks and resources set up, you can reuse your templates to replicate your infrastructure in multiple environments."
+        }
+      },
+      "types": [
+        "AWS::EC2::VPC",
+        "AWS::EC2::RouteTable",
+        "AWS::EC2::Route",
+        "AWS::EC2::SubnetRouteTableAssociation",
+        "AWS::EC2::InternetGateway",
+        "AWS::EC2::VPCGatewayAttachment",
+        "AWS::EC2::SecurityGroup",
+        "AWS::EC2::SecurityGroupIngress",
+        "AWS::EC2::SecurityGroupEgress",
+        "AWS::EC2::VPCEndpoint",
+        "AWS::EC2::EIP",
+        "aws_vpc",
+        "aws_route_table",
+        "aws_route",
+        "aws_route_table_association",
+        "aws_internet_gateway",
+        "aws_security_group",
+        "aws_security_group_rule",
+        "aws_vpc_security_group_ingress_rule",
+        "aws_vpc_security_group_egress_rule",
+        "aws_vpc_endpoint",
+        "aws_eip",
+        "AWS::RDS::DBSubnetGroup",
+        "aws_db_subnet_group"
+      ],
+      "mechanism": {
+        "boundary": "regional",
+        "content": "configuration",
+        "path": "redeploy",
+        "via": "redeploy the input in the target",
+        "data": null,
+        "crosses_partition": true,
+        "layer": "foundation"
+      }
+    },
+    {
+      "id": "move-zonal-network",
+      "kind": "mechanism",
+      "scope": {},
+      "source": {
+        "doc": {
+          "url": "https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/best-practices.html",
+          "quote": "After you have your stacks and resources set up, you can reuse your templates to replicate your infrastructure in multiple environments."
+        }
+      },
+      "types": [
+        "AWS::EC2::Subnet",
+        "AWS::EC2::NatGateway",
+        "AWS::EFS::MountTarget",
+        "aws_subnet",
+        "aws_nat_gateway",
+        "aws_efs_mount_target"
+      ],
+      "mechanism": {
+        "boundary": "zonal",
+        "content": "configuration",
+        "path": "redeploy",
+        "via": "redeploy the input in the target",
+        "data": null,
+        "crosses_partition": true,
+        "layer": "foundation"
+      }
+    },
+    {
+      "id": "move-identity",
+      "kind": "mechanism",
+      "scope": {},
+      "source": {
+        "doc": {
+          "url": "https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/best-practices.html",
+          "quote": "After you have your stacks and resources set up, you can reuse your templates to replicate your infrastructure in multiple environments."
+        }
+      },
+      "types": [
+        "AWS::IAM::Role",
+        "AWS::IAM::Policy",
+        "AWS::IAM::ManagedPolicy",
+        "AWS::IAM::InstanceProfile",
+        "AWS::IAM::RolePolicy",
+        "aws_iam_role",
+        "aws_iam_policy",
+        "aws_iam_role_policy",
+        "aws_iam_role_policy_attachment",
+        "aws_iam_instance_profile"
+      ],
+      "mechanism": {
+        "boundary": "global",
+        "content": "configuration",
+        "path": "redeploy",
+        "via": "redeploy the input in the target",
+        "data": null,
+        "crosses_partition": true,
+        "layer": "foundation"
+      }
+    },
+    {
+      "id": "move-shared-services",
+      "kind": "mechanism",
+      "scope": {},
+      "source": {
+        "doc": {
+          "url": "https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/best-practices.html",
+          "quote": "After you have your stacks and resources set up, you can reuse your templates to replicate your infrastructure in multiple environments."
+        }
+      },
+      "types": [
+        "AWS::ElasticLoadBalancingV2::LoadBalancer",
+        "AWS::ElasticLoadBalancingV2::TargetGroup",
+        "AWS::ElasticLoadBalancingV2::Listener",
+        "AWS::ElasticLoadBalancingV2::ListenerRule",
+        "AWS::ElasticLoadBalancing::LoadBalancer",
+        "AWS::ECS::Cluster",
+        "AWS::ApiGateway::RestApi",
+        "AWS::ApiGateway::Resource",
+        "AWS::ApiGateway::Method",
+        "AWS::ApiGateway::Deployment",
+        "AWS::ApiGateway::Stage",
+        "aws_lb",
+        "aws_lb_target_group",
+        "aws_lb_listener",
+        "aws_lb_listener_rule",
+        "aws_ecs_cluster",
+        "AWS::SNS::Topic",
+        "aws_sns_topic"
+      ],
+      "mechanism": {
+        "boundary": "regional",
+        "content": "configuration",
+        "path": "redeploy",
+        "via": "redeploy the input in the target",
+        "data": null,
+        "crosses_partition": true,
+        "layer": "shared"
+      }
+    },
+    {
+      "id": "move-workload-configuration",
+      "kind": "mechanism",
+      "scope": {},
+      "source": {
+        "doc": {
+          "url": "https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/best-practices.html",
+          "quote": "After you have your stacks and resources set up, you can reuse your templates to replicate your infrastructure in multiple environments."
+        }
+      },
+      "types": [
+        "AWS::ECS::Service",
+        "AWS::ECS::TaskDefinition",
+        "AWS::AutoScaling::AutoScalingGroup",
+        "AWS::AutoScaling::LaunchConfiguration",
+        "AWS::EC2::LaunchTemplate",
+        "AWS::Events::Rule",
+        "AWS::CloudWatch::Alarm",
+        "AWS::Logs::QueryDefinition",
+        "AWS::SSM::Parameter",
+        "AWS::S3::BucketPolicy",
+        "AWS::Lambda::Permission",
+        "AWS::CodeBuild::Project",
+        "AWS::StepFunctions::StateMachine",
+        "aws_ecs_service",
+        "aws_ecs_task_definition",
+        "aws_autoscaling_group",
+        "aws_launch_template",
+        "aws_cloudwatch_event_rule",
+        "aws_cloudwatch_metric_alarm",
+        "aws_ssm_parameter",
+        "aws_s3_bucket_policy",
+        "aws_lambda_permission"
+      ],
+      "mechanism": {
+        "boundary": "regional",
+        "content": "configuration",
+        "path": "redeploy",
+        "via": "redeploy the input in the target",
+        "data": null,
+        "crosses_partition": true,
+        "layer": "workload"
+      }
+    },
+    {
+      "id": "move-function-code",
+      "kind": "mechanism",
+      "scope": {},
+      "source": {
+        "doc": {
+          "url": "https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/best-practices.html",
+          "quote": "After you have your stacks and resources set up, you can reuse your templates to replicate your infrastructure in multiple environments."
+        }
+      },
+      "types": [
+        "AWS::Lambda::Function",
+        "AWS::Serverless::Function",
+        "aws_lambda_function",
+        "AWS::Lambda::LayerVersion",
+        "aws_lambda_layer_version"
+      ],
+      "mechanism": {
+        "boundary": "regional",
+        "content": "code",
+        "path": "redeploy",
+        "via": "redeploy the input; its deployment package or image must be in the target",
+        "data": null,
+        "crosses_partition": true,
+        "layer": "workload"
+      }
+    },
+    {
+      "id": "move-log-group",
+      "kind": "mechanism",
+      "scope": {},
+      "source": {
+        "doc": {
+          "url": "https://docs.aws.amazon.com/AmazonCloudWatch/latest/logs/Working-with-log-groups-and-streams.html",
+          "quote": "By default, log data is stored in CloudWatch Logs indefinitely."
+        }
+      },
+      "types": [
+        "AWS::Logs::LogGroup",
+        "aws_cloudwatch_log_group"
+      ],
+      "mechanism": {
+        "boundary": "regional",
+        "content": "supplemental",
+        "path": "redeploy",
+        "via": "redeploy the log group; the history stays in the source",
+        "data": "leave",
+        "crosses_partition": true,
+        "layer": "workload"
+      }
+    },
+    {
+      "id": "move-queue",
+      "kind": "mechanism",
+      "scope": {},
+      "source": {
+        "doc": {
+          "url": "https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/quotas-messages.html",
+          "quote": "By default, a message is retained for 4 days."
+        }
+      },
+      "types": [
+        "AWS::SQS::Queue",
+        "aws_sqs_queue"
+      ],
+      "mechanism": {
+        "boundary": "regional",
+        "content": "data",
+        "path": "redeploy",
+        "via": "redeploy the queue; let the source queue drain before switching producers",
+        "data": "drain",
+        "crosses_partition": true,
+        "layer": "shared"
+      }
+    },
+    {
+      "id": "move-bucket",
+      "kind": "mechanism",
+      "scope": {},
+      "source": {
+        "doc": {
+          "url": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/replication.html",
+          "quote": "To replicate existing objects from the source bucket to one or more destination buckets on demand, use S3 Batch Replication."
+        }
+      },
+      "types": [
+        "AWS::S3::Bucket",
+        "aws_s3_bucket"
+      ],
+      "mechanism": {
+        "boundary": "regional",
+        "content": "data",
+        "path": "replicate",
+        "via": "S3 Replication, with S3 Batch Replication for existing objects",
+        "data": "migrate",
+        "crosses_partition": null,
+        "layer": "shared"
+      }
+    },
+    {
+      "id": "move-table",
+      "kind": "mechanism",
+      "scope": {},
+      "source": {
+        "doc": {
+          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GlobalTables.html",
+          "quote": "Global tables automatically replicate your DynamoDB table data across AWS Regions and optionally across AWS accounts without requiring you to build and maintain your own replication solution."
+        }
+      },
+      "types": [
+        "AWS::DynamoDB::Table",
+        "aws_dynamodb_table"
+      ],
+      "mechanism": {
+        "boundary": "regional",
+        "content": "data",
+        "path": "replicate",
+        "via": "a DynamoDB global table replica in the target",
+        "data": "migrate",
+        "crosses_partition": null,
+        "layer": "shared",
+        "fallback": {
+          "path": "restore",
+          "via": "export the table to Amazon S3, copy the export, import it into a new table",
+          "data": "migrate",
+          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/S3DataImport.HowItWorks.html",
+          "quote": "During the Amazon S3 import process, DynamoDB creates a new target table that will be imported into."
+        }
+      }
+    },
+    {
+      "id": "move-database",
+      "kind": "mechanism",
+      "scope": {},
+      "source": {
+        "doc": {
+          "url": "https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_CopySnapshot.html",
+          "quote": "You can copy snapshots to another AWS Region or account in a single step."
+        }
+      },
+      "types": [
+        "AWS::RDS::DBInstance",
+        "AWS::RDS::DBCluster",
+        "aws_db_instance",
+        "aws_rds_cluster"
+      ],
+      "mechanism": {
+        "boundary": "regional",
+        "content": "data",
+        "path": "restore",
+        "via": "copy a snapshot to the target and restore it",
+        "data": "migrate",
+        "crosses_partition": null,
+        "layer": "shared"
+      }
+    },
+    {
+      "id": "move-file-system",
+      "kind": "mechanism",
+      "scope": {},
+      "source": {
+        "doc": {
+          "url": "https://docs.aws.amazon.com/efs/latest/ug/efs-replication.html",
+          "quote": "Amazon EFS automatically and transparently replicates the data and metadata on the source file system to a destination file system."
+        }
+      },
+      "types": [
+        "AWS::EFS::FileSystem",
+        "aws_efs_file_system"
+      ],
+      "mechanism": {
+        "boundary": "regional",
+        "content": "data",
+        "path": "replicate",
+        "via": "EFS replication to a file system in the target",
+        "data": "migrate",
+        "crosses_partition": null,
+        "layer": "shared"
+      }
+    },
+    {
+      "id": "move-secret",
+      "kind": "mechanism",
+      "scope": {},
+      "source": {
+        "doc": {
+          "url": "https://docs.aws.amazon.com/secretsmanager/latest/userguide/replicate-secrets.html",
+          "quote": "You can replicate your secrets in multiple AWS Regions to support applications spread across those Regions to meet Regional access and low latency requirements."
+        }
+      },
+      "types": [
+        "AWS::SecretsManager::Secret",
+        "aws_secretsmanager_secret"
+      ],
+      "mechanism": {
+        "boundary": "regional",
+        "content": "data",
+        "path": "replicate",
+        "via": "a replica secret in the target",
+        "data": "migrate",
+        "crosses_partition": null,
+        "layer": "foundation"
+      }
+    },
+    {
+      "id": "move-multi-region-key",
+      "kind": "mechanism",
+      "scope": {},
+      "source": {
+        "doc": {
+          "url": "https://docs.aws.amazon.com/kms/latest/developerguide/multi-region-keys-overview.html",
+          "quote": "You create a multi-Region primary key and then replicate it into Regions that you select within an AWS partition."
+        }
+      },
+      "types": [
+        "AWS::KMS::Key",
+        "aws_kms_key"
+      ],
+      "mechanism": {
+        "boundary": "regional",
+        "content": "data",
+        "path": "replicate",
+        "via": "a multi-Region replica key in the target",
+        "data": "migrate",
+        "crosses_partition": false,
+        "layer": "foundation",
+        "fallback": {
+          "path": "redeploy",
+          "via": "a new key in the target; decrypt and re-encrypt the data under it",
+          "data": "recreate",
+          "url": "https://docs.aws.amazon.com/kms/latest/developerguide/multi-region-keys-overview.html",
+          "quote": "You create a multi-Region primary key and then replicate it into Regions that you select within an AWS partition."
+        }
+      },
+      "when": [
+        {
+          "path": "MultiRegion",
+          "equals": "true"
+        },
+        {
+          "path": "multi_region",
+          "equals": "true"
+        }
+      ]
+    },
+    {
+      "id": "move-key",
+      "kind": "mechanism",
+      "scope": {},
+      "source": {
+        "doc": {
+          "url": "https://docs.aws.amazon.com/kms/latest/developerguide/multi-region-keys-overview.html",
+          "quote": "You cannot convert an existing single-Region key to a multi-Region key."
+        }
+      },
+      "types": [
+        "AWS::KMS::Key",
+        "aws_kms_key"
+      ],
+      "mechanism": {
+        "boundary": "regional",
+        "content": "data",
+        "path": "redeploy",
+        "via": "a new key in the target; decrypt and re-encrypt the data under it",
+        "data": "recreate",
+        "crosses_partition": true,
+        "layer": "foundation"
+      }
+    },
+    {
+      "id": "move-repository",
+      "kind": "mechanism",
+      "scope": {},
+      "source": {
+        "doc": {
+          "url": "https://docs.aws.amazon.com/AmazonECR/latest/userguide/replication.html",
+          "quote": "Cross-Region replication is not supported between AWS partitions."
+        }
+      },
+      "types": [
+        "AWS::ECR::Repository",
+        "aws_ecr_repository"
+      ],
+      "mechanism": {
+        "boundary": "regional",
+        "content": "data",
+        "path": "replicate",
+        "via": "ECR private image replication to the target",
+        "data": "migrate",
+        "crosses_partition": false,
+        "layer": "shared"
+      }
+    },
+    {
+      "id": "move-instance",
+      "kind": "mechanism",
+      "scope": {},
+      "source": {
+        "doc": {
+          "url": "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/CopyingAMIs.html",
+          "quote": "Copy AMIs across Regions within the same partition"
+        }
+      },
+      "types": [
+        "AWS::EC2::Instance",
+        "aws_instance"
+      ],
+      "mechanism": {
+        "boundary": "zonal",
+        "content": "data",
+        "path": "restore",
+        "via": "copy an AMI of the instance to the target and launch from it",
+        "data": "migrate",
+        "crosses_partition": false,
+        "layer": "workload",
+        "fallback": {
+          "path": "restore",
+          "via": "store an AMI of the instance in Amazon S3, copy it, and restore it in the target",
+          "data": "migrate",
+          "url": "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ami-store-restore.html",
+          "quote": "By storing and restoring an AMI using S3 buckets, you can copy AMIs from one AWS partition to another"
+        }
+      }
+    }
+  ]
+}

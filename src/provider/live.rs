@@ -4,11 +4,11 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Serialize;
 
-use super::aws_call::{Caller, Outcome, xml_values};
+use super::aws_call::{Call, Caller, Outcome, xml_first, xml_values};
 use crate::depth::{self, DepthCheck, DepthKind, DepthSource, Offered};
 use crate::error::{Result, ScanError};
 use crate::matcher::{Live, ServiceStatus};
-use crate::services::{self, Service};
+use crate::services::{self, Service, service};
 
 /// What the input asks live mode to check.
 #[derive(Debug, Default)]
@@ -24,19 +24,45 @@ pub struct Needs {
 #[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
 pub struct LiveProvenance {
     pub account_id: String,
+    /// When the account was read.
+    pub fetched_at: String,
     pub depth_probes: Vec<DepthKind>,
     /// The caller's role has ReadOnlyAccess (or AdministratorAccess) attached, so an
     /// AccessDenied from a service means the service is not offered.
     pub read_only_access: Option<bool>,
 }
 
+/// The caller's account id and ARN, from `GetCallerIdentity`: the first live call, so
+/// it also tells credentials that do not work in the Region apart from other failures.
+pub fn identity(caller: &Caller) -> Result<(String, String)> {
+    // In an opt-in Region that is not enabled, the first call already fails.
+    let body = caller
+        .call(service("sts"), "GetCallerIdentity", "POST", "/", &[])
+        .body("GetCallerIdentity")
+        .map_err(|e| match e {
+            ScanError::Auth(m) | ScanError::DataSource(m)
+                if ["InvalidClientTokenId", "UnrecognizedClient", "AuthFailure"]
+                    .iter()
+                    .any(|c| m.contains(c)) =>
+            {
+                ScanError::Auth(format!(
+                    "{}. If the target is an opt-in Region, check that it is enabled for the account.",
+                    m.trim_end_matches('.')
+                ))
+            }
+            e => e,
+        })?;
+    let account = xml_first(&body, "Account").unwrap_or_default();
+    if account.is_empty() {
+        return Err(ScanError::DataSource(
+            "GetCallerIdentity returned no account".into(),
+        ));
+    }
+    Ok((account, xml_first(&body, "Arn").unwrap_or_default()))
+}
+
 pub fn run(caller: &Caller, needs: Needs) -> Result<(Live, LiveProvenance)> {
-    let sts = svc("sts");
-    let identity = caller
-        .call(sts, "GetCallerIdentity", "POST", "/", &[])
-        .body("GetCallerIdentity")?;
-    let account_id = first(&identity, "Account");
-    let arn = first(&identity, "Arn");
+    let (account_id, arn) = identity(caller)?;
 
     let registry = needs.registry.then(|| registry_types(caller)).transpose()?;
     let mut read_only = None;
@@ -90,6 +116,7 @@ pub fn run(caller: &Caller, needs: Needs) -> Result<(Live, LiveProvenance)> {
 
     let prov = LiveProvenance {
         account_id,
+        fetched_at: crate::report::now_utc(),
         depth_probes: offered.keys().copied().collect(),
         read_only_access: read_only,
     };
@@ -105,21 +132,11 @@ pub fn run(caller: &Caller, needs: Needs) -> Result<(Live, LiveProvenance)> {
     ))
 }
 
-fn svc(prefix: &str) -> &'static Service {
-    services::index()
-        .by_endpoint_prefix(prefix)
-        .expect("core service is in the bundled table")
-}
-
-fn first(body: &str, tag: &str) -> String {
-    xml_values(body, tag).into_iter().next().unwrap_or_default()
-}
-
 /// Every public AWS resource type the CloudFormation registry offers.
-fn registry_types(caller: &Caller) -> Result<BTreeSet<String>> {
+pub fn registry_types(caller: &Caller) -> Result<BTreeSet<String>> {
     let types = paginate(
         caller,
-        svc("cloudformation"),
+        service("cloudformation"),
         "ListTypes",
         &[
             ("Visibility", "PUBLIC"),
@@ -156,7 +173,7 @@ fn paginate(
         }
         let body = caller.call(s, op, "POST", "/", &p).body(op)?;
         out.extend(xml_values(&body, tag));
-        next = first(&body, token);
+        next = xml_first(&body, token).unwrap_or_default();
         if next.is_empty() {
             return Ok(out);
         }
@@ -174,7 +191,7 @@ fn has_read_only(caller: &Caller, arn: &str) -> bool {
         return false;
     };
     match caller.call(
-        svc("iam"),
+        service("iam"),
         "ListAttachedRolePolicies",
         "POST",
         "/",
@@ -193,7 +210,7 @@ fn depth_probe(
     kind: DepthKind,
     checks: &BTreeMap<String, Vec<DepthCheck>>,
 ) -> Option<BTreeSet<String>> {
-    let ec2 = svc("ec2");
+    let ec2 = service("ec2");
     let set = |v: Result<Vec<String>>| v.ok().map(|v| v.into_iter().collect());
     match kind {
         DepthKind::InstanceType => set(paginate(
@@ -247,12 +264,14 @@ fn depth_probe(
         | DepthKind::NeptuneEngineVersion
         | DepthKind::DocumentDbEngineVersion
         | DepthKind::RedshiftNodeType => None,
+        // Read from the resource schemas, not probed.
+        DepthKind::Property => None,
     }
 }
 
 /// A Bedrock list call. No endpoint means no models are offered.
 fn bedrock(caller: &Caller, op: &str, uri: &str, list: &str, id: &str) -> Option<BTreeSet<String>> {
-    let s = svc("bedrock");
+    let s = service("bedrock");
     let mut out = BTreeSet::new();
     let mut next = String::new();
     loop {
@@ -290,7 +309,7 @@ fn engine_versions(
     token: &str,
     engines: &BTreeSet<String>,
 ) -> Option<BTreeSet<String>> {
-    let s = svc(prefix);
+    let s = service(prefix);
     let mut out = BTreeSet::new();
     for engine in engines {
         let mut next = String::new();
@@ -307,7 +326,7 @@ fn engine_versions(
                     out.insert(format!("{engine} {v}"));
                 }
             }
-            next = first(&body, token);
+            next = xml_first(&body, token).unwrap_or_default();
             if next.is_empty() {
                 break;
             }
@@ -400,8 +419,7 @@ mod tests {
             )]),
             zones: true,
         };
-        let (live, prov) = run(&caller, needs).unwrap();
-        eprintln!("{prov:?}\n{:?}\n{:?}", live.services, live.depth);
+        let (live, _) = run(&caller, needs).unwrap();
         assert!(live.registry.as_ref().unwrap().len() > 500);
         for s in ["EKS", "RDS", "DynamoDB", "CodePipeline", "CodeBuild"] {
             assert_eq!(live.services[s], ServiceStatus::Offered, "{s}");

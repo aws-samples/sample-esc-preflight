@@ -4,6 +4,7 @@
     "tool_version": "test",
     "source_format": "terraform-plan",
     "target_region": "eusc-de-east-1",
+    "target_account": null,
     "input_environments": [
       {
         "region": "eusc-de-east-1",
@@ -27,7 +28,8 @@
       "aws_provider_version": "6.71.0",
       "awscc_provider_version": "1.108.0"
     },
-    "live": null
+    "live": null,
+    "schemas": null
   },
   "summary": {
     "resources": 15,
@@ -36,16 +38,18 @@
     "disputed": 0,
     "cannot_assess": 0,
     "planned": 0,
-    "hazards": 2,
+    "hazards": 3,
     "environment_literals": 0,
     "divergences": 0,
     "depth_blockers": 1,
+    "account_blockers": 0,
     "deviations": 0,
     "guide_conflicts": 0,
     "caveats": 0,
+    "dependencies": 0,
     "fixes": 2,
     "proposals": 2,
-    "flags": 0
+    "flags": 1
   },
   "outcome": {
     "blocker": true,
@@ -66,6 +70,7 @@
       },
       "roadmap": null,
       "note": null,
+      "decided_by": "knowledge",
       "depth": []
     },
     {
@@ -81,6 +86,7 @@
       },
       "roadmap": null,
       "note": null,
+      "decided_by": "knowledge",
       "depth": []
     },
     {
@@ -96,6 +102,7 @@
       },
       "roadmap": null,
       "note": null,
+      "decided_by": "knowledge",
       "depth": []
     },
     {
@@ -111,6 +118,7 @@
       },
       "roadmap": null,
       "note": null,
+      "decided_by": "knowledge",
       "depth": []
     },
     {
@@ -126,6 +134,7 @@
       },
       "roadmap": null,
       "note": null,
+      "decided_by": "knowledge",
       "depth": [
         {
           "kind": "rds-engine-version",
@@ -149,6 +158,7 @@
       },
       "roadmap": null,
       "note": null,
+      "decided_by": "knowledge",
       "depth": []
     },
     {
@@ -164,6 +174,7 @@
       },
       "roadmap": null,
       "note": null,
+      "decided_by": "knowledge",
       "depth": [
         {
           "kind": "foundation-model",
@@ -187,6 +198,7 @@
       },
       "roadmap": null,
       "note": null,
+      "decided_by": "knowledge",
       "depth": [
         {
           "kind": "instance-type",
@@ -210,6 +222,7 @@
       },
       "roadmap": null,
       "note": null,
+      "decided_by": "knowledge",
       "depth": []
     },
     {
@@ -225,6 +238,7 @@
       },
       "roadmap": null,
       "note": null,
+      "decided_by": "knowledge",
       "depth": []
     },
     {
@@ -240,6 +254,7 @@
       },
       "roadmap": null,
       "note": null,
+      "decided_by": "knowledge",
       "depth": []
     },
     {
@@ -255,6 +270,7 @@
       },
       "roadmap": null,
       "note": null,
+      "decided_by": "knowledge",
       "depth": [
         {
           "kind": "availability-zone",
@@ -278,6 +294,7 @@
       },
       "roadmap": null,
       "note": null,
+      "decided_by": "knowledge",
       "depth": [
         {
           "kind": "availability-zone",
@@ -301,6 +318,7 @@
       },
       "roadmap": null,
       "note": null,
+      "decided_by": "knowledge",
       "depth": [
         {
           "kind": "availability-zone",
@@ -324,6 +342,7 @@
       },
       "roadmap": null,
       "note": null,
+      "decided_by": "knowledge",
       "depth": []
     }
   ],
@@ -335,12 +354,14 @@
         {
           "kind": "arn-partition",
           "value": "arn:aws-eusc:",
-          "impact": "portability"
+          "impact": "portability",
+          "rule": null
         },
         {
           "kind": "account-id",
           "value": "111122223333",
-          "impact": "portability"
+          "impact": "portability",
+          "rule": null
         }
       ]
     },
@@ -351,12 +372,26 @@
         {
           "kind": "arn-partition",
           "value": "arn:aws:",
-          "impact": "breaks"
+          "impact": "breaks",
+          "rule": null
+        }
+      ]
+    },
+    {
+      "logical_id": "aws_instance.this",
+      "path": "values.ami",
+      "literals": [
+        {
+          "kind": "resource-id",
+          "value": "ami-0123456789abcdef0",
+          "impact": "breaks",
+          "rule": null
         }
       ]
     }
   ],
   "deviations": [],
+  "dependencies": [],
   "documented_differences": [
     {
       "page": "cognito",
@@ -448,6 +483,7 @@
         ]
       },
       "impact": null,
+      "decided_by": "knowledge",
       "reason": "RDS engine version `postgres 16.4` at engine_version is not offered in eusc-de-east-1",
       "change": "Choose one of the candidates the target offers.",
       "precondition": null,
@@ -473,6 +509,7 @@
         ]
       },
       "impact": "portability",
+      "decided_by": "scanner",
       "reason": "hardcoded `arn:aws-eusc:` at values.service_role",
       "change": "Build the ARN from the partition instead of the literal.",
       "precondition": null,
@@ -502,6 +539,7 @@
         ]
       },
       "impact": "portability",
+      "decided_by": "scanner",
       "reason": "hardcoded `111122223333` at values.service_role",
       "change": "Use the deployment account instead of `111122223333`.",
       "precondition": "The value is the account the stack deploys to, not another account such as a central logging or an AWS-owned account.",
@@ -531,6 +569,7 @@
         ]
       },
       "impact": "breaks",
+      "decided_by": "scanner",
       "reason": "hardcoded `arn:aws:` at values.policy.Statement[0].Resource[0]",
       "change": "Build the ARN from the partition instead of the literal.",
       "precondition": null,
@@ -548,6 +587,26 @@
       ],
       "candidates": [],
       "doc": null
+    },
+    {
+      "logical_id": "aws_instance.this",
+      "cdk_path": null,
+      "tier": "flag",
+      "cause": {
+        "type": "hazard",
+        "ids": [
+          "resource-id"
+        ]
+      },
+      "impact": "breaks",
+      "decided_by": "scanner",
+      "reason": "hardcoded `ami-0123456789abcdef0` at values.ami",
+      "change": "`ami-0123456789abcdef0` names a resource in one Region and account. Pass it as a parameter or look it up in the target: for an AMI, an SSM public parameter (`{{resolve:ssm:/aws/service/...}}` in CloudFormation, `data \"aws_ssm_parameter\"` in Terraform). For a CDK lookup, synthesize again for the target.",
+      "precondition": null,
+      "consequence": null,
+      "edits": [],
+      "candidates": [],
+      "doc": null
     }
   ],
   "out_of_scope": [
@@ -557,6 +616,7 @@
       "provider": "registry.terraform.io/hashicorp/random"
     }
   ],
+  "account": null,
   "warnings": [
     {
       "code": "stale-rules",

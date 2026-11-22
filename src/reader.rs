@@ -163,8 +163,7 @@ fn yaml_to_json(node: &Yaml) -> Result<Value> {
 /// Rewrites a CloudFormation short-form tag to its long form.
 fn short_form(suffix: &str, inner: Value) -> Value {
     let (key, value) = match suffix {
-        "Ref" => ("Ref".to_string(), inner),
-        "Condition" => ("Condition".to_string(), inner),
+        "Ref" | "Condition" => (suffix.to_string(), inner),
         "GetAtt" => {
             let v = match inner {
                 Value::String(s) => match s.split_once('.') {
@@ -201,6 +200,44 @@ fn scalar_key(s: &Scalar) -> String {
     }
 }
 
+/// Transforms that are macros. `AWS::LanguageExtensions` is expanded here and SAM
+/// types are not property-checked, so neither hides anything.
+fn macros(transform: Option<&Value>) -> Vec<String> {
+    let names: Vec<&Value> = match transform {
+        Some(Value::Array(a)) => a.iter().collect(),
+        Some(v) => vec![v],
+        None => vec![],
+    };
+    names
+        .into_iter()
+        .map(|v| match v {
+            Value::String(s) => s.clone(),
+            // `{"Name": "AWS::Include", ...}` and other object forms.
+            v => v["Name"].as_str().unwrap_or("unknown").to_string(),
+        })
+        .filter(|n| n != "AWS::LanguageExtensions" && !n.starts_with("AWS::Serverless-"))
+        .collect()
+}
+
+/// Parameters that resolve an AWS public SSM parameter, such as the latest AMI.
+fn ssm_defaults(params: Option<&Value>) -> std::collections::BTreeMap<String, String> {
+    params
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .filter(|(_, p)| {
+            p["Type"]
+                .as_str()
+                .is_some_and(|t| t.starts_with("AWS::SSM::Parameter::Value<"))
+        })
+        .filter_map(|(name, p)| {
+            let d = p["Default"].as_str()?;
+            d.starts_with("/aws/service/")
+                .then(|| (format!("Parameters/{name}"), d.to_string()))
+        })
+        .collect()
+}
+
 fn from_value(doc: &Value, env: Option<DeployEnv>) -> Result<Template> {
     let resources = doc
         .get("Resources")
@@ -212,7 +249,11 @@ fn from_value(doc: &Value, env: Option<DeployEnv>) -> Result<Template> {
         })?;
     let mut flat = Map::new();
     expand_for_each(resources, &mut flat)?;
-    let mut template = Template::default();
+    let mut template = Template {
+        macros: macros(doc.get("Transform")),
+        ssm_defaults: ssm_defaults(doc.get("Parameters")),
+        ..Template::default()
+    };
     for (id, body) in flat {
         let resource_type = match body.get("Type") {
             Some(Value::String(t)) => t.clone(),
@@ -223,6 +264,23 @@ fn from_value(doc: &Value, env: Option<DeployEnv>) -> Result<Template> {
             }
             None => return Err(ScanError::Input(format!("resource {id} has no Type"))),
         };
+        let depends: Vec<String> = match body.get("DependsOn") {
+            Some(Value::String(s)) => vec![s.clone()],
+            Some(Value::Array(a)) => a
+                .iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect(),
+            _ => Vec::new(),
+        };
+        if !depends.is_empty() {
+            template.depends_on.insert(id.clone(), depends);
+        }
+        // `Fn::Transform` in the properties runs a macro on them.
+        if let Some(t) = body["Properties"].get("Fn::Transform") {
+            template.macros.extend(macros(Some(t)));
+            template.macros.sort();
+            template.macros.dedup();
+        }
         template.resources.insert(
             id.clone(),
             Resource {
@@ -370,6 +428,48 @@ Resources:
     fn rejects_malformed_input() {
         let err = parse_text("{not: [valid").unwrap_err();
         assert_eq!(err.exit_code(), 1);
+    }
+
+    #[test]
+    fn macros_exclude_sam_and_language_extensions() {
+        let m = |transform: &str| {
+            parse_text(&format!(
+                r#"{{"Transform":{transform},"Resources":{{"B":{{"Type":"AWS::S3::Bucket"}}}}}}"#
+            ))
+            .unwrap()
+            .macros
+        };
+        assert!(m(r#""AWS::Serverless-2016-10-31""#).is_empty());
+        assert!(m(r#"["AWS::LanguageExtensions","AWS::Serverless-2016-10-31"]"#).is_empty());
+        assert_eq!(m(r#""ExecutionRoleBuilder""#), ["ExecutionRoleBuilder"]);
+        assert_eq!(
+            m(r#"[{"Name":"AWS::Include","Parameters":{}}]"#),
+            ["AWS::Include"]
+        );
+        let inline = parse_text(
+            r#"{"Resources":{"B":{"Type":"AWS::S3::Bucket","Properties":{"Fn::Transform":{"Name":"Tags"}}}}}"#,
+        )
+        .unwrap();
+        assert_eq!(inline.macros, ["Tags"]);
+    }
+
+    #[test]
+    fn public_ssm_parameter_defaults() {
+        let t = parse_text(
+            r#"{"Parameters":{
+                "Ami":{"Type":"AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>","Default":"/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-x86_64"},
+                "Own":{"Type":"AWS::SSM::Parameter::Value<String>","Default":"/my/app/x"},
+                "Plain":{"Type":"String","Default":"/aws/service/x"}},
+              "Resources":{"B":{"Type":"AWS::S3::Bucket"}}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            t.ssm_defaults.into_iter().collect::<Vec<_>>(),
+            [(
+                "Parameters/Ami".to_string(),
+                "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-x86_64".to_string()
+            )]
+        );
     }
 
     #[test]

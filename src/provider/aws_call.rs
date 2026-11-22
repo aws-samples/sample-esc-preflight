@@ -11,6 +11,66 @@ use aws_sigv4::sign::v4;
 use crate::error::{Result, ScanError};
 use crate::services::Service;
 
+/// One AWS call, so code that reads an account can run against a fake in tests.
+pub trait Call: Sized {
+    fn call(
+        &self,
+        svc: &Service,
+        op: &str,
+        method: &str,
+        uri: &str,
+        params: &[(&str, &str)],
+    ) -> Outcome;
+    /// The same credentials against another Region of the partition, for services
+    /// with one endpoint per partition.
+    fn in_region(&self, region: &str) -> Result<Self>;
+}
+
+impl Call for Caller {
+    /// Calls `op`. Query and EC2 protocols send `params` in the form body; REST
+    /// protocols send them as the query string of `method uri`; JSON sends them as
+    /// an object of strings.
+    fn call(
+        &self,
+        svc: &Service,
+        op: &str,
+        method: &str,
+        uri: &str,
+        params: &[(&str, &str)],
+    ) -> Outcome {
+        let host = format!(
+            "{}.{}.{}",
+            svc.endpoint_prefix, self.region, self.dns_suffix
+        );
+        let mut attempt = 0;
+        loop {
+            let (req, body) = request(svc, op, uri, params);
+            let url = format!("https://{host}{}", req.path_and_query);
+            let mut headers = req.headers;
+            headers.push(("host".into(), host.clone()));
+            let outcome = match self.send(svc, method, &url, headers, body) {
+                Ok(o) => o,
+                Err(e) => Outcome::Failed(e),
+            };
+            attempt += 1;
+            if !outcome.is_throttled() || attempt == MAX_ATTEMPTS {
+                return outcome;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(500 << attempt));
+        }
+    }
+
+    fn in_region(&self, region: &str) -> Result<Self> {
+        check_endpoint_parts(region, &self.dns_suffix)?;
+        Ok(Self {
+            creds: self.creds.clone(),
+            region: region.into(),
+            dns_suffix: self.dns_suffix.clone(),
+            http: self.http.clone(),
+        })
+    }
+}
+
 pub struct Caller {
     creds: Credentials,
     region: String,
@@ -37,7 +97,7 @@ impl Outcome {
             if code.starts_with("AccessDenied") || code.starts_with("Unauthorized"))
     }
 
-    fn is_throttled(&self) -> bool {
+    pub fn is_throttled(&self) -> bool {
         matches!(self, Outcome::Error(code)
             if code.contains("Throttl") || code == "TooManyRequestsException" || code == "RequestLimitExceeded")
     }
@@ -79,38 +139,6 @@ impl Caller {
             dns_suffix: dns_suffix.into(),
             http,
         })
-    }
-
-    /// Calls `op`. Query and EC2 protocols send `params` in the form body; REST
-    /// protocols send them as the query string of `method uri`; JSON sends `{}`.
-    pub fn call(
-        &self,
-        svc: &Service,
-        op: &str,
-        method: &str,
-        uri: &str,
-        params: &[(&str, &str)],
-    ) -> Outcome {
-        let host = format!(
-            "{}.{}.{}",
-            svc.endpoint_prefix, self.region, self.dns_suffix
-        );
-        let mut attempt = 0;
-        loop {
-            let (req, body) = request(svc, op, uri, params);
-            let url = format!("https://{host}{}", req.path_and_query);
-            let mut headers = req.headers;
-            headers.push(("host".into(), host.clone()));
-            let outcome = match self.send(svc, method, &url, headers, body) {
-                Ok(o) => o,
-                Err(e) => Outcome::Failed(e),
-            };
-            attempt += 1;
-            if !outcome.is_throttled() || attempt == MAX_ATTEMPTS {
-                return outcome;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(500 << attempt));
-        }
     }
 
     fn send(
@@ -165,6 +193,13 @@ impl Caller {
             return Ok(Outcome::Ok(text));
         }
         match header_code.or_else(|| error_code(&text)) {
+            // A denial keeps its message: SSM, for one, explains why it denied.
+            Some(code) if code.starts_with("AccessDenied") => {
+                Ok(Outcome::Error(match error_message(&text) {
+                    Some(m) => format!("{code}: {m}"),
+                    None => code,
+                }))
+            }
             Some(code) => Ok(Outcome::Error(code)),
             None => Err(format!("HTTP {status} without an error code")),
         }
@@ -202,7 +237,14 @@ fn request(svc: &Service, op: &str, uri: &str, params: &[(&str, &str)]) -> (Requ
                     ),
                 ),
             ];
-            (req("/", headers), "{}".into())
+            let body: serde_json::Map<String, serde_json::Value> = params
+                .iter()
+                .map(|(k, v)| ((*k).to_string(), serde_json::Value::from(*v)))
+                .collect();
+            (
+                req("/", headers),
+                serde_json::Value::Object(body).to_string(),
+            )
         }
         _ => {
             let q = encode(params);
@@ -242,9 +284,21 @@ fn encode(pairs: &[(&str, &str)]) -> String {
         .join("&")
 }
 
+/// `<Message>` for XML protocols, `message`/`Message` for JSON ones.
+fn error_message(body: &str) -> Option<String> {
+    if let Some(m) = xml_first(body, "Message") {
+        return Some(m);
+    }
+    let v: serde_json::Value = serde_json::from_str(body).ok()?;
+    v["message"]
+        .as_str()
+        .or(v["Message"].as_str())
+        .map(str::to_string)
+}
+
 /// `<Code>X</Code>` for XML protocols, `__type`/`code` for JSON ones.
 fn error_code(body: &str) -> Option<String> {
-    if let Some(c) = xml_values(body, "Code").into_iter().next() {
+    if let Some(c) = xml_first(body, "Code") {
         return Some(c);
     }
     let v: serde_json::Value = serde_json::from_str(body).ok()?;
@@ -265,12 +319,49 @@ pub fn xml_values(body: &str, tag: &str) -> Vec<String> {
         .collect()
 }
 
+/// Text of the first `<tag>...</tag>` element.
+pub fn xml_first(body: &str, tag: &str) -> Option<String> {
+    xml_values(body, tag).into_iter().next()
+}
+
+/// The five named entities and numeric character references, in one pass, so an
+/// escaped `&amp;` never starts a second reference.
 fn unescape(s: &str) -> String {
-    s.replace("&lt;", "<")
-        .replace("&gt;", ">")
-        .replace("&quot;", "\"")
-        .replace("&apos;", "'")
-        .replace("&amp;", "&")
+    const NAMED: &[(&str, char)] = &[
+        ("lt", '<'),
+        ("gt", '>'),
+        ("quot", '"'),
+        ("apos", '\''),
+        ("amp", '&'),
+    ];
+    let mut out = String::with_capacity(s.len());
+    let mut rest = s;
+    while let Some(i) = rest.find('&') {
+        out.push_str(&rest[..i]);
+        let tail = &rest[i + 1..];
+        let decoded = tail.split_once(';').and_then(|(name, after)| {
+            let c = match name.strip_prefix('#') {
+                Some(num) => char::from_u32(match num.strip_prefix(['x', 'X']) {
+                    Some(hex) => u32::from_str_radix(hex, 16).ok()?,
+                    None => num.parse().ok()?,
+                })?,
+                None => NAMED.iter().find(|(n, _)| *n == name)?.1,
+            };
+            Some((c, after))
+        });
+        match decoded {
+            Some((c, after)) => {
+                out.push(c);
+                rest = after;
+            }
+            None => {
+                out.push('&');
+                rest = tail;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
 }
 
 /// DNS suffixes of AWS partitions. The endpoint host is checked against them before
@@ -425,11 +516,20 @@ mod tests {
     use crate::services;
 
     #[test]
-    fn missing_profile_suggests_a_close_name_or_points_to_the_cli() {
-        let known = ["prod", "eusc-scanner", "management"];
+    fn xml_entities_are_decoded() {
+        let body = "<Schema>{&quot;a&quot;:&quot;x&#xD;&#10;&amp;lt;&amp;quot;&#9731;&quot;}&#bad; & y</Schema>";
         assert_eq!(
-            missing_profile("eusc-ro", &known),
-            "profile `eusc-ro` not found. Did you mean `eusc-scanner`?"
+            xml_values(body, "Schema"),
+            ["{\"a\":\"x\r\n&lt;&quot;\u{2603}\"}&#bad; & y"]
+        );
+    }
+
+    #[test]
+    fn missing_profile_suggests_a_close_name_or_points_to_the_cli() {
+        let known = ["prod", "target-scanner", "admin"];
+        assert_eq!(
+            missing_profile("target-ro", &known),
+            "profile `target-ro` not found. Did you mean `target-scanner`?"
         );
         assert_eq!(
             missing_profile("prdo", &known),
@@ -475,6 +575,17 @@ mod tests {
         assert!(
             r.headers
                 .contains(&("x-amz-target".into(), "DynamoDB_20120810.ListTables".into()))
+        );
+        let (_, body) = request(
+            i.by_endpoint_prefix("ssm").unwrap(),
+            "GetParameter",
+            "/",
+            &[("Name", "/aws/service/x \"y\"")],
+        );
+        assert_eq!(body, r#"{"Name":"/aws/service/x \"y\""}"#);
+        assert_eq!(
+            error_message(r#"{"__type":"AccessDeniedException","message":"No access"}"#).as_deref(),
+            Some("No access")
         );
         assert!(
             r.headers

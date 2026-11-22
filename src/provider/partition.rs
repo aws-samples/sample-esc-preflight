@@ -58,6 +58,8 @@ pub fn facts(target_region: &str) -> Result<PartitionFacts> {
             .to_string(),
         target_regions: regions(target).count(),
         target_partition: target_id,
+        target_account: None,
+        source_partition: None,
         partitions,
         dns_suffixes,
         dual_stack,
