@@ -251,6 +251,7 @@ fn depth_probe(
             "Marker",
             &depth::engines(checks, kind),
         ),
+        DepthKind::RdsInstanceClass => orderable_classes(caller, checks),
         DepthKind::CacheEngineVersion => engine_versions(
             caller,
             "elasticache",
@@ -297,6 +298,40 @@ fn bedrock(caller: &Caller, op: &str, uri: &str, list: &str, id: &str) -> Option
             _ => return Some(out),
         }
     }
+}
+
+/// The input's `engine class` values that RDS can order in the region: one call per
+/// pair, filtered by engine and class.
+fn orderable_classes(
+    caller: &Caller,
+    checks: &BTreeMap<String, Vec<DepthCheck>>,
+) -> Option<BTreeSet<String>> {
+    let s = service("rds");
+    let wanted: BTreeSet<&str> = checks
+        .values()
+        .flatten()
+        .filter(|c| c.kind == DepthKind::RdsInstanceClass)
+        .map(|c| c.value.as_str())
+        .collect();
+    let mut out = BTreeSet::new();
+    for v in wanted {
+        let Some((engine, class)) = v.split_once(' ') else {
+            continue;
+        };
+        let p = [
+            ("Engine", engine),
+            ("DBInstanceClass", class),
+            ("MaxRecords", "20"),
+        ];
+        match caller.call(s, "DescribeOrderableDBInstanceOptions", "POST", "/", &p) {
+            Outcome::Ok(body) if body.contains("<OrderableDBInstanceOption>") => {
+                out.insert(v.to_string());
+            }
+            Outcome::Ok(_) | Outcome::NoEndpoint => {}
+            _ => return None,
+        }
+    }
+    Some(out)
 }
 
 /// `engine version` pairs for each engine. Each listed version element is read only up

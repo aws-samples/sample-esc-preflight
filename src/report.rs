@@ -25,8 +25,18 @@ pub struct TerraformProvenance {
 
 #[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
 pub struct KnowledgeProvenance {
+    /// Where products, services and APIs came from: the AWS Knowledge MCP server, or the
+    /// AWS SDK endpoint data for China.
     pub url: String,
-    /// Types, services or operations the server does not know.
+    /// Where the CloudFormation types and config values came from: the Builder Center
+    /// capabilities API, the Knowledge MCP server when the API failed, or the Region's
+    /// schema bundle for China.
+    pub cloudformation_url: String,
+    /// Where the product and roadmap states came from: the capabilities API, with the
+    /// Knowledge MCP server for the not-expanding state, or the Knowledge MCP server
+    /// alone when the API failed. Null for China, which publishes none.
+    pub products_url: Option<String>,
+    /// Types, services or operations the sources do not know.
     pub unknown: Vec<String>,
 }
 
@@ -41,7 +51,8 @@ pub struct Provenance {
     pub input_environments: Vec<DeployEnv>,
     /// botocore release of the bundled partition data.
     pub partitions_version: String,
-    /// Null when the server has no data for the target, so live mode decides alone.
+    /// The public availability data; null when no public source covers the target, so
+    /// live mode decides alone.
     pub knowledge: Option<KnowledgeProvenance>,
     /// ESC User Guide service pages, when the target is in its partition.
     pub user_guide: Option<GuideProvenance>,
@@ -86,7 +97,7 @@ pub struct Summary {
     /// Resources that use a feature the ESC User Guide or another AWS page documents as
     /// not available.
     pub deviations: usize,
-    /// Guide restrictions the Knowledge MCP data contradicts; warnings, not blockers.
+    /// Guide restrictions the public availability data contradicts; warnings, not blockers.
     pub guide_conflicts: usize,
     /// Features that work with a documented difference.
     pub caveats: usize,
@@ -134,11 +145,14 @@ impl Outcome {
 pub enum WarningCode {
     /// The input was produced for another Region than the target.
     InputRegionMismatch,
-    /// The Knowledge MCP server does not know some types, services or operations.
+    /// The public availability data does not know some types, services or operations.
     KnowledgeUnknown,
-    /// The Knowledge MCP server has no data for the target; live mode decides alone.
+    /// No public availability data covers the target; live mode decides alone.
     KnowledgeRegionUnlisted,
-    /// The ESC User Guide and the Knowledge MCP data disagree.
+    /// No source answered for instance types, engine versions or node types the input
+    /// sets (AWS China publishes none), so they were not checked.
+    ValuesUnchecked,
+    /// The ESC User Guide and the public availability data disagree.
     GuideConflict,
     /// Rules matched, but the guide no longer contains their sentence.
     StaleRules,
@@ -336,13 +350,33 @@ pub fn build(
         let finding = findings.iter().find(|f| f.logical_id == c.logical_id);
         c.cdk_path = finding.and_then(|f| f.cdk_path.clone());
         c.decided_by = decided_by(c, finding, &guide);
+        if matches!(c.cause.kind, CauseType::Availability | CauseType::Deviation)
+            && let Some(f) = finding
+        {
+            let partition = ctx
+                .facts
+                .map(|p| p.target_partition.as_str())
+                .unwrap_or_default();
+            // A whole-service substitute answers an unavailable type; a feature gap is
+            // answered only by mitigations for its rule.
+            let t = crate::sam::base_type(&f.resource_type).unwrap_or(&f.resource_type);
+            let t = (c.cause.kind == CauseType::Availability).then_some(t);
+            c.mitigations = crate::mitigations::find(t, &c.cause.ids, partition);
+        }
         match c.tier {
             Tier::Fix => s.fixes += 1,
             Tier::Propose => s.proposals += 1,
             Tier::Flag => s.flags += 1,
         }
     }
-    let (warnings, warning_commands) = warnings(&provenance, &guide, ctx, produce);
+    let unchecked: Vec<String> = unique(
+        findings
+            .iter()
+            .flat_map(|f| &f.depth)
+            .filter(|d| d.offered.is_none() && crate::depth::is_public(d.kind))
+            .map(|d| format!("{} {}", d.path, d.value)),
+    );
+    let (warnings, warning_commands) = warnings(&provenance, &guide, ctx, produce, &unchecked);
     Report {
         schema_version: SCHEMA_VERSION,
         data_provenance: provenance,
@@ -456,6 +490,7 @@ fn warnings(
     guide: &GuideFindings,
     ctx: &Context,
     produce: &str,
+    unchecked: &[String],
 ) -> (Vec<Warning>, Vec<(usize, String, String)>) {
     let target = &prov.target_region;
     let mut warnings: Vec<Warning> = Vec::new();
@@ -471,7 +506,21 @@ fn warnings(
         warn(
             WarningCode::KnowledgeRegionUnlisted,
             format!(
-                "The AWS Knowledge MCP server has no data for {target}, so the verdicts come from live mode alone, without roadmap states."
+                "No public availability data covers {target}, so the verdicts come from live mode alone, without roadmap states."
+            ),
+        );
+    }
+    if !unchecked.is_empty() {
+        warn(
+            WarningCode::ValuesUnchecked,
+            format!(
+                "No source says whether {target} offers {}, so these values were not checked.{}",
+                unchecked.join(", "),
+                if prov.live.is_some() {
+                    " Check them in the target before you deploy."
+                } else {
+                    " Run in live mode to check them in the account."
+                }
             ),
         );
     }
@@ -503,7 +552,7 @@ fn warnings(
         warn(
             WarningCode::KnowledgeUnknown,
             format!(
-                "The Knowledge MCP data does not know {}; only live mode can assess these resources.",
+                "The public availability data does not know {}; only live mode can assess these resources.",
                 k.unknown.join(", ")
             ),
         );
@@ -519,7 +568,7 @@ fn warnings(
         warn(
             WarningCode::GuideConflict,
             format!(
-                "The ESC User Guide says these features are not available, while the Knowledge MCP data lists them as available: {}. The guide is likely outdated. Ask your AWS team to confirm and to have the guide corrected.",
+                "The ESC User Guide says these features are not available, while the public availability data lists them as available: {}. The guide is likely outdated. Ask your AWS team to confirm and to have the guide corrected.",
                 conflicts.join(", ")
             ),
         );
@@ -649,7 +698,15 @@ pub fn text_summary(r: &Report, st: Style) -> String {
             pen.paint(
                 DIM,
                 &[
-                    p.knowledge.as_ref().map(|_| "Knowledge MCP".to_string()),
+                    p.knowledge.as_ref().map(|k| {
+                        if k.url == crate::provider::china::ENDPOINTS_URL {
+                            "China schema bundle, SDK endpoints".to_string()
+                        } else if k.cloudformation_url == crate::provider::capabilities::URL {
+                            "capabilities API, Knowledge MCP".to_string()
+                        } else {
+                            "Knowledge MCP".to_string()
+                        }
+                    }),
                     p.user_guide
                         .as_ref()
                         .map(|g| format!("ESC User Guide {} pages", g.pages)),
@@ -988,6 +1045,18 @@ fn change_lines(r: &Report, pen: &Pen) -> Vec<String> {
                 pen.paint(DIM, &types)
             ));
         }
+        if let Some(m) = &grp.mitigation {
+            let m = clip(
+                &format!("known mitigation: {m}"),
+                MAX_WHAT + 4 + MAX_ACTION,
+                ell,
+            );
+            out.push(format!(
+                "  {}  {}",
+                " ".repeat(tier_w + 2),
+                pen.paint(DIM, &m)
+            ));
+        }
     }
     if groups.len() > MAX_CHANGE_LINES {
         let rest: usize = groups[MAX_CHANGE_LINES..].iter().map(|x| x.n).sum();
@@ -1116,6 +1185,8 @@ struct Group {
     resources: usize,
     /// " in N resources", kept apart so clipping `what` never cuts the count.
     count: String,
+    /// The first known mitigation, as its summary.
+    mitigation: Option<String>,
 }
 
 impl Group {
@@ -1169,6 +1240,7 @@ fn change_groups(r: &Report) -> Vec<Group> {
                         subjects: Vec::new(),
                         resources: 0,
                         count: String::new(),
+                        mitigation: None,
                     },
                     Vec::new(),
                 ));
@@ -1176,6 +1248,9 @@ fn change_groups(r: &Report) -> Vec<Group> {
             }
         };
         let (x, ids) = &mut groups[i];
+        if x.mitigation.is_none() {
+            x.mitigation = c.mitigations.first().map(|m| clean(&m.summary));
+        }
         if !ids.contains(&c.logical_id.as_str()) {
             ids.push(&c.logical_id);
         }
@@ -1228,7 +1303,7 @@ pub(crate) fn clean(s: &str) -> String {
         .collect()
 }
 
-fn list(items: &[String], max: usize) -> String {
+pub(crate) fn list(items: &[String], max: usize) -> String {
     match items.len() {
         n if n <= max => items.join(", "),
         n => format!("{}, +{} more", items[..max].join(", "), n - max),
@@ -1351,6 +1426,12 @@ pub(crate) mod tests {
         PublicData {
             partition: partition::facts("eusc-de-east-1").unwrap(),
             knowledge: knowledge::tests::fixture(),
+            urls: Some((
+                knowledge::URL.into(),
+                crate::provider::capabilities::URL.into(),
+                Some(crate::provider::capabilities::URL.into()),
+            )),
+            bundle: None,
             guide: Some(guide::tests::fixture()),
             tf: Some(terraform::tests::fixture()),
         }
@@ -1371,6 +1452,30 @@ pub(crate) mod tests {
         )
     }
 
+    #[test]
+    fn unanswered_values_are_a_warning() {
+        let (w, _) = warnings(
+            &prov(SourceFormat::Cloudformation, vec![]),
+            &GuideFindings::default(),
+            &Context::default(),
+            "Synthesize",
+            &["InstanceType m7i.large".to_string()],
+        );
+        assert_eq!(w.len(), 1);
+        assert_eq!(w[0].code, WarningCode::ValuesUnchecked);
+        assert!(
+            w[0].message.contains("InstanceType m7i.large") && w[0].message.contains("live mode")
+        );
+        let (none, _) = warnings(
+            &prov(SourceFormat::Cloudformation, vec![]),
+            &GuideFindings::default(),
+            &Context::default(),
+            "Synthesize",
+            &[],
+        );
+        assert!(none.is_empty());
+    }
+
     fn prov(format: SourceFormat, envs: Vec<DeployEnv>) -> Provenance {
         Provenance {
             tool_version: "test".into(),
@@ -1381,6 +1486,8 @@ pub(crate) mod tests {
             partitions_version: "test".into(),
             knowledge: Some(KnowledgeProvenance {
                 url: knowledge::URL.into(),
+                cloudformation_url: crate::provider::capabilities::URL.into(),
+                products_url: Some(crate::provider::capabilities::URL.into()),
                 unknown: vec![],
             }),
             user_guide: None,
@@ -1444,7 +1551,7 @@ pub(crate) mod tests {
         );
         let prov = Provenance {
             user_guide: gp,
-            schema_types: crate::provider::schema::types(&t).len(),
+            schema_types: crate::provider::schema::types(&t, data.tf.as_ref()).len(),
             macros: t.macros.clone(),
             ..prov
         };
@@ -1949,7 +2056,7 @@ pub(crate) mod tests {
             "AWS::Lambda::Function".to_string(),
             ["Runtime".to_string()].into(),
         )]);
-        let mut depth = crate::provider::schema::checks(&t, &schemas);
+        let mut depth = crate::provider::schema::checks(&t, &schemas, None);
         let data = data();
         let findings = matcher::assess(&t, &data.knowledge, None, None, &depth);
         depth.clear();
@@ -2001,6 +2108,7 @@ pub(crate) mod tests {
                 quota_code: "L-F678F1CE".into(),
                 name: "VPCs per Region".into(),
                 needed: 6,
+                used: None,
                 uncounted: 0,
                 quota: 5.0,
                 value_source: QuotaSource::Default,
@@ -2016,6 +2124,7 @@ pub(crate) mod tests {
                     verdict: ScpVerdict::DeniesTarget,
                     conditional: true,
                 }],
+                services_denied: vec![],
             }),
             ssm_parameters: vec![SsmParameterCheck {
                 name: "/aws/service/x".into(),
@@ -2062,6 +2171,81 @@ pub(crate) mod tests {
         );
         let text = text_summary(&r, Style::default());
         assert!(text.contains("account blockers"), "{text}");
+    }
+
+    /// A Terraform policy set from a policy document read at apply time is checked
+    /// through the document's statements.
+    #[test]
+    fn terraform_policy_documents_are_checked() {
+        let plan = r#"{"format_version":"1.2",
+          "planned_values":{"root_module":{"resources":[
+            {"address":"aws_iam_policy.p","mode":"managed","type":"aws_iam_policy","name":"p",
+             "provider_name":"registry.terraform.io/hashicorp/aws","values":{"name":"p"}}]}},
+          "resource_changes":[
+            {"address":"data.aws_iam_policy_document.d","mode":"data","type":"aws_iam_policy_document","name":"d",
+             "change":{"actions":["read"],"after":{"statement":[{"effect":"Deny","actions":["*"],
+               "condition":[{"test":"StringNotEquals","variable":"aws:RequestedRegion","values":["eu-central-1"]}]}]}}}],
+          "configuration":{"root_module":{"resources":[
+            {"address":"aws_iam_policy.p","mode":"managed","type":"aws_iam_policy","name":"p",
+             "expressions":{"policy":{"references":["data.aws_iam_policy_document.d.json","data.aws_iam_policy_document.d"]}}}]}}}"#;
+        let r = fixed_for(plan, "eusc-de-east-1", None);
+        assert!(
+            r.dependencies
+                .iter()
+                .any(|d| d.rule == "iam-requested-region-condition"
+                    && d.logical_id == "aws_iam_policy.p"),
+            "{:?}",
+            r.dependencies
+        );
+    }
+
+    /// A SAM function is assessed as the Lambda function it deploys as, with Globals.
+    #[test]
+    fn sam_resources_are_assessed_as_their_base_type() {
+        let input = r#"{"Transform":"AWS::Serverless-2016-10-31",
+            "Globals":{"Function":{"Runtime":"python3.7","Environment":{"Variables":{"R":"eu-central-1"}}}},
+            "Resources":{
+              "F":{"Type":"AWS::Serverless::Function","Properties":{"Handler":"a.h","CodeUri":"src/","AcceleratorConfig":{}}},
+              "C":{"Type":"AWS::Serverless::Connector","Properties":{}}}}"#;
+        let r = fixed_for(input, "eu-west-1", None);
+        let f = r.findings.iter().find(|f| f.logical_id == "F").unwrap();
+        assert_eq!(f.resource_type, "AWS::Serverless::Function");
+        assert_eq!(f.verdict, crate::matcher::Verdict::Available);
+        assert!(
+            r.deviations
+                .iter()
+                .any(|d| d.rule == "lambda-runtime-create-blocked" && d.logical_id == "F"),
+            "{:?}",
+            r.deviations
+        );
+        // A literal in Globals is reported where it is written, not on the function.
+        assert!(
+            r.hazards.iter().all(|h| h.logical_id != "F"),
+            "{:?}",
+            r.hazards
+        );
+        assert!(
+            r.hazards
+                .iter()
+                .any(|h| h.logical_id == "Globals/Function"
+                    && h.path.starts_with("Globals.Function.")),
+            "{:?}",
+            r.hazards
+        );
+        let t = reader::parse_text(input).unwrap();
+        assert_eq!(
+            crate::provider::schema::types(&t, None),
+            ["AWS::Lambda::Function".to_string()].into()
+        );
+        let schemas = crate::provider::schema::Schemas::from([(
+            "AWS::Lambda::Function".to_string(),
+            ["Runtime", "Handler", "Environment"]
+                .map(String::from)
+                .into(),
+        )]);
+        let checks = crate::provider::schema::checks(&t, &schemas, None);
+        let props: Vec<&str> = checks["F"].iter().map(|c| c.value.as_str()).collect();
+        assert_eq!(props, ["AcceleratorConfig"]);
     }
 
     /// Each scan addition fires on an input that has it and not on one that does not,

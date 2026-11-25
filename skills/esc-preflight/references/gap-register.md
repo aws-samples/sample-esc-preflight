@@ -13,6 +13,7 @@ Input <path>, produced for <input_environments> · esc-preflight <tool_version> 
 - Finding: <reason>
 - Documented: <doc; roadmap status and launch quarter>
 - Decision needed: <change>
+- Known mitigations: <per entry of `mitigations`: summary; tradeoffs; doc; validation. Omit the line when there are none>
 - Before deciding, the owner needs: <what the code cannot tell: which callers use the endpoint, whether data must move, which account replaces this one>
 - Decision: <left for the owner>
 
@@ -20,7 +21,7 @@ Input <path>, produced for <input_environments> · esc-preflight <tool_version> 
 <same fields, plus what the user said>
 
 ## Verify
-<disputed, cannot-assess, caveats, guide conflicts, unknown to the Knowledge MCP data, stale rules, out of scope>
+<disputed, cannot-assess, caveats, guide conflicts, unknown to the public availability data, stale rules, out of scope>
 
 ## Not in the report
 <blockers you found, with file and line>

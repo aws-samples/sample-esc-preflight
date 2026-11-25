@@ -1,5 +1,5 @@
 ◆ esc-preflight · 8 resources · eusc-de-east-1
-  Knowledge MCP · ESC User Guide 16 pages · public mode
+  capabilities API, Knowledge MCP · ESC User Guide 16 pages · public mode
 
   AVAILABILITY
   ✔ available            6

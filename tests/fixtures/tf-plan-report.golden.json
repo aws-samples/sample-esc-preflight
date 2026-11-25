@@ -14,6 +14,8 @@
     "partitions_version": "test",
     "knowledge": {
       "url": "https://knowledge-mcp.global.api.aws",
+      "cloudformation_url": "https://prod.capabilities.builder.aws.com",
+      "products_url": "https://prod.capabilities.builder.aws.com",
       "unknown": []
     },
     "user_guide": {
@@ -142,6 +144,13 @@
           "value": "postgres 16.4",
           "offered": false,
           "source": "knowledge"
+        },
+        {
+          "kind": "rds-instance-class",
+          "path": "instance_class",
+          "value": "postgres db.t4g.micro",
+          "offered": null,
+          "source": null
         }
       ]
     },
@@ -496,7 +505,8 @@
         "postgres 16.12",
         "postgres 16.11"
       ],
-      "doc": null
+      "doc": null,
+      "mitigations": []
     },
     {
       "logical_id": "aws_codebuild_project.this",
@@ -526,7 +536,8 @@
         }
       ],
       "candidates": [],
-      "doc": null
+      "doc": null,
+      "mitigations": []
     },
     {
       "logical_id": "aws_codebuild_project.this",
@@ -556,7 +567,8 @@
         }
       ],
       "candidates": [],
-      "doc": null
+      "doc": null,
+      "mitigations": []
     },
     {
       "logical_id": "aws_iam_policy.bedrock",
@@ -586,7 +598,8 @@
         }
       ],
       "candidates": [],
-      "doc": null
+      "doc": null,
+      "mitigations": []
     },
     {
       "logical_id": "aws_instance.this",
@@ -606,7 +619,8 @@
       "consequence": null,
       "edits": [],
       "candidates": [],
-      "doc": null
+      "doc": null,
+      "mitigations": []
     }
   ],
   "out_of_scope": [

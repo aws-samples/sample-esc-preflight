@@ -18,6 +18,8 @@ pub enum DepthKind {
     FoundationModel,
     InferenceProfile,
     RdsEngineVersion,
+    /// `engine class`: an RDS DB instance class orderable for the engine; live mode.
+    RdsInstanceClass,
     CacheEngineVersion,
     CacheNodeType,
     NeptuneEngineVersion,
@@ -134,8 +136,13 @@ const FIXED_ENGINES: &[(&str, &str, &str, DepthKind)] = &[
     ),
 ];
 
-/// The Knowledge MCP config parent of each kind it covers. Engine values are keyed
-/// `<engine>-<version>` there.
+/// A kind the public availability data answers where it has config values.
+pub fn is_public(kind: DepthKind) -> bool {
+    CONFIG.iter().any(|(k, _)| *k == kind)
+}
+
+/// The config parent of each kind the public availability data covers. Engine values
+/// are keyed `<engine>-<version>` there.
 const CONFIG: &[(DepthKind, &str)] = &[
     (InstanceType, "AWS::EC2::Instance::InstanceType"),
     (RdsEngineVersion, "AWS::RDS::DBInstance::EngineVersion"),
@@ -185,6 +192,18 @@ const ENGINES: &[(&str, &str, &str, DepthKind)] = &[
         RdsEngineVersion,
     ),
     (
+        "AWS::RDS::DBInstance",
+        "Engine",
+        "DBInstanceClass",
+        RdsInstanceClass,
+    ),
+    (
+        "aws_db_instance",
+        "engine",
+        "instance_class",
+        RdsInstanceClass,
+    ),
+    (
         "AWS::ElastiCache::CacheCluster",
         "Engine",
         "EngineVersion",
@@ -216,8 +235,8 @@ pub fn checks(template: &Template, target_region: &str) -> BTreeMap<String, Vec<
     let mut out: BTreeMap<String, Vec<DepthCheck>> = BTreeMap::new();
     for r in template.resources.values() {
         let mut found = Vec::new();
-        let p = &r.properties;
-        for (_, path, kind) in SINGLE.iter().filter(|(t, ..)| *t == r.resource_type) {
+        let (p, rt) = (r.deployed_properties(), r.deployed_type());
+        for (_, path, kind) in SINGLE.iter().filter(|(t, ..)| *t == rt) {
             let (key, list) = match path.strip_suffix("[]") {
                 Some(k) => (k, true),
                 None => (*path, false),
@@ -238,14 +257,14 @@ pub fn checks(template: &Template, target_region: &str) -> BTreeMap<String, Vec<
                 }
             }
         }
-        for (_, e, v, kind) in ENGINES.iter().filter(|(t, ..)| *t == r.resource_type) {
+        for (_, e, v, kind) in ENGINES.iter().filter(|(t, ..)| *t == rt) {
             if let (Some(engine), Some(version)) = (p[*e].as_str(), p[*v].as_str()) {
                 // Engine names are case-insensitive in the APIs and lowercase in the data.
                 let engine = engine.to_ascii_lowercase();
                 found.push(check(*kind, v, &format!("{engine} {version}")));
             }
         }
-        for (_, v, engine, kind) in FIXED_ENGINES.iter().filter(|(t, ..)| *t == r.resource_type) {
+        for (_, v, engine, kind) in FIXED_ENGINES.iter().filter(|(t, ..)| *t == rt) {
             if let Some(version) = p[*v].as_str() {
                 found.push(check(*kind, v, &format!("{engine} {version}")));
             }
@@ -401,7 +420,10 @@ mod tests {
         );
         assert_eq!(
             v("aws_db_instance.this"),
-            [(RdsEngineVersion, "postgres 16.4".to_string())]
+            [
+                (RdsEngineVersion, "postgres 16.4".to_string()),
+                (RdsInstanceClass, "postgres db.t4g.micro".to_string())
+            ]
         );
         assert_eq!(
             v("aws_iam_policy.bedrock"),

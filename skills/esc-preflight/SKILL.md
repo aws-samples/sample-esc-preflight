@@ -2,9 +2,9 @@
 name: esc-preflight
 description: Prepare CDK, CloudFormation or Terraform code for another AWS Region or partition, such as the AWS European Sovereign Cloud (ESC), AWS GovCloud (US) or another Region of the global partition. Runs the esc-preflight scanner, applies the changes it marks as safe, asks before the ones it proposes, and records the rest for the owner. Use when the user wants to check, migrate, port or make infrastructure code ready for a target Region or partition, or remove hardcoded Regions, zones, partitions or account IDs.
 license: MIT-0
-compatibility: Needs the esc-preflight CLI 0.3.0 or later (cargo install --locked --git https://github.com/aws-samples/sample-esc-preflight --tag 0.3.0) and HTTPS access to knowledge-mcp.global.api.aws; for ESC targets also docs.aws.eu; for property checks in public mode schema.cloudformation.<region>.amazonaws.com (.amazonaws.com.cn in China).
+compatibility: Needs the esc-preflight CLI 0.3.1 or later (cargo install --locked --git https://github.com/aws-samples/sample-esc-preflight --tag 0.3.1) and HTTPS access to prod.capabilities.builder.aws.com and knowledge-mcp.global.api.aws; for ESC targets also docs.aws.eu; for property checks in public mode schema.cloudformation.<region>.amazonaws.com; for AWS China targets schema.cloudformation.<region>.amazonaws.com.cn and raw.githubusercontent.com.
 metadata:
-  version: "0.3.0"
+  version: "0.3.1"
 ---
 
 # esc-preflight
@@ -21,7 +21,7 @@ The `esc-preflight` CLI decides what changes; you apply its decisions in the sou
 
 ## 1. Target and input
 
-Ask for the target Region if the user did not name one; the CLI defaults to `eusc-de-east-1` (ESC). Run `esc-preflight --version`; if it is missing or older than 0.3.0, give the user the install command from `compatibility` above and stop.
+Ask for the target Region if the user did not name one; the CLI defaults to `eusc-de-east-1` (ESC). Run `esc-preflight --version`; if it is missing or older than 0.3.1, give the user the install command from `compatibility` above and stop.
 
 Produce the input for the target, then scan:
 
@@ -52,6 +52,7 @@ Handle `warnings` by `code` before editing:
 | `knowledge-region-unlisted` | Verdicts come from live mode alone, without roadmap states; note it in the register header. |
 | `guide-conflict`, `stale-rules` | List under Verify. |
 | `properties-unchecked` | Offer live mode, or the processed template if the message names a transform; otherwise note in the register header that properties were not checked. |
+| `values-unchecked` | Offer live mode if it did not run; otherwise list the named values under Verify. |
 | `account-checks-skipped` | List each skipped check and its reason under Verify. |
 
 Then work `required_changes`, the `environment` entry first:
@@ -59,7 +60,7 @@ Then work `required_changes`, the `environment` entry first:
 - `cause.type` `environment` (`logical_id` `*`): values written by synth or plan for the input's own environment. Once the user agrees, set the CDK stack `env` or Terraform provider to the target, or make the stack environment-agnostic, then scan again.
 - `cause.type` `hazard`: hardcoded literals. `impact` `breaks` means the value names another Region, partition, account or resource; `portability` means it is right for the target but hardcoded. Treat both by tier. A `resource-id` (an `ami-`, `subnet-` or similar ID) is always a flag: the owner looks the resource up in the target or passes it as a parameter.
 - `cause.type` `dependency`, `account`, and `depth` with id `property`: flags. Record them; never request a quota increase, change an SCP or remove a property yourself.
-- Every other entry by tier: a `propose` with `candidates` needs the user's pick; a `propose` without `edits`, such as replacing a global table with a table, is applied from its `change` after a yes; every `flag` goes to the gap register.
+- Every other entry by tier: a `propose` with `candidates` needs the user's pick; a `propose` without `edits`, such as replacing a global table with a table, is applied from its `change` after a yes; every `flag` goes to the gap register. A flag with `mitigations` lists each in the register with its `summary`, `tradeoffs`, `doc` and `validation`; never apply a mitigation yourself.
 
 Only a `fix` or an approved `propose` is edited. For a `flag`, never write an edit from its `change` text. Findings with verdict `disputed` or `cannot-assess`, deviations with `severity` `caveat` or a `conflict`, and `out_of_scope` resources go under Verify, with `roadmap` state where present.
 

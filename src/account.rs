@@ -9,7 +9,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::model::Template;
-use crate::provider::aws_call::{Call, Outcome, xml_first};
+use crate::provider::aws_call::{Call, Outcome, xml_first, xml_values};
 use crate::rules::{self, Kind};
 use crate::services::service;
 
@@ -35,6 +35,7 @@ impl AccountChecks {
                     .iter()
                     .filter(|p| p.verdict == ScpVerdict::DeniesTarget)
                     .count()
+                    + s.services_denied.len()
             })
             + self
                 .ssm_parameters
@@ -51,8 +52,10 @@ pub struct QuotaCheck {
     pub service_code: String,
     pub quota_code: String,
     pub name: String,
-    /// What the input alone needs, without what the account already uses.
+    /// What the input alone needs.
     pub needed: u64,
+    /// What the account already uses in the target; null when it could not be read.
+    pub used: Option<u64>,
     /// Values the input sets with a reference or function, so they are not counted.
     /// Negative values (Terraform's `-1`, no reservation) count as zero.
     pub uncounted: usize,
@@ -75,6 +78,20 @@ pub struct ScpCheck {
     pub status: ScpStatus,
     /// Service control policies that apply to the account, through its OUs and root.
     pub policies: Vec<ScpPolicy>,
+    /// Services the input uses that the SCPs deny in any Region: an allow list at one
+    /// level of the organization that does not name them, or a `Deny` of all their
+    /// actions without conditions.
+    pub services_denied: Vec<ScpServiceDenial>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+pub struct ScpServiceDenial {
+    /// The IAM service prefix, such as `lambda`.
+    pub service: String,
+    /// The account, OU or root whose policies deny it.
+    pub target: String,
+    /// The denying policy; null when no policy at the target allows the service.
+    pub policy: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, schemars::JsonSchema)]
@@ -129,6 +146,8 @@ pub struct Needs {
     pub quotas: Vec<(&'static rules::Rule, u64, usize)>,
     /// Public parameter path to where the input uses it.
     pub ssm: BTreeMap<String, BTreeSet<String>>,
+    /// IAM service prefixes of the input's CloudFormation resources.
+    pub services: BTreeSet<String>,
 }
 
 /// Counts the input against the quota rules and collects its public SSM parameters.
@@ -140,13 +159,17 @@ pub fn needs(template: &Template) -> Needs {
         for r in template
             .resources
             .values()
-            .filter(|r| rule.types.contains(&r.resource_type))
+            .filter(|r| rule.types.iter().any(|t| t == r.deployed_type()))
         {
             if rule.paths.is_empty() {
                 units += 1;
                 continue;
             }
-            for v in rule.paths.iter().filter_map(|p| r.properties.get(p)) {
+            for v in rule
+                .paths
+                .iter()
+                .filter_map(|p| r.deployed_properties().get(p))
+            {
                 match v
                     .as_i64()
                     .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
@@ -178,7 +201,53 @@ pub fn needs(template: &Template) -> Needs {
                 .insert(r.logical_id.clone());
         }
     }
-    Needs { quotas, ssm }
+    let services = template
+        .resources
+        .values()
+        .filter_map(|r| iam_prefix(r.deployed_type()))
+        .collect();
+    Needs {
+        quotas,
+        ssm,
+        services,
+    }
+}
+
+/// CloudFormation namespaces whose IAM service prefix is not the namespace in lower
+/// case, from the Service Authorization Reference.
+const IAM_PREFIXES: &[(&str, &str)] = &[
+    ("ApiGatewayV2", "apigateway"),
+    ("ApplicationAutoScaling", "application-autoscaling"),
+    ("CertificateManager", "acm"),
+    ("DocDB", "rds"),
+    ("EFS", "elasticfilesystem"),
+    ("ElasticLoadBalancingV2", "elasticloadbalancing"),
+    ("EMR", "elasticmapreduce"),
+    ("Elasticsearch", "es"),
+    ("KinesisAnalyticsV2", "kinesisanalytics"),
+    ("KinesisFirehose", "firehose"),
+    ("MSK", "kafka"),
+    ("Neptune", "rds"),
+    ("OpenSearchService", "es"),
+    ("StepFunctions", "states"),
+];
+
+/// The IAM prefix of a resource type's service, where it is known: from the table,
+/// else the namespace in lower case when botocore has a service of that name.
+fn iam_prefix(resource_type: &str) -> Option<String> {
+    let ns = match resource_type.split("::").collect::<Vec<_>>().as_slice() {
+        ["AWS", ns, _] => *ns,
+        _ => return None,
+    };
+    if let Some((_, p)) = IAM_PREFIXES.iter().find(|(n, _)| *n == ns) {
+        return Some((*p).to_string());
+    }
+    let p = ns.to_ascii_lowercase();
+    let index = crate::services::index();
+    (index
+        .by_endpoint_prefix(&p)
+        .is_some_and(|s| s.signing_name == p))
+    .then_some(p)
 }
 
 /// Partitions whose Organizations endpoint is in one Region; the others serve it in
@@ -244,20 +313,35 @@ pub fn run(
             skip(&rule.id, "Service Quotas returned no value".into());
             continue;
         };
+        let used = match usage(caller, &spec.quota_code) {
+            Some(Ok(n)) => Some(n),
+            Some(Err(r)) => {
+                skip(&format!("{}-usage", rule.id), r);
+                None
+            }
+            None => None,
+        };
         out.quotas.push(QuotaCheck {
             rule: rule.id.clone(),
             service_code: spec.service_code.clone(),
             quota_code: spec.quota_code.clone(),
             name: spec.name.clone(),
             needed: *needed,
+            used,
             uncounted: *uncounted,
             quota,
             value_source,
-            exceeded: *needed as f64 > quota,
+            exceeded: (*needed + used.unwrap_or(0)) as f64 > quota,
             doc: rule.source.url().to_string(),
         });
     }
-    match scp(caller, partition, account_id, target_region) {
+    match scp(
+        caller,
+        partition,
+        account_id,
+        target_region,
+        &needs.services,
+    ) {
         Ok(s) => out.scp = Some(s),
         Err(r) => skip("scp", r),
     }
@@ -285,6 +369,65 @@ pub fn run(
     out
 }
 
+/// What the account already uses of a quota in the target. `None`: no usage call
+/// is known for the quota.
+fn usage(caller: &impl Call, quota_code: &str) -> Option<Result<u64, String>> {
+    let ec2 = service("ec2");
+    // Each item of these lists carries its id once.
+    let count = |op: &str, paged: bool, tag: &str| -> Result<u64, String> {
+        let mut n = 0;
+        let mut token = String::new();
+        for _ in 0..20 {
+            let mut p = Vec::new();
+            if paged {
+                p.push(("MaxResults", "1000"));
+                if !token.is_empty() {
+                    p.push(("NextToken", token.as_str()));
+                }
+            }
+            match caller.call(ec2, op, "POST", "/", &p) {
+                Outcome::Ok(body) => {
+                    n += xml_values(&body, tag).len() as u64;
+                    match xml_first(&body, "nextToken") {
+                        Some(t) if paged && !t.is_empty() => token = t,
+                        _ => return Ok(n),
+                    }
+                }
+                o => return Err(reason(&format!("ec2:{op}"), &o)),
+            }
+        }
+        Err(format!("ec2:{op}: more than 20 pages"))
+    };
+    Some(match quota_code {
+        "L-F678F1CE" => count("DescribeVpcs", true, "vpcId"),
+        "L-A4707A72" => count("DescribeInternetGateways", true, "internetGatewayId"),
+        "L-0263D0A3" => count("DescribeAddresses", false, "allocationId"),
+        // Reserved concurrency already in use: the account's limit minus what is left
+        // unreserved.
+        "L-B99A9384" => match caller.call(
+            service("lambda"),
+            "GetAccountSettings",
+            "GET",
+            "/2016-08-19/account-settings/",
+            &[],
+        ) {
+            Outcome::Ok(body) => serde_json::from_str::<Value>(&body)
+                .ok()
+                .and_then(|v| {
+                    let l = &v["AccountLimit"];
+                    Some(
+                        l["ConcurrentExecutions"]
+                            .as_u64()?
+                            .saturating_sub(l["UnreservedConcurrentExecutions"].as_u64()?),
+                    )
+                })
+                .ok_or_else(|| "lambda:GetAccountSettings returned an unreadable answer.".into()),
+            o => Err(reason("lambda:GetAccountSettings", &o)),
+        },
+        _ => return None,
+    })
+}
+
 fn reason(call: &str, o: &Outcome) -> String {
     match o {
         o if o.is_denied() => format!("{call} was denied for the role."),
@@ -306,6 +449,7 @@ fn scp<C: Call>(
     partition: &str,
     account_id: &str,
     target_region: &str,
+    services: &BTreeSet<String>,
 ) -> Result<ScpCheck, String> {
     let region = ORGANIZATIONS_REGION
         .iter()
@@ -326,6 +470,7 @@ fn scp<C: Call>(
         Ok(ScpCheck {
             status,
             policies: Vec::new(),
+            services_denied: Vec::new(),
         })
     };
     match org.call(s, "DescribeOrganization", "POST", "/", &[]) {
@@ -355,9 +500,12 @@ fn scp<C: Call>(
             break;
         }
     }
-    let mut seen = BTreeSet::new();
+    let mut contents: BTreeMap<String, String> = BTreeMap::new();
     let mut policies = Vec::new();
+    // Each target's policies, as (id, content); every level must allow a service.
+    let mut levels: Vec<(String, Vec<(String, String)>)> = Vec::new();
     for t in &targets {
+        levels.push((t.clone(), Vec::new()));
         let mut next = String::new();
         loop {
             let mut p = vec![
@@ -370,11 +518,20 @@ fn scp<C: Call>(
             let v = json("ListPoliciesForTarget", &p)?;
             for pol in v["Policies"].as_array().into_iter().flatten() {
                 let id = pol["Id"].as_str().unwrap_or_default().to_string();
-                if !seen.insert(id.clone()) {
+                // A policy attached at several levels, such as FullAWSAccess, counts at
+                // each of them; it is read and listed once.
+                if let Some(content) = contents.get(&id) {
+                    if let Some((_, l)) = levels.last_mut() {
+                        l.push((id.clone(), content.clone()));
+                    }
                     continue;
                 }
                 let d = json("DescribePolicy", &[("PolicyId", &id)])?;
                 let content = d["Policy"]["Content"].as_str().unwrap_or("{}");
+                contents.insert(id.clone(), content.to_string());
+                if let Some((_, l)) = levels.last_mut() {
+                    l.push((id.clone(), content.to_string()));
+                }
                 let (verdict, conditional) = scp_verdict(content, target_region);
                 policies.push(ScpPolicy {
                     name: pol["Name"].as_str().unwrap_or_default().to_string(),
@@ -393,7 +550,92 @@ fn scp<C: Call>(
     Ok(ScpCheck {
         status: ScpStatus::Evaluated,
         policies,
+        services_denied: services_denied(&levels, services),
     })
+}
+
+/// Services the SCPs deny whatever the Region and resource.
+fn services_denied(
+    levels: &[(String, Vec<(String, String)>)],
+    services: &BTreeSet<String>,
+) -> Vec<ScpServiceDenial> {
+    let mut out = Vec::new();
+    for svc in services {
+        let action = format!("{svc}:*");
+        'levels: for (target, policies) in levels {
+            let docs: Vec<(&String, Vec<Value>)> =
+                policies.iter().map(|(id, c)| (id, statements(c))).collect();
+            for (id, sts) in &docs {
+                // A Deny without conditions of every action of the service, by
+                // `Action`, or by a `NotAction` that leaves it out.
+                let denies = sts.iter().any(|s| {
+                    s["Effect"] == "Deny"
+                        && s.get("Condition").is_none()
+                        && s.get("NotResource").is_none()
+                        && patterns(&s["Resource"]).iter().any(|r| r == "*")
+                        && (patterns(&s["Action"]).iter().any(|p| covers(p, &action))
+                            || (s.get("NotAction").is_some()
+                                && !patterns(&s["NotAction"])
+                                    .iter()
+                                    .any(|p| glob_ci(p, &action) || glob_ci(&action, p))))
+                });
+                if denies {
+                    out.push(ScpServiceDenial {
+                        service: svc.clone(),
+                        target: target.clone(),
+                        policy: Some((*id).clone()),
+                    });
+                    break 'levels;
+                }
+            }
+            if docs.is_empty() {
+                continue;
+            }
+            let allowed = docs.iter().flat_map(|(_, s)| s).any(|s| {
+                s["Effect"] == "Allow"
+                    && patterns(&s["Action"]).iter().any(|p| {
+                        covers(p, &action) || p.to_ascii_lowercase().starts_with(&format!("{svc}:"))
+                    })
+            });
+            if !allowed {
+                out.push(ScpServiceDenial {
+                    service: svc.clone(),
+                    target: target.clone(),
+                    policy: None,
+                });
+                break;
+            }
+        }
+    }
+    out
+}
+
+fn statements(content: &str) -> Vec<Value> {
+    match serde_json::from_str::<Value>(content).map(|d| d["Statement"].clone()) {
+        Ok(Value::Array(a)) => a,
+        Ok(v @ Value::Object(_)) => vec![v],
+        _ => Vec::new(),
+    }
+}
+
+fn patterns(v: &Value) -> Vec<String> {
+    match v {
+        Value::String(s) => vec![s.clone()],
+        Value::Array(a) => a
+            .iter()
+            .filter_map(|x| x.as_str().map(String::from))
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// `pattern` matches every action of `svc:*`: `*`, `svc:*` or a wildcard covering it.
+fn covers(pattern: &str, service_all: &str) -> bool {
+    glob_ci(pattern, service_all)
+}
+
+fn glob_ci(pattern: &str, s: &str) -> bool {
+    glob(&pattern.to_ascii_lowercase(), &s.to_ascii_lowercase())
 }
 
 /// Whether an SCP's Deny statements reach `region` through `aws:RequestedRegion`, and
@@ -605,6 +847,58 @@ mod tests {
     }
 
     #[test]
+    fn allow_lists_and_service_denies() {
+        let lvl = |t: &str, docs: &[&str]| {
+            (
+                t.to_string(),
+                docs.iter()
+                    .enumerate()
+                    .map(|(i, d)| (format!("{t}-p{i}"), (*d).to_string()))
+                    .collect::<Vec<_>>(),
+            )
+        };
+        let full = r#"{"Statement":{"Effect":"Allow","Action":"*","Resource":"*"}}"#;
+        let allow =
+            r#"{"Statement":[{"Effect":"Allow","Action":["s3:*","lambda:Get*"],"Resource":"*"}]}"#;
+        let deny_sqs = r#"{"Statement":[{"Effect":"Deny","Action":"sqs:*","Resource":"*"}]}"#;
+        let deny_some_buckets = r#"{"Statement":[{"Effect":"Deny","Action":"s3:*","Resource":"arn:aws:s3:::secret*"}]}"#;
+        let not_action = r#"{"Statement":[{"Effect":"Deny","NotAction":["iam:*","s3:*","lambda:*"],"Resource":"*"}]}"#;
+        let region = r#"{"Statement":[{"Effect":"Deny","Action":"sqs:*","Resource":"*","Condition":{"StringNotEquals":{"aws:RequestedRegion":"eu-west-1"}}}]}"#;
+        let services: BTreeSet<String> =
+            ["s3", "lambda", "sqs", "dynamodb"].map(String::from).into();
+        let d = services_denied(
+            &[
+                lvl("acct", &[full, deny_sqs, deny_some_buckets]),
+                lvl("ou", &[allow]),
+                lvl("ou2", &[full, deny_some_buckets]),
+                lvl("root", &[full]),
+            ],
+            &services,
+        );
+        let got: Vec<(&str, &str, Option<&str>)> = d
+            .iter()
+            .map(|x| (x.service.as_str(), x.target.as_str(), x.policy.as_deref()))
+            .collect();
+        assert_eq!(
+            got,
+            [("dynamodb", "ou", None), ("sqs", "acct", Some("acct-p1"))]
+        );
+        let n = services_denied(&[lvl("acct", &[full, not_action, region])], &services);
+        let svc: Vec<&str> = n.iter().map(|x| x.service.as_str()).collect();
+        assert_eq!(svc, ["dynamodb", "sqs"]);
+        assert!(services_denied(&[lvl("acct", &[full])], &services).is_empty());
+        assert_eq!(
+            iam_prefix("AWS::StepFunctions::StateMachine").as_deref(),
+            Some("states")
+        );
+        assert_eq!(
+            iam_prefix("AWS::Lambda::Function").as_deref(),
+            Some("lambda")
+        );
+        assert_eq!(iam_prefix("Custom::X"), None);
+    }
+
+    #[test]
     fn blockers_count_what_fails() {
         let mut a = AccountChecks {
             region_opt_in: Some("opted-in".into()),
@@ -689,6 +983,14 @@ mod tests {
                     ok(r#"{"Quota":{"Value":5.0}}"#),
                 ),
                 (
+                    "DescribeVpcs 1000",
+                    ok("<vpcSet><item><vpcId>vpc-1</vpcId></item></vpcSet>"),
+                ),
+                (
+                    "DescribeAddresses ",
+                    ok(&"<item><allocationId>eipalloc-1</allocationId></item>".repeat(4)),
+                ),
+                (
                     "GetParameter /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-x86_64",
                     ok("{}"),
                 ),
@@ -708,16 +1010,21 @@ mod tests {
         let n = needs(&reader::parse_text(INPUT).unwrap());
         let a = run(&c, "eu-west-1", "aws", "111122223333", &n);
         assert_eq!(a.region_opt_in.as_deref(), Some("opt-in-not-required"));
-        let q: Vec<(&str, QuotaSource, bool)> = a
+        let q: Vec<(&str, QuotaSource, Option<u64>, bool)> = a
             .quotas
             .iter()
-            .map(|q| (q.rule.as_str(), q.value_source, q.exceeded))
+            .map(|q| (q.rule.as_str(), q.value_source, q.used, q.exceeded))
             .collect();
         assert_eq!(
             q,
             [
-                ("quota-vpcs-per-region", QuotaSource::Applied, true),
-                ("quota-elastic-ips-per-region", QuotaSource::Default, false)
+                ("quota-vpcs-per-region", QuotaSource::Applied, Some(1), true),
+                (
+                    "quota-elastic-ips-per-region",
+                    QuotaSource::Default,
+                    Some(4),
+                    false
+                )
             ]
         );
         assert_eq!(

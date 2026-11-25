@@ -59,7 +59,7 @@ impl<'a> TypeMapper<'a> {
 
     pub fn map(&self, r: &Resource) -> Mapping {
         match r.origin {
-            Origin::Cfn => self.map_cfn(&r.resource_type, &r.properties),
+            Origin::Cfn => self.map_cfn(r.deployed_type(), r.deployed_properties()),
             Origin::TfAwscc => match self.tf.and_then(|m| m.awscc_cfn_type(&r.resource_type)) {
                 Some(cfn) => self.map_cfn_type(cfn),
                 None => unknown("Not in the awscc provider's schema list"),
@@ -222,6 +222,7 @@ mod tests {
             origin: Origin::Cfn,
             env: None,
             cdk_path: None,
+            deployed: None,
         })
     }
 
@@ -361,6 +362,7 @@ mod tests {
             origin,
             env: None,
             cdk_path: None,
+            deployed: None,
         };
         assert_eq!(
             m.map(&r("aws_lb", Origin::TfAws)),

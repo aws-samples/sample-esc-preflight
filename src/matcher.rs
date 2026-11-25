@@ -70,7 +70,7 @@ pub enum Listed {
 /// What each source said about one resource.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct Evidence {
-    /// The AWS Knowledge MCP data for the type, operation or service.
+    /// The public availability data for the type, operation or service.
     pub knowledge: Listed,
     /// The live check found the resource offered. Null without live mode or when the
     /// check could not decide.
@@ -121,9 +121,9 @@ pub struct Finding {
     pub roadmap: Option<Roadmap>,
     pub note: Option<String>,
     /// The source that decided whether the resource is offered. Roadmap states always
-    /// come from the Knowledge MCP data.
+    /// come from the public availability data.
     pub decided_by: DecidedBy,
-    /// The live check contradicted the Knowledge MCP data (an AWS data-staleness signal).
+    /// The live check contradicted the public availability data (an AWS data-staleness signal).
     /// Visible in the JSON as `evidence.knowledge` against `evidence.live`.
     #[serde(skip)]
     pub divergence: bool,
@@ -212,7 +212,7 @@ pub fn assess(
                 if live_listed == Some(true) {
                     "The CloudFormation registry of the target region"
                 } else {
-                    "The Knowledge MCP data"
+                    "The public availability data"
                 },
                 check_label(&check),
                 rm.sentence()
@@ -227,8 +227,8 @@ pub fn assess(
             }
             (Verdict::NotAvailable, None) => notes.push(NOT_AVAILABLE_NOTE.into()),
             (Verdict::CannotAssess, _) => notes.push(match &check {
-                Check::Type(_) => "The Knowledge MCP data does not know this type; it may be retired or newer than the data. Live mode checks it in the target registry.".into(),
-                Check::Api { .. } => "The Knowledge MCP data does not know this service.".into(),
+                Check::Type(_) => "The public availability data does not know this type; it may be retired or newer than the data. Live mode checks it in the target registry.".into(),
+                Check::Api { .. } => "The public availability data does not know this service.".into(),
             }),
             _ => {}
         }
@@ -303,7 +303,7 @@ fn sibling_available(t: &str, k: &Knowledge, live: Option<&Live>) -> bool {
 }
 
 /// The live answer, notes explaining why there is none, and whether an access-denied
-/// answer contradicts the Knowledge MCP data.
+/// answer contradicts the public availability data.
 fn live_result(
     live: Option<&Live>,
     check: &Check,
@@ -329,7 +329,7 @@ fn live_result(
                 Some(ServiceStatus::Refused) if listed == Listed::Available => (
                     None,
                     kind,
-                    vec!["The service answered access denied although the caller has ReadOnlyAccess, while the Knowledge MCP data lists it. Check account settings and policies that may deny the service.".into()],
+                    vec!["The service answered access denied although the caller has ReadOnlyAccess, while the public availability data lists it. Check account settings and policies that may deny the service.".into()],
                     true,
                 ),
                 Some(ServiceStatus::Refused) => (Some(false), kind, Vec::new(), false),

@@ -23,14 +23,14 @@ It runs locally, read-only, and makes no model calls.
 * In an automated migration, scan, change and re-scan IaC code until no blockers remain, across repositories.
 * Plan the move of a workload: which resources redeploy, which need their data replicated or restored, and in which order.
 * Compare two Regions before you choose one.
-* Move between any Regions or partitions, not only to ESC: `--region eu-west-1` for a move within the global partition, `--region us-gov-west-1` for AWS GovCloud (US), or `--region cn-north-1 --profile <name>` for AWS China. ESC User Guide checks apply to ESC targets only.
+* Move between any Regions or partitions, not only to ESC: `--region eu-west-1` for a move within the global partition, `--region us-gov-west-1` for AWS GovCloud (US), or `--region cn-north-1` for AWS China. ESC User Guide checks apply to ESC targets only.
 
 ## Install
 
 Requires [Rust](https://www.rust-lang.org/tools/install) 1.99 or later.
 
 ```bash
-cargo install --locked --git https://github.com/aws-samples/sample-esc-preflight --tag 0.3.0
+cargo install --locked --git https://github.com/aws-samples/sample-esc-preflight --tag 0.3.1
 ```
 
 ## Scan
@@ -44,6 +44,7 @@ Run in your project directory:
 | Terraform | `terraform plan -out=tfplan && terraform show -json tfplan \| esc-preflight scan` |
 
 * Without a path, `scan` reads `cdk.out` or the single template in the current directory.
+* AWS SAM templates are read as the CloudFormation they deploy: `Globals` apply, and each SAM resource is checked as its base type (an `AWS::Serverless::Function` as an `AWS::Lambda::Function`) with the properties SAM passes through. Hardcoded values in `Globals` are reported at `Globals/<section>`. Resources SAM generates from event sources are not checked; scan the processed template for those.
 * For a target other than ESC, add `--region <region>` and synthesize or plan for that Region.
 * For a move to another account, add `--account <id>`: account IDs other than the target's and the input's own then break.
 * The summary goes to stderr. The JSON report goes to `--out <file>`, or to stdout when it is redirected.
@@ -74,7 +75,7 @@ esc-preflight plan template.yaml --from eu-central-1 --region eusc-de-east-1 --o
 
 * The source Region is `--from`, else the input's environment (a CDK assembly or Terraform plan states it). Pass `--from` when you produced the input for the target, as for `scan`. Without a source, or with the target as source, the plan applies no partition limits and says so in a warning.
 * `crosses_partition` on an entry says whether its mechanism works across partitions: `true`, `false`, or `null` where the AWS documentation does not say. For a move to another partition, a mechanism that is not documented there takes its documented alternative (DynamoDB export and import, a new KMS key, an EC2 AMI stored and restored through S3) or becomes `unknown` with a note (S3, EFS, Secrets Manager and ECR replication, RDS snapshot copy).
-* Resources come in waves: foundation (network, identity, keys) from wave 1, shared services from wave 2, workloads from wave 3, and each resource after the resources it references in its stack (`Ref`, `Fn::GetAtt`, `Fn::Sub`, `DependsOn`). Terraform plans follow the layers only.
+* Resources come in waves: foundation (network, identity, keys) from wave 1, shared services from wave 2, workloads from wave 3, and each resource after the resources it references: in its stack (`Ref`, `Fn::GetAtt`, `Fn::Sub`, `DependsOn`), in other stacks (`Fn::ImportValue`, nested-stack outputs), and in a Terraform plan (references, `depends_on`, module inputs and outputs, data sources). A reference cycle gets a warning.
 * Findings on the whole input, such as a quota, are one warning that blocks everything until resolved. Dependencies and hardcoded literals do not block; fix them as the scan says.
 * The scan options apply to the scan `plan` runs; `--out` takes the plan JSON. `plan` executes nothing and exits 0 whenever it produced a plan.
 
@@ -88,9 +89,9 @@ esc-preflight compare --from eu-central-1 --to eusc-de-east-1
 
 `compare` lists what `--from` offers and `--to` does not: products and features with their roadmap state in `--to`, CloudFormation resource types, config values such as instance types and engine versions, and top-level properties of types both offer. It does not list the reverse.
 
-* Public mode reads both Regions from the AWS Knowledge MCP server (about 30 seconds) and compares properties where both Regions publish a CloudFormation schema bundle: the global partition, AWS GovCloud (US) and AWS China. ESC publishes none, so public mode skips properties for it with a warning.
-* With `--profile` or `--role-arn` for `--to`, its CloudFormation registry and resource schemas come from the account (`cloudformation:ListTypes`, `cloudformation:DescribeType`). This takes several minutes, for about 700 `DescribeType` calls.
-* `--from` must be a Region the Knowledge MCP server has data for. A `--to` without such data needs live mode, and then only types and properties are compared.
+* Public mode reads both Regions from the public sources under [Network access](#network-access) and compares properties where both Regions publish a CloudFormation schema bundle: the global partition, AWS GovCloud (US) and AWS China. ESC publishes none, so public mode skips properties for it with a warning.
+* With `--live`, `--profile` or `--role-arn` for `--to`, its CloudFormation registry comes from the account (`cloudformation:ListTypes`). Add `--properties` to read its resource schemas as well (`cloudformation:DescribeType`), which takes several minutes for about 700 types. Without `--properties`, a `--to` that publishes a schema bundle still has its properties compared.
+* AWS China publishes no product or config value data, so a comparison with a China Region covers resource types and properties. A `--to` that no public source covers needs live mode, and then only types and properties are compared.
 * The terminal shows the first 8 entries of each list; the JSON has all of them.
 
 ## How it works
@@ -107,7 +108,7 @@ Each entry in `required_changes` has a tier:
 | `propose` | Apply after review; states precondition and consequence | a global table becomes a table, an instance type the region offers |
 | `flag` | Your decision | an unavailable service, a documented deviation, a dependency |
 
-`edits` carry the replacement for CloudFormation, CDK and Terraform; `cdk_path` locates the CDK construct. Each required change states its `cause` and what decided it (`decided_by`: the Knowledge MCP data, live mode, the target's resource schema, the ESC User Guide, a rule with a quoted AWS source, or the scanner itself).
+`edits` carry the replacement for CloudFormation, CDK and Terraform; `cdk_path` locates the CDK construct. Each required change states its `cause` and what decided it (`decided_by`: the public availability data, live mode, the target's resource schema, the ESC User Guide, a rule with a quoted AWS source, or the scanner itself). An unavailable service or a documented deviation can carry `mitigations`: another AWS service, a self-managed build or the service in another partition, each with its trade-offs, the AWS page that describes it, and `validation` (`documented` by AWS, or `field-proven`). The terminal shows the first as "known mitigation".
 
 Hardcoded literals have a kind: `arn-partition`, `dns-suffix`, `dual-stack-suffix`, `service-principal`, `region-literal`, `availability-zone`, `account-id`, `resource-id` (such as `ami-`, `subnet-` or `sg-` IDs, which exist in one Region and account) and `legacy-endpoint` (such as dash-Region S3 hosts). Each has an `impact`: `breaks` when it names another Region, partition, account or resource, `portability` when it is right for the target but ties the input to it. Account IDs are found in ARNs, in the policies and Lambda permissions the input writes out (AWS principals, account condition keys such as `aws:SourceAccount`) and in ECR registry hosts. Zone IDs, resource IDs and other partitions' service principals always break; an account ID breaks next to another partition's ARN prefix, or when `--account` names a different one. A required change for hardcoded literals carries the same `impact`, `breaks` if any of its literals breaks; for other causes it is `null`. A Region a property requires, such as us-east-1 for a CloudFront certificate, is not a hazard there.
 
@@ -117,8 +118,8 @@ Other findings:
 |---|---|---|
 | depth blocker, `property` | A top-level property the target's CloudFormation schema of the type lacks | Remove the property, or keep the resource out of the target |
 | dependency | Something the resource needs stays outside the target, or a fixed S3 bucket name is taken in the partition | Decide as the change says; it counts as a hazard for `--fail-on` |
-| account blocker | Live mode: a quota the input alone exceeds, an SCP that denies the Region, a missing public SSM parameter | Raise the quota, ask your administrators, or choose another parameter |
-| disputed | The type exists in the target, the service is not launched yet (for example CloudFront in ESC) | Test before relying on it |
+| account blocker | Live mode: a quota the input and the account's current use exceed, an SCP that denies the Region or a service, a missing public SSM parameter | Raise the quota, ask your administrators, or choose another parameter |
+| disputed | The type exists in the target, but the service is planned or being planned there | Test before relying on it |
 | caveat | The feature works with a documented difference, or a Lambda runtime is deprecated | Read the quoted sentence |
 | guide conflict | The ESC User Guide says not available, the availability data says available | Ask your AWS team to confirm and correct the guide |
 
@@ -136,11 +137,11 @@ For automation, read codes, enum values, ids and counts: `outcome` holds the `--
 esc-preflight scan --profile <profile>
 ```
 
-`--profile`, `--role-arn` or `--live` (default credential chain) turn it on. Live mode reads your account in the target Region and overrides the public data. It also checks Availability Zones, Bedrock models and resource properties (`cloudformation:DescribeType`), and runs account checks:
+`--profile`, `--role-arn` or `--live` (default credential chain) turn it on. Live mode reads your account in the target Region and overrides the public data. It also checks Availability Zones, Bedrock models, RDS DB instance classes for the engine (`rds:DescribeOrderableDBInstanceOptions`) and resource properties (`cloudformation:DescribeType`), and runs account checks:
 
 * **Region opt-in**: the Region's status from `ec2:DescribeRegions`. A Region that is not enabled for the account fails at the first call, with a hint.
-* **Quotas**: the input's VPCs, internet gateways, Elastic IPs and Lambda reserved concurrency against the account's quotas from Service Quotas. `needed` is what the input alone needs, without what the account already uses; Lambda keeps 100 units unreserved; resources under CloudFormation conditions count.
-* **Service control policies**: read from AWS Organizations, which works only from the management account or a delegated administrator; elsewhere the check is skipped with a warning. Deny statements with an `aws:RequestedRegion` condition are evaluated; others are listed as not evaluated. SCPs do not affect the management account.
+* **Quotas**: the input's VPCs, internet gateways, Elastic IPs and Lambda reserved concurrency, plus what the account already uses in the target (`used`, from `ec2:DescribeVpcs`, `ec2:DescribeInternetGateways`, `ec2:DescribeAddresses` and `lambda:GetAccountSettings`), against the account's quotas from Service Quotas. `needed` is what the input needs; Lambda keeps 100 units unreserved; resources under CloudFormation conditions count.
+* **Service control policies**: read from AWS Organizations, which works only from the management account or a delegated administrator; elsewhere the check is skipped with a warning. Deny statements with an `aws:RequestedRegion` condition are evaluated for the target Region. Services the CloudFormation, CDK or SAM input uses are checked against allow lists (every level of the organization must allow a service) and against unconditional `Deny` statements, also with `NotAction`. SCPs do not affect the management account.
 * **Public SSM parameters**: `/aws/service/...` parameters the input resolves, from parameter defaults (CDK writes these for the latest AMI) and `{{resolve:ssm:...}}` references, must exist in the target.
 
 A check the role cannot read is skipped, with the reason, as an `account-checks-skipped` warning.
@@ -187,13 +188,13 @@ The server's answers go into the gap register; the scanner's report alone decide
 | `--all` | | Report every resource, not only gaps |
 | `--fail-on blocker\|hazard\|disputed` | | Exit 2 on a matching finding; `hazard` includes `portability` literals and dependencies, `disputed` includes guide conflicts |
 | `--out <file>` | stdout when redirected | JSON report file |
-| `--region <region>` | `eusc-de-east-1` | Region to check against; a Region without Knowledge MCP data, such as China, needs live mode |
+| `--region <region>` | `eusc-de-east-1` | Region to check against |
 | `--timeout <seconds>` | `60` | Per-request timeout |
 | `-q`, `--quiet` | | No summary |
 
 `esc-preflight plan [OPTIONS] [PATH]` takes the scan options and `--from <region>`, the Region the workload runs in today; it overrides the Region the input was produced for. `--out` takes the plan JSON; `--fail-on` and `--all` are rejected.
 
-`esc-preflight compare --from <region> --to <region>` takes `--profile`, `--role-arn` (for `--to`), `--out`, `--timeout` and `--quiet`.
+`esc-preflight compare --from <region> --to <region>` takes `--live`, `--profile`, `--role-arn` and `--properties` (for `--to`), `--out`, `--timeout` and `--quiet`.
 
 Exit codes: `0` report produced, `1` invalid input, `2` `--fail-on` matched (`scan` only), `3` a data source failed, `4` live-mode authentication failed.
 
@@ -209,13 +210,19 @@ Every run fetches current data, with no cache. Allow these hosts:
 
 | Host | Data |
 |---|---|
-| `knowledge-mcp.global.api.aws` | Availability and roadmap ([AWS Knowledge MCP server](https://awslabs.github.io/mcp/servers/aws-knowledge-mcp-server)) |
+| `prod.capabilities.builder.aws.com` | Products with roadmap states, CloudFormation resource types and config values for every Region of the run (the data behind [AWS Capabilities by Region](https://builder.aws.com/build/capabilities)) |
+| `knowledge-mcp.global.api.aws` | API availability, the not-expanding state of products, and products the capabilities API does not list ([AWS Knowledge MCP server](https://awslabs.github.io/mcp/servers/aws-knowledge-mcp-server)); everything when the capabilities API fails |
 | `docs.aws.eu` | ESC User Guide, ESC targets only |
-| `schema.cloudformation.<region>.amazonaws.com` (`.amazonaws.com.cn` in China) | The Region's CloudFormation resource schemas, for property checks in public mode; not for ESC |
-| `registry.terraform.io`, `raw.githubusercontent.com` | Terraform provider data, Terraform input only |
+| `schema.cloudformation.<region>.amazonaws.com` (`.amazonaws.com.cn` in China) | The Region's CloudFormation resource schemas, for property checks in public mode, and the resource types of AWS China; not for ESC |
+| `raw.githubusercontent.com` | AWS SDK endpoint data (botocore `endpoints.json`) for AWS China targets; Terraform provider type maps for Terraform input |
+| `registry.terraform.io` | Terraform provider versions, Terraform input only |
 | AWS endpoints in the target Region | Live mode only; Organizations in the partition's Organizations Region |
 
-The Knowledge MCP server is rate-limited. A public-mode scan makes 6 to 31 calls, two at a time; inputs with instance types or engine versions need the most. `compare` makes about 50, one Region after the other. The scanner waits when the server asks it to. A failed download of a schema bundle fails the run (exit 3).
+The public sources are not always up to date, and they can disagree. Where you have read access to an account in the target Region, use live mode: it reads the target itself and overrides the public data.
+
+AWS China publishes no product, roadmap or config value data, so a public-mode scan for China reports the instance types and engine versions it did not check (warning `values-unchecked`).
+
+Outside China, a scan also asks the Knowledge MCP server for the input's resource types, and a type is available when either source says so. When the capabilities API fails, the run prints a note and reads CloudFormation from the Knowledge MCP server, which is slower. The Knowledge MCP server is rate-limited; the scanner runs up to eight calls at a time and fewer when the server asks it to wait. A failed download of a schema bundle fails the run (exit 3).
 
 ## Related AWS resources
 

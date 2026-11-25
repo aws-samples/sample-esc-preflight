@@ -9,6 +9,8 @@
     "partitions_version": "test",
     "knowledge": {
       "url": "https://knowledge-mcp.global.api.aws",
+      "cloudformation_url": "https://prod.capabilities.builder.aws.com",
+      "products_url": "https://prod.capabilities.builder.aws.com",
       "unknown": []
     },
     "user_guide": {
@@ -62,7 +64,7 @@
         "status": "planned",
         "launch": "2026 Q4"
       },
-      "note": "The Knowledge MCP data lists CloudFront CreateInvalidation, but Amazon CloudFront is planned for 2026 Q4 in the target region. Check that the feature works before relying on it.",
+      "note": "The public availability data lists CloudFront CreateInvalidation, but Amazon CloudFront is planned for 2026 Q4 in the target region. Check that the feature works before relying on it.",
       "decided_by": "knowledge",
       "depth": []
     },

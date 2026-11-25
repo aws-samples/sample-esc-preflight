@@ -340,7 +340,12 @@
         },
         {
           "const": "layers-only",
-          "description": "Terraform waves follow the layers only.",
+          "description": "The Terraform plan names no references, so waves follow the layers only.",
+          "type": "string"
+        },
+        {
+          "const": "reference-cycle",
+          "description": "References form a cycle, so the order within it is not decided by them.",
           "type": "string"
         }
       ]

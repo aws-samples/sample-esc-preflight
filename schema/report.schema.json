@@ -118,7 +118,7 @@
       "oneOf": [
         {
           "const": "knowledge",
-          "description": "The AWS Knowledge MCP data.",
+          "description": "The public availability data: the Builder Center capabilities API and the AWS\nKnowledge MCP server, or the AWS China sources.",
           "type": "string"
         },
         {
@@ -260,6 +260,11 @@
           "type": "string"
         },
         {
+          "const": "rds-instance-class",
+          "description": "`engine class`: an RDS DB instance class orderable for the engine; live mode.",
+          "type": "string"
+        },
+        {
           "const": "property",
           "description": "A top-level resource property the target's CloudFormation schema lacks.",
           "type": "string"
@@ -285,7 +290,7 @@
     "Deviation": {
       "properties": {
         "conflict": {
-          "description": "The feature the Knowledge MCP data lists as available although the guide says it\nis not: a guide conflict, reported as a warning.",
+          "description": "The feature the public availability data lists as available although the guide says it\nis not: a guide conflict, reported as a warning.",
           "type": [
             "string",
             "null"
@@ -401,7 +406,7 @@
       "properties": {
         "knowledge": {
           "$ref": "#/$defs/Listed",
-          "description": "The AWS Knowledge MCP data for the type, operation or service."
+          "description": "The public availability data for the type, operation or service."
         },
         "live": {
           "description": "The live check found the resource offered. Null without live mode or when the\ncheck could not decide.",
@@ -438,7 +443,7 @@
         },
         "decided_by": {
           "$ref": "#/$defs/DecidedBy",
-          "description": "The source that decided whether the resource is offered. Roadmap states always\ncome from the Knowledge MCP data."
+          "description": "The source that decided whether the resource is offered. Roadmap states always\ncome from the public availability data."
         },
         "depth": {
           "description": "Property values checked against what the target region offers.",
@@ -609,20 +614,53 @@
         }
       ]
     },
+    "Kind": {
+      "oneOf": [
+        {
+          "const": "substitute",
+          "description": "Another AWS service.",
+          "type": "string"
+        },
+        {
+          "const": "self-managed",
+          "description": "Open source or own code on AWS compute.",
+          "type": "string"
+        },
+        {
+          "const": "cross-partition",
+          "description": "The service in another partition; a sovereignty and compliance decision.",
+          "type": "string"
+        }
+      ]
+    },
     "KnowledgeProvenance": {
       "properties": {
+        "cloudformation_url": {
+          "description": "Where the CloudFormation types and config values came from: the Builder Center\ncapabilities API, the Knowledge MCP server when the API failed, or the Region's\nschema bundle for China.",
+          "type": "string"
+        },
+        "products_url": {
+          "description": "Where the product and roadmap states came from: the capabilities API, with the\nKnowledge MCP server for the not-expanding state, or the Knowledge MCP server\nalone when the API failed. Null for China, which publishes none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "unknown": {
-          "description": "Types, services or operations the server does not know.",
+          "description": "Types, services or operations the sources do not know.",
           "items": {
             "type": "string"
           },
           "type": "array"
         },
         "url": {
+          "description": "Where products, services and APIs came from: the AWS Knowledge MCP server, or the\nAWS SDK endpoint data for China.",
           "type": "string"
         }
       },
       "required": [
+        "cloudformation_url",
+        "products_url",
         "unknown",
         "url"
       ],
@@ -701,6 +739,38 @@
       ],
       "type": "object"
     },
+    "Mitigation": {
+      "description": "A mitigation as the report carries it.",
+      "properties": {
+        "doc": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/Kind"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "tradeoffs": {
+          "type": "string"
+        },
+        "validation": {
+          "$ref": "#/$defs/Validation"
+        }
+      },
+      "required": [
+        "doc",
+        "id",
+        "kind",
+        "summary",
+        "tradeoffs",
+        "validation"
+      ],
+      "type": "object"
+    },
     "OutOfScope": {
       "description": "A Terraform resource of a provider other than aws or awscc.",
       "properties": {
@@ -766,7 +836,7 @@
               "type": "null"
             }
           ],
-          "description": "Null when the server has no data for the target, so live mode decides alone."
+          "description": "The public availability data; null when no public source covers the target, so\nlive mode decides alone."
         },
         "live": {
           "anyOf": [
@@ -859,7 +929,7 @@
           "type": "string"
         },
         "needed": {
-          "description": "What the input alone needs, without what the account already uses.",
+          "description": "What the input alone needs.",
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
@@ -883,6 +953,15 @@
           "minimum": 0,
           "type": "integer"
         },
+        "used": {
+          "description": "What the account already uses in the target; null when it could not be read.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
         "value_source": {
           "$ref": "#/$defs/QuotaSource",
           "description": "`applied` for the account's own value, `default` when none is applied."
@@ -898,6 +977,7 @@
         "rule",
         "service_code",
         "uncounted",
+        "used",
         "value_source"
       ],
       "type": "object"
@@ -984,6 +1064,13 @@
         "logical_id": {
           "type": "string"
         },
+        "mitigations": {
+          "description": "Known ways around the gap, each from an AWS page; empty when none is known.",
+          "items": {
+            "$ref": "#/$defs/Mitigation"
+          },
+          "type": "array"
+        },
         "precondition": {
           "description": "What must hold for a proposed change to be right.",
           "type": [
@@ -1009,6 +1096,7 @@
         "edits",
         "impact",
         "logical_id",
+        "mitigations",
         "precondition",
         "reason",
         "tier"
@@ -1087,12 +1175,20 @@
           },
           "type": "array"
         },
+        "services_denied": {
+          "description": "Services the input uses that the SCPs deny in any Region: an allow list at one\nlevel of the organization that does not name them, or a `Deny` of all their\nactions without conditions.",
+          "items": {
+            "$ref": "#/$defs/ScpServiceDenial"
+          },
+          "type": "array"
+        },
         "status": {
           "$ref": "#/$defs/ScpStatus"
         }
       },
       "required": [
         "policies",
+        "services_denied",
         "status"
       ],
       "type": "object"
@@ -1118,6 +1214,31 @@
         "id",
         "name",
         "verdict"
+      ],
+      "type": "object"
+    },
+    "ScpServiceDenial": {
+      "properties": {
+        "policy": {
+          "description": "The denying policy; null when no policy at the target allows the service.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "service": {
+          "description": "The IAM service prefix, such as `lambda`.",
+          "type": "string"
+        },
+        "target": {
+          "description": "The account, OU or root whose policies deny it.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "policy",
+        "service",
+        "target"
       ],
       "type": "object"
     },
@@ -1299,7 +1420,7 @@
           "type": "integer"
         },
         "guide_conflicts": {
-          "description": "Guide restrictions the Knowledge MCP data contradicts; warnings, not blockers.",
+          "description": "Guide restrictions the public availability data contradicts; warnings, not blockers.",
           "format": "uint",
           "minimum": 0,
           "type": "integer"
@@ -1377,6 +1498,25 @@
       ],
       "type": "string"
     },
+    "Validation": {
+      "oneOf": [
+        {
+          "const": "documented",
+          "description": "An AWS page describes it.",
+          "type": "string"
+        },
+        {
+          "const": "field-proven",
+          "description": "Deployed and tested by someone who reported it, in addition.",
+          "type": "string"
+        },
+        {
+          "const": "deprecated",
+          "description": "No longer needed or no longer right, kept for the record; never reported.",
+          "type": "string"
+        }
+      ]
+    },
     "Verdict": {
       "oneOf": [
         {
@@ -1422,17 +1562,22 @@
         },
         {
           "const": "knowledge-unknown",
-          "description": "The Knowledge MCP server does not know some types, services or operations.",
+          "description": "The public availability data does not know some types, services or operations.",
           "type": "string"
         },
         {
           "const": "knowledge-region-unlisted",
-          "description": "The Knowledge MCP server has no data for the target; live mode decides alone.",
+          "description": "No public availability data covers the target; live mode decides alone.",
+          "type": "string"
+        },
+        {
+          "const": "values-unchecked",
+          "description": "No source answered for instance types, engine versions or node types the input\nsets (AWS China publishes none), so they were not checked.",
           "type": "string"
         },
         {
           "const": "guide-conflict",
-          "description": "The ESC User Guide and the Knowledge MCP data disagree.",
+          "description": "The ESC User Guide and the public availability data disagree.",
           "type": "string"
         },
         {

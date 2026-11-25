@@ -45,8 +45,10 @@ pub enum PlanWarningCode {
     SourceMismatch,
     /// Scan findings on the whole input, such as a quota, block every resource.
     BlocksWholeInput,
-    /// Terraform waves follow the layers only.
+    /// The Terraform plan names no references, so waves follow the layers only.
     LayersOnly,
+    /// References form a cycle, so the order within it is not decided by them.
+    ReferenceCycle,
 }
 
 fn warning(code: PlanWarningCode, message: String) -> PlanWarning {
@@ -170,7 +172,7 @@ pub fn build(
     }
     let mut entries: BTreeMap<String, PlanEntry> = BTreeMap::new();
     for r in template.resources.values() {
-        let rule = rule_for(&r.resource_type, &r.properties, facts);
+        let rule = rule_for(r.deployed_type(), r.deployed_properties(), facts);
         let m = rule.and_then(|r| r.mechanism.as_ref());
         let mut e = PlanEntry {
             logical_id: r.logical_id.clone(),
@@ -232,7 +234,16 @@ pub fn build(
         }
         entries.insert(r.logical_id.clone(), e);
     }
-    waves(template, &mut entries);
+    let cycle = waves(template, &mut entries);
+    if !cycle.is_empty() {
+        warnings.push(warning(
+            PlanWarningCode::ReferenceCycle,
+            format!(
+                "References form a cycle at {}, so the waves there do not follow every reference. Check the order of the resources in the cycle before you deploy.",
+                crate::report::list(&cycle.into_iter().collect::<Vec<_>>(), 5)
+            ),
+        ));
+    }
     let resources: Vec<PlanEntry> = {
         let mut v: Vec<PlanEntry> = entries.into_values().collect();
         v.sort_by(|a, b| (a.wave, &a.logical_id).cmp(&(b.wave, &b.logical_id)));
@@ -253,10 +264,10 @@ pub fn build(
         unknown: count(MovePath::Unknown),
         data_to_move: resources.iter().filter(|e| moves_data(e)).count(),
     };
-    if template.format == SourceFormat::TerraformPlan {
+    if template.format == SourceFormat::TerraformPlan && template.depends_on.is_empty() {
         warnings.push(warning(
             PlanWarningCode::LayersOnly,
-            "esc-preflight does not read references between Terraform resources, so their waves follow the layers only.".into(),
+            "The plan names no references between Terraform resources, so their waves follow the layers only.".into(),
         ));
     }
     Plan {
@@ -306,6 +317,65 @@ fn blockers(report: &Report) -> (BTreeMap<&str, BTreeSet<String>>, BTreeSet<Stri
         }
     }
     (blocked, whole)
+}
+
+/// Resources of other stacks a resource uses: `Fn::ImportValue` of an export, and
+/// `Fn::GetAtt` of a nested stack's `Outputs.<name>`, resolve to what that output
+/// refers to.
+fn imports(
+    v: &Value,
+    prefix: &str,
+    template: &Template,
+    stacks: &BTreeMap<&str, BTreeSet<&str>>,
+) -> BTreeSet<String> {
+    let mut outputs = Vec::new();
+    find_imports(v, prefix, template, &mut outputs);
+    let mut out = BTreeSet::new();
+    for id in outputs {
+        let Some(o) = template.outputs.get(&id) else {
+            continue;
+        };
+        // `<stack>/Outputs/<name>`: the output's stack is everything before `Outputs/`.
+        let prefix = id.rfind("Outputs/").map_or("", |i| &id[..i]);
+        if let Some(ids) = stacks.get(prefix) {
+            let mut bare = BTreeSet::new();
+            references(&o.properties, ids, &mut bare);
+            out.extend(bare.into_iter().map(|b| format!("{prefix}{b}")));
+        }
+    }
+    out
+}
+
+fn find_imports(v: &Value, prefix: &str, template: &Template, out: &mut Vec<String>) {
+    match v {
+        Value::Object(m) => {
+            for (k, x) in m {
+                match (k.as_str(), x) {
+                    ("Fn::ImportValue", Value::String(name)) => {
+                        out.extend(template.exports.get(name).cloned());
+                    }
+                    ("Fn::GetAtt", Value::Array(a)) => {
+                        if let (Some(stack), Some(name)) = (
+                            a.first().and_then(Value::as_str),
+                            a.get(1)
+                                .and_then(Value::as_str)
+                                .and_then(|s| s.strip_prefix("Outputs.")),
+                        ) {
+                            let id = format!("{prefix}{stack}/Outputs/{name}");
+                            if template.outputs.contains_key(&id) {
+                                out.push(id);
+                            }
+                        }
+                    }
+                    _ => find_imports(x, prefix, template, out),
+                }
+            }
+        }
+        Value::Array(a) => a
+            .iter()
+            .for_each(|x| find_imports(x, prefix, template, out)),
+        _ => {}
+    }
 }
 
 /// Logical ids a CloudFormation resource refers to: `Ref`, `Fn::GetAtt`, `${X}` in
@@ -362,7 +432,8 @@ fn stack_prefix(id: &str) -> &str {
     id.rfind('/').map_or("", |i| &id[..=i])
 }
 
-fn waves(template: &Template, entries: &mut BTreeMap<String, PlanEntry>) {
+/// Assigns waves; returns the resources where a reference cycle closed.
+fn waves(template: &Template, entries: &mut BTreeMap<String, PlanEntry>) -> BTreeSet<String> {
     // References name resources of the same stack by their bare logical id.
     let mut stacks: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
     for id in template.resources.keys() {
@@ -379,13 +450,15 @@ fn waves(template: &Template, entries: &mut BTreeMap<String, PlanEntry>) {
                 let mut bare = BTreeSet::new();
                 references(&r.properties, &stacks[prefix], &mut bare);
                 out.extend(bare.into_iter().map(|b| format!("{prefix}{b}")));
-                for d in template.depends_on.get(&r.logical_id).into_iter().flatten() {
-                    if template.resources.contains_key(d) {
-                        out.insert(d.clone());
-                    }
-                }
-                out.remove(&r.logical_id);
+                out.extend(imports(&r.properties, prefix, template, &stacks));
             }
+            // CloudFormation `DependsOn`, and Terraform references.
+            for d in template.depends_on.get(&r.logical_id).into_iter().flatten() {
+                if template.resources.contains_key(d) {
+                    out.insert(d.clone());
+                }
+            }
+            out.remove(&r.logical_id);
             (r.logical_id.as_str(), out)
         })
         .collect();
@@ -394,17 +467,21 @@ fn waves(template: &Template, entries: &mut BTreeMap<String, PlanEntry>) {
         Some(Layer::Shared) => 2,
         Some(Layer::Workload) | None => 3,
     };
-    /// `None` in the memo marks a resource in progress: a cycle, which CloudFormation
-    /// would reject at deployment, contributes nothing.
+    /// `None` in the memo marks a resource in progress: reaching it again closes a
+    /// cycle, which contributes nothing to the wave and is recorded.
     fn wave(
         id: &str,
         deps: &BTreeMap<&str, BTreeSet<String>>,
         start: &dyn Fn(&str) -> usize,
         memo: &mut BTreeMap<String, Option<usize>>,
+        cycle: &mut BTreeSet<String>,
     ) -> usize {
         match memo.get(id) {
             Some(Some(w)) => return *w,
-            Some(None) => return 0,
+            Some(None) => {
+                cycle.insert(id.to_string());
+                return 0;
+            }
             None => {}
         }
         memo.insert(id.to_string(), None);
@@ -412,7 +489,7 @@ fn waves(template: &Template, entries: &mut BTreeMap<String, PlanEntry>) {
             .get(id)
             .into_iter()
             .flatten()
-            .map(|d| wave(d, deps, start, memo))
+            .map(|d| wave(d, deps, start, memo, cycle))
             .max()
             .unwrap_or(0);
         let w = start(id).max(after + 1);
@@ -425,13 +502,15 @@ fn waves(template: &Template, entries: &mut BTreeMap<String, PlanEntry>) {
         .collect();
     let start_of = |id: &str| starts.get(id).copied().unwrap_or(3);
     let mut memo = BTreeMap::new();
+    let mut cycle = BTreeSet::new();
     let all: Vec<String> = entries.keys().cloned().collect();
     for id in all {
-        let w = wave(&id, &deps, &start_of, &mut memo);
+        let w = wave(&id, &deps, &start_of, &mut memo, &mut cycle);
         if let Some(e) = entries.get_mut(&id) {
             e.wave = w;
         }
     }
+    cycle
 }
 
 fn moves_data(e: &PlanEntry) -> bool {
@@ -653,6 +732,7 @@ mod tests {
                     origin: Origin::Cfn,
                     env: None,
                     cdk_path: None,
+                    deployed: None,
                 },
             );
         };
@@ -708,6 +788,139 @@ mod tests {
         assert_eq!(p.data_provenance.crosses_partition, Some(true));
         assert_eq!(codes(&p), [PlanWarningCode::SourceMismatch]);
         assert_eq!(by_id(&p, "Repo").path, MovePath::Unknown);
+    }
+
+    #[test]
+    fn waves_follow_imports_and_nested_stack_outputs() {
+        use serde_json::json;
+        let mut t = crate::model::Template::default();
+        let res = |id: &str, ty: &str, props: Value| crate::model::Resource {
+            logical_id: id.into(),
+            resource_type: ty.into(),
+            properties: props,
+            origin: Origin::Cfn,
+            env: None,
+            cdk_path: None,
+            deployed: None,
+        };
+        for r in [
+            res("Net/Vpc", "AWS::EC2::VPC", json!({})),
+            res(
+                "App/Fn",
+                "AWS::Lambda::Function",
+                json!({"Env": {"Fn::ImportValue": "Net:VpcId"}}),
+            ),
+            res("App/Inner/Queue", "AWS::SQS::Queue", json!({})),
+            res(
+                "App/Topic",
+                "AWS::SNS::Topic",
+                json!({"X": {"Fn::GetAtt": ["Inner", "Outputs.QueueArn"]}}),
+            ),
+        ] {
+            t.resources.insert(r.logical_id.clone(), r);
+        }
+        t.outputs.insert(
+            "Net/Outputs/VpcId".into(),
+            res(
+                "Net/Outputs/VpcId",
+                crate::model::OUTPUT_TYPE,
+                json!({"Ref": "Vpc"}),
+            ),
+        );
+        t.outputs.insert(
+            "App/Inner/Outputs/QueueArn".into(),
+            res(
+                "App/Inner/Outputs/QueueArn",
+                crate::model::OUTPUT_TYPE,
+                json!({"Fn::GetAtt": ["Queue", "Arn"]}),
+            ),
+        );
+        t.exports
+            .insert("Net:VpcId".into(), "Net/Outputs/VpcId".into());
+        let facts = partition::facts("eusc-de-east-1").unwrap();
+        let report = crate::report::tests::empty_report("eusc-de-east-1");
+        let p = build(&report, &t, &facts, Some("eu-central-1"));
+        assert!(by_id(&p, "App/Fn").wave > by_id(&p, "Net/Vpc").wave);
+        assert!(by_id(&p, "App/Topic").wave > by_id(&p, "App/Inner/Queue").wave);
+    }
+
+    #[test]
+    fn a_reference_cycle_warns() {
+        let p = plan(
+            r#"{"Resources":{
+              "A":{"Type":"AWS::SQS::Queue","Properties":{"X":{"Ref":"B"}}},
+              "B":{"Type":"AWS::SQS::Queue","Properties":{"X":{"Ref":"A"}}}}}"#,
+            "eu-west-1",
+            Some("eu-central-1"),
+        );
+        let w = p
+            .warnings
+            .iter()
+            .find(|w| w.code == PlanWarningCode::ReferenceCycle)
+            .unwrap();
+        assert!(
+            w.message.contains('A') || w.message.contains('B'),
+            "{}",
+            w.message
+        );
+        assert!(
+            plan(APP, "eu-west-1", Some("eu-central-1"))
+                .warnings
+                .iter()
+                .all(|w| w.code != PlanWarningCode::ReferenceCycle)
+        );
+    }
+
+    #[test]
+    fn terraform_waves_follow_references() {
+        let input = r#"{"format_version":"1.2","planned_values":{"root_module":{
+            "resources":[
+              {"address":"aws_vpc.main","mode":"managed","type":"aws_vpc","name":"main","provider_name":"registry.terraform.io/hashicorp/aws","values":{}},
+              {"address":"aws_subnet.a[0]","mode":"managed","type":"aws_subnet","name":"a","provider_name":"registry.terraform.io/hashicorp/aws","values":{}},
+              {"address":"aws_sns_topic.t","mode":"managed","type":"aws_sns_topic","name":"t","provider_name":"registry.terraform.io/hashicorp/aws","values":{}},
+              {"address":"aws_sns_topic.l","mode":"managed","type":"aws_sns_topic","name":"l","provider_name":"registry.terraform.io/hashicorp/aws","values":{}},
+              {"address":"aws_sns_topic.d","mode":"managed","type":"aws_sns_topic","name":"d","provider_name":"registry.terraform.io/hashicorp/aws","values":{}}],
+            "child_modules":[{"address":"module.app","resources":[
+              {"address":"module.app.aws_lambda_function.f","mode":"managed","type":"aws_lambda_function","name":"f","provider_name":"registry.terraform.io/hashicorp/aws","values":{}},
+              {"address":"module.app.aws_sqs_queue.q","mode":"managed","type":"aws_sqs_queue","name":"q","provider_name":"registry.terraform.io/hashicorp/aws","values":{}}]}]}},
+          "configuration":{"root_module":{
+            "resources":[
+              {"address":"aws_vpc.main","mode":"managed","type":"aws_vpc","name":"main","expressions":{}},
+              {"address":"aws_subnet.a","mode":"managed","type":"aws_subnet","name":"a","expressions":{"vpc_id":{"references":["aws_vpc.main.id","aws_vpc.main"]}}},
+              {"address":"aws_sns_topic.t","mode":"managed","type":"aws_sns_topic","name":"t","expressions":{"name":{"references":["module.app.queue_name","module.app"]}}},
+              {"address":"aws_sns_topic.l","mode":"managed","type":"aws_sns_topic","name":"l","expressions":{"name":{"references":["module.app.via_local","module.app"]}}},
+              {"address":"aws_sns_topic.d","mode":"managed","type":"aws_sns_topic","name":"d","depends_on":["module.app"],"expressions":{"name":{"references":["module.app.queue_name","module.app"]}}}],
+            "module_calls":{"app":{"expressions":{"subnet":{"references":["aws_subnet.a"]},"name":{"constant_value":"x"}},"module":{
+              "resources":[{"address":"aws_lambda_function.f","mode":"managed","type":"aws_lambda_function","name":"f",
+                "expressions":{"vpc_config":[{"subnet_ids":{"references":["var.subnet"]}}],"role":{"references":["data.aws_iam_role.r.arn"]}}},
+                {"address":"data.aws_iam_role.r","mode":"data","type":"aws_iam_role","name":"r",
+                "expressions":{"name":{"references":["aws_sqs_queue.q.name"]}}},
+                {"address":"aws_sqs_queue.q","mode":"managed","type":"aws_sqs_queue","name":"q",
+                "expressions":{"name":{"references":["var.name"]}}}],
+              "outputs":{"queue_name":{"expression":{"references":["aws_sqs_queue.q.name","aws_sqs_queue.q"]}},
+                "via_local":{"expression":{"references":["local.x"]}}}}}}}}}"#;
+        let p = plan(input, "eu-west-1", Some("eu-central-1"));
+        assert!(
+            p.warnings
+                .iter()
+                .all(|w| w.code != PlanWarningCode::LayersOnly)
+        );
+        let w = |id: &str| by_id(&p, id).wave;
+        assert!(w("aws_subnet.a[0]") > w("aws_vpc.main"));
+        assert!(w("module.app.aws_lambda_function.f") > w("aws_subnet.a[0]"));
+        // Through the data source; through a module output to what it references.
+        assert!(w("module.app.aws_lambda_function.f") > w("module.app.aws_sqs_queue.q"));
+        assert!(w("aws_sns_topic.t") > w("module.app.aws_sqs_queue.q"));
+        assert!(w("aws_sns_topic.t") <= w("module.app.aws_lambda_function.f"));
+        // Through a local: after the whole module.
+        assert!(w("aws_sns_topic.l") > w("module.app.aws_lambda_function.f"));
+        // `depends_on` the module beside an output reference: after the whole module.
+        assert!(w("aws_sns_topic.d") > w("module.app.aws_lambda_function.f"));
+        assert!(
+            p.warnings
+                .iter()
+                .all(|w| w.code != PlanWarningCode::ReferenceCycle)
+        );
     }
 
     #[test]

@@ -95,6 +95,8 @@ pub struct RequiredChange {
     /// Values the target offers, for the owner to choose from.
     pub candidates: Vec<String>,
     pub doc: Option<String>,
+    /// Known ways around the gap, each from an AWS page; empty when none is known.
+    pub mitigations: Vec<crate::mitigations::Mitigation>,
     /// The change in a few words for the terminal summary. Built from the same
     /// structured data as the change, never parsed from its text.
     #[serde(skip)]
@@ -149,6 +151,7 @@ impl RequiredChange {
             edits: Vec::new(),
             candidates: Vec::new(),
             doc: None,
+            mitigations: Vec::new(),
             brief,
         }
     }
@@ -662,11 +665,14 @@ pub fn account(a: &crate::account::AccountChecks, target_region: &str) -> Vec<Re
             "*",
             &q.rule,
             format!(
-                "the input alone needs {} of {} ({} {}), the account's {} quota in {target_region} is {}",
+                "the input needs {} of {} ({} {}){}, the account's {} quota in {target_region} is {}",
                 q.needed,
                 q.name,
                 q.service_code,
                 q.quota_code,
+                q.used
+                    .map(|u| format!(" and the account already uses {u}"))
+                    .unwrap_or_default(),
                 id(q.value_source),
                 q.quota
             ),
@@ -698,6 +704,27 @@ pub fn account(a: &crate::account::AccountChecks, target_region: &str) -> Vec<Re
             "Ask the organization's administrators to allow the target Region for the account."
                 .into(),
             brief("SCP denies the Region", "have the SCP allow the Region"),
+        ));
+    }
+    for d in a.scp.iter().flat_map(|s| &s.services_denied) {
+        out.push(flag(
+            "*",
+            "scp",
+            match &d.policy {
+                Some(p) => format!(
+                    "the service control policy {p} on {} denies every {} action",
+                    d.target, d.service
+                ),
+                None => format!(
+                    "no service control policy on {} allows {} actions",
+                    d.target, d.service
+                ),
+            },
+            "Ask the organization's administrators to allow the service for the account.".into(),
+            brief(
+                format!("SCP denies {}", d.service),
+                "have the SCP allow the service",
+            ),
         ));
     }
     for p in a.ssm_parameters.iter().filter(|p| !p.exists) {
@@ -790,6 +817,7 @@ fn kind_label(k: DepthKind) -> &'static str {
         DepthKind::FoundationModel => "foundation model",
         DepthKind::InferenceProfile => "inference profile",
         DepthKind::RdsEngineVersion => "RDS engine version",
+        DepthKind::RdsInstanceClass => "RDS DB instance class",
         DepthKind::CacheEngineVersion => "ElastiCache engine version",
         DepthKind::CacheNodeType => "ElastiCache node type",
         DepthKind::NeptuneEngineVersion => "Neptune engine version",

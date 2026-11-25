@@ -6,6 +6,7 @@ mod deviation;
 mod error;
 mod extractor;
 mod matcher;
+mod mitigations;
 mod model;
 mod plan;
 mod provider;
@@ -13,6 +14,7 @@ mod reader;
 mod remediation;
 mod report;
 mod rules;
+mod sam;
 mod services;
 #[cfg(test)]
 mod test_inputs;

@@ -1,0 +1,341 @@
+{
+ "source": "https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-specification-resources-and-properties.html",
+ "globals_doc": "https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-specification-template-anatomy-globals.html",
+ "types": {
+  "AWS::Serverless::Function": {
+   "cfn_type": "AWS::Lambda::Function",
+   "doc": "https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-resource-function.html",
+   "pass_through": {
+    "AcceleratorConfig": {
+     "property": "AcceleratorConfig",
+     "quote": "This property is passed directly to the AcceleratorConfig property of an AWS::Lambda::Function resource."
+    },
+    "Architectures": {
+     "property": "Architectures",
+     "quote": "This property is passed directly to the Architectures property of an AWS::Lambda::Function resource."
+    },
+    "CodeSigningConfigArn": {
+     "property": "CodeSigningConfigArn",
+     "quote": "This property is passed directly to the CodeSigningConfigArn property of an AWS::Lambda::Function resource."
+    },
+    "Description": {
+     "property": "Description",
+     "quote": "This property is passed directly to the Description property of an AWS::Lambda::Function resource."
+    },
+    "Environment": {
+     "property": "Environment",
+     "quote": "This property is passed directly to the Environment property of an AWS::Lambda::Function resource."
+    },
+    "EphemeralStorage": {
+     "property": "EphemeralStorage",
+     "quote": "This property is passed directly to the EphemeralStorage property of an AWS::Lambda::Function resource."
+    },
+    "FileSystemConfigs": {
+     "property": "FileSystemConfigs",
+     "quote": "This property is passed directly to the FileSystemConfigs property of an AWS::Lambda::Function resource."
+    },
+    "FunctionName": {
+     "property": "FunctionName",
+     "quote": "This property is passed directly to the FunctionName property of an AWS::Lambda::Function resource."
+    },
+    "FunctionScalingConfig": {
+     "property": "FunctionScalingConfig",
+     "quote": "This property is passed directly to the FunctionScalingConfig property of an AWS::Lambda::Function resource."
+    },
+    "Handler": {
+     "property": "Handler",
+     "quote": "This property is passed directly to the Handler property of an AWS::Lambda::Function resource."
+    },
+    "ImageConfig": {
+     "property": "ImageConfig",
+     "quote": "This property is passed directly to the ImageConfig property of an AWS::Lambda::Function resource."
+    },
+    "KmsKeyArn": {
+     "property": "KmsKeyArn",
+     "quote": "This property is passed directly to the KmsKeyArn property of an AWS::Lambda::Function resource."
+    },
+    "Layers": {
+     "property": "Layers",
+     "quote": "This property is passed directly to the Layers property of an AWS::Lambda::Function resource."
+    },
+    "LoggingConfig": {
+     "property": "LoggingConfig",
+     "quote": "This property is passed directly to the LoggingConfig property of an AWS::Lambda::Function resource."
+    },
+    "MemorySize": {
+     "property": "MemorySize",
+     "quote": "This property is passed directly to the MemorySize property of an AWS::Lambda::Function resource."
+    },
+    "PackageType": {
+     "property": "PackageType",
+     "quote": "This property is passed directly to the PackageType property of an AWS::Lambda::Function resource."
+    },
+    "PublishToLatestPublished": {
+     "property": "PublishToLatestPublished",
+     "quote": "This property is passed directly to the PublishToLatestPublished property of an AWS::Lambda::Function resource."
+    },
+    "RecursiveLoop": {
+     "property": "RecursiveLoop",
+     "quote": "This property is passed directly to the RecursiveLoop property of the AWS::Lambda::Function resource."
+    },
+    "ReservedConcurrentExecutions": {
+     "property": "ReservedConcurrentExecutions",
+     "quote": "This property is passed directly to the ReservedConcurrentExecutions property of an AWS::Lambda::Function resource."
+    },
+    "Runtime": {
+     "property": "Runtime",
+     "quote": "This property is passed directly to the Runtime property of an AWS::Lambda::Function resource."
+    },
+    "RuntimeConfig": {
+     "property": "RuntimeConfig",
+     "quote": "This property is passed directly to the RuntimeConfig property of an AWS::Lambda::Function resource."
+    },
+    "RuntimeManagementConfig": {
+     "property": "RuntimeManagementConfig",
+     "quote": "This property is passed directly to the RuntimeManagementConfig property of an AWS::Lambda::Function resource."
+    },
+    "SnapStart": {
+     "property": "SnapStart",
+     "quote": "This property is passed directly to the SnapStart property of an AWS::Lambda::Function resource."
+    },
+    "TenancyConfig": {
+     "property": "TenancyConfig",
+     "quote": "This property is passed directly to the TenancyConfig property of an AWS::Lambda::Function resource."
+    },
+    "Timeout": {
+     "property": "Timeout",
+     "quote": "This property is passed directly to the Timeout property of an AWS::Lambda::Function resource."
+    },
+    "VpcConfig": {
+     "property": "VpcConfig",
+     "quote": "This property is passed directly to the VpcConfig property of an AWS::Lambda::Function resource."
+    }
+   }
+  },
+  "AWS::Serverless::Api": {
+   "cfn_type": "AWS::ApiGateway::RestApi",
+   "doc": "https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-resource-api.html",
+   "pass_through": {
+    "ApiKeySourceType": {
+     "property": "ApiKeySourceType",
+     "quote": "This property is passed directly to the ApiKeySourceType property of an AWS::ApiGateway::RestApi resource."
+    },
+    "Description": {
+     "property": "Description",
+     "quote": "This property is passed directly to the Description property of an AWS::ApiGateway::RestApi resource."
+    },
+    "EndpointAccessMode": {
+     "property": "EndpointAccessMode",
+     "quote": "This property is passed directly to the EndpointAccessMode property of an AWS::ApiGateway::RestApi resource."
+    },
+    "FailOnWarnings": {
+     "property": "FailOnWarnings",
+     "quote": "This property is passed directly to the FailOnWarnings property of an AWS::ApiGateway::RestApi resource."
+    },
+    "MinimumCompressionSize": {
+     "property": "MinimumCompressionSize",
+     "quote": "This property is passed directly to the MinimumCompressionSize property of an AWS::ApiGateway::RestApi resource."
+    },
+    "Mode": {
+     "property": "Mode",
+     "quote": "This property is passed directly to the Mode property of an AWS::ApiGateway::RestApi resource."
+    },
+    "Name": {
+     "property": "Name",
+     "quote": "This property is passed directly to the Name property of an AWS::ApiGateway::RestApi resource."
+    },
+    "Policy": {
+     "property": "Policy",
+     "quote": "This property is passed directly to the Policy property of an AWS::ApiGateway::RestApi resource."
+    },
+    "SecurityPolicy": {
+     "property": "SecurityPolicy",
+     "quote": "This property is passed directly to the SecurityPolicy property of an AWS::ApiGateway::RestApi resource."
+    }
+   }
+  },
+  "AWS::Serverless::HttpApi": {
+   "cfn_type": "AWS::ApiGatewayV2::Api",
+   "doc": "https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-resource-httpapi.html",
+   "pass_through": {
+    "FailOnWarnings": {
+     "property": "FailOnWarnings",
+     "quote": "This property is passed directly to the FailOnWarnings property of an AWS::ApiGatewayV2::Api resource."
+    }
+   }
+  },
+  "AWS::Serverless::SimpleTable": {
+   "cfn_type": "AWS::DynamoDB::Table",
+   "doc": "https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-resource-simpletable.html",
+   "pass_through": {
+    "PointInTimeRecoverySpecification": {
+     "property": "PointInTimeRecoverySpecification",
+     "quote": "This property is passed directly to the PointInTimeRecoverySpecification property of an AWS::DynamoDB::Table resource."
+    },
+    "ProvisionedThroughput": {
+     "property": "ProvisionedThroughput",
+     "quote": "This property is passed directly to the ProvisionedThroughput property of an AWS::DynamoDB::Table resource."
+    },
+    "SSESpecification": {
+     "property": "SSESpecification",
+     "quote": "This property is passed directly to the SSESpecification property of an AWS::DynamoDB::Table resource."
+    },
+    "TableName": {
+     "property": "TableName",
+     "quote": "This property is passed directly to the TableName property of an AWS::DynamoDB::Table resource."
+    }
+   }
+  },
+  "AWS::Serverless::StateMachine": {
+   "cfn_type": "AWS::StepFunctions::StateMachine",
+   "doc": "https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-resource-statemachine.html",
+   "pass_through": {
+    "DefinitionUri": {
+     "property": "DefinitionS3Location",
+     "quote": "This property is passed directly to the DefinitionS3Location property of an AWS::StepFunctions::StateMachine resource."
+    },
+    "Logging": {
+     "property": "LoggingConfiguration",
+     "quote": "This property is passed directly to the LoggingConfiguration property of an AWS::StepFunctions::StateMachine resource."
+    },
+    "Name": {
+     "property": "StateMachineName",
+     "quote": "This property is passed directly to the StateMachineName property of an AWS::StepFunctions::StateMachine resource."
+    },
+    "Role": {
+     "property": "RoleArn",
+     "quote": "This property is passed directly to the RoleArn property of an AWS::StepFunctions::StateMachine resource."
+    },
+    "Tracing": {
+     "property": "TracingConfiguration",
+     "quote": "This property is passed directly to the TracingConfiguration property of an AWS::StepFunctions::StateMachine resource."
+    },
+    "Type": {
+     "property": "StateMachineType",
+     "quote": "This property is passed directly to the StateMachineType property of an AWS::StepFunctions::StateMachine resource."
+    }
+   }
+  },
+  "AWS::Serverless::LayerVersion": {
+   "cfn_type": "AWS::Lambda::LayerVersion",
+   "doc": "https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-resource-layerversion.html",
+   "pass_through": {
+    "CompatibleArchitectures": {
+     "property": "CompatibleArchitectures",
+     "quote": "This property is passed directly to the CompatibleArchitectures property of an AWS::Lambda::LayerVersion resource."
+    },
+    "CompatibleRuntimes": {
+     "property": "CompatibleRuntimes",
+     "quote": "This property is passed directly to the CompatibleRuntimes property of an AWS::Lambda::LayerVersion resource."
+    },
+    "Description": {
+     "property": "Description",
+     "quote": "This property is passed directly to the Description property of an AWS::Lambda::LayerVersion resource."
+    },
+    "LicenseInfo": {
+     "property": "LicenseInfo",
+     "quote": "This property is passed directly to the LicenseInfo property of an AWS::Lambda::LayerVersion resource."
+    }
+   }
+  },
+  "AWS::Serverless::GraphQLApi": {
+   "cfn_type": "AWS::AppSync::GraphQLApi",
+   "doc": "https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/sam-resource-graphqlapi.html",
+   "pass_through": {
+    "Logging": {
+     "property": "LogConfig",
+     "quote": "This property is passed directly to the LogConfig property of an AWS::AppSync::GraphQLApi resource."
+    },
+    "Name": {
+     "property": "Name",
+     "quote": "This property is passed directly to the Name property of an AWS::AppSync::GraphQLApi resource."
+    },
+    "XrayEnabled": {
+     "property": "XrayEnabled",
+     "quote": "This property is passed directly to the XrayEnabled property of an AWS::AppSync::GraphQLApi resource."
+    }
+   }
+  }
+ },
+ "globals": {
+  "Api": [
+   "AccessLogSetting",
+   "Auth",
+   "BinaryMediaTypes",
+   "CacheClusterEnabled",
+   "CacheClusterSize",
+   "CanarySetting",
+   "Cors",
+   "DefinitionUri",
+   "Domain",
+   "EndpointConfiguration",
+   "EndpointAccessMode",
+   "GatewayResponses",
+   "MethodSettings",
+   "MinimumCompressionSize",
+   "Name",
+   "OpenApiVersion",
+   "PropagateTags",
+   "SecurityPolicy",
+   "TracingEnabled",
+   "Variables"
+  ],
+  "Function": [
+   "AcceleratorConfig",
+   "Architectures",
+   "AssumeRolePolicyDocument",
+   "AutoPublishAlias",
+   "AutoPublishAliasAllProperties",
+   "CapacityProviderConfig",
+   "CodeSigningConfigArn",
+   "CodeUri",
+   "DeadLetterQueue",
+   "DeploymentPreference",
+   "Description",
+   "DurableConfig",
+   "Environment",
+   "EphemeralStorage",
+   "EventInvokeConfig",
+   "FileSystemConfigs",
+   "FunctionScalingConfig",
+   "FunctionUrlConfig",
+   "Handler",
+   "KmsKeyArn",
+   "Layers",
+   "LoggingConfig",
+   "MemorySize",
+   "PermissionsBoundary",
+   "PropagateTags",
+   "ProvisionedConcurrencyConfig",
+   "PublishToLatestPublished",
+   "RecursiveLoop",
+   "ReservedConcurrentExecutions",
+   "RolePath",
+   "Runtime",
+   "RuntimeConfig",
+   "RuntimeManagementConfig",
+   "SnapStart",
+   "SourceKMSKeyArn",
+   "Tags",
+   "TenancyConfig",
+   "Timeout",
+   "Tracing",
+   "VersionDeletionPolicy",
+   "VpcConfig"
+  ],
+  "HttpApi": [
+   "AccessLogSettings",
+   "Auth",
+   "PropagateTags",
+   "StageVariables",
+   "Tags"
+  ],
+  "SimpleTable": [
+   "SSESpecification"
+  ],
+  "StateMachine": [
+   "PropagateTags"
+  ],
+  "LayerVersion": []
+ }
+}

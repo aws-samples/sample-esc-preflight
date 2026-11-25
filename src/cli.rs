@@ -10,7 +10,7 @@ use clap::{Parser, ValueEnum};
 use crate::depth::DepthSource;
 use crate::error::{Result, ScanError};
 use crate::model::{SourceFormat, Template};
-use crate::provider::{self, aws_call, http, knowledge, live, partition, schema, terraform};
+use crate::provider::{self, aws_call, china, http, knowledge, live, partition, schema, terraform};
 use crate::remediation;
 use crate::report::{self, KnowledgeProvenance, Provenance, Report, TerraformProvenance};
 use crate::type_mapper::{Check, Mapping, TypeMapper};
@@ -74,13 +74,21 @@ struct CompareArgs {
     /// The Region to compare it with.
     #[arg(long)]
     to: String,
+    /// Read the --to Region's registry from the account, with the default credential
+    /// chain.
+    #[arg(long)]
+    live: bool,
     /// AWS profile for the --to Region: its registry and resource schemas replace the
-    /// public data.
+    /// public data. Implies --live.
     #[arg(long)]
     profile: Option<String>,
     /// Role to assume in the --to Region, on top of the profile or default credentials.
     #[arg(long)]
     role_arn: Option<String>,
+    /// Also read the --to Region's resource schemas from the account to compare
+    /// properties. Needs --profile or --role-arn; takes several minutes.
+    #[arg(long)]
+    properties: bool,
     /// Write the JSON report here. Without it, the report goes to stdout when stdout is
     /// redirected or piped.
     #[arg(long)]
@@ -94,13 +102,15 @@ struct CompareArgs {
 }
 
 const COMPARE_HELP: &str = "\
-Public mode reads both Regions from the AWS Knowledge MCP server and, where both
-publish one, their CloudFormation schema bundles. With --profile or --role-arn, the
---to Region's CloudFormation registry and resource schemas are read from the account.
+Public mode reads both Regions from the Builder Center capabilities API and the AWS
+Knowledge MCP server and, where both publish one, their CloudFormation schema bundles.
+With --live, --profile or --role-arn, the --to Region's CloudFormation registry is read
+from the account; --properties also reads its resource schemas, which takes several
+minutes.
 
 Examples:
   esc-preflight compare --from eu-central-1 --to eusc-de-east-1
-  esc-preflight compare --from eu-central-1 --to eusc-de-east-1 --profile esc --out c.json
+  esc-preflight compare --from eu-central-1 --to eusc-de-east-1 --profile esc --properties --out c.json
 
 Exit codes:
   0  report produced
@@ -236,11 +246,24 @@ fn assess(args: &ScanArgs) -> Result<(Report, Template, extractor::PartitionFact
     partition.target_account.clone_from(&args.account);
     partition.source_partition = extractor::source_partition(&template, &partition);
     let live_mode = args.live || args.profile.is_some() || args.role_arn.is_some();
-    let listed = knowledge::regions(&client)?.contains(region);
+    // China has public data of its own; the Knowledge MCP server does not cover it.
+    let china = partition.target_partition == china::PARTITION;
+    let (listed, tf) = std::thread::scope(|s| {
+        let tf = s.spawn(|| {
+            (template.format == SourceFormat::TerraformPlan)
+                .then(|| terraform::fetch(&client))
+                .transpose()
+        });
+        let listed = if china {
+            Ok(true)
+        } else {
+            knowledge::regions(&client).map(|r| r.contains(region))
+        };
+        (listed, tf.join().expect("Terraform fetch does not panic"))
+    });
+    let listed = listed?;
     gate(region, listed, live_mode)?;
-    let tf = (template.format == SourceFormat::TerraformPlan)
-        .then(|| terraform::fetch(&client))
-        .transpose()?;
+    let tf = tf?;
     let mut depth = depth::checks(&template, region);
     let checks = checks(&template, tf.as_ref());
     // Also for checks with an operation: the service decides when the server does not
@@ -267,12 +290,30 @@ fn assess(args: &ScanArgs) -> Result<(Report, Template, extractor::PartitionFact
             .collect(),
         config: depth::needs_config(&depth),
     };
-    let data = provider::fetch_public(&client, region, partition, tf, listed.then_some(&needs))?;
+    let schema_types = schema::types(&template, tf.as_ref());
+    // Without live mode the target's schemas come from its public bundle, if it has one;
+    // the China availability fetch downloads it anyway.
+    let bundle_url = (!live_mode && !schema_types.is_empty() && !china)
+        .then(|| schema::bundle_url(&partition))
+        .flatten();
+    let (data, bundle) = std::thread::scope(|s| {
+        let bundle = s.spawn(|| {
+            bundle_url
+                .as_ref()
+                .map(|url| schema::fetch_bundle(&client, url, &schema_types, false))
+                .transpose()
+        });
+        let data = provider::fetch_public(&client, region, partition, tf, listed.then_some(&needs));
+        (
+            data,
+            bundle.join().expect("schema bundle fetch does not panic"),
+        )
+    });
+    let (data, bundle) = (data?, bundle?);
     let fetched_at = report::now_utc();
     let mut offered = depth::public_offered(&data.knowledge);
     depth::resolve(&mut depth, &offered, DepthSource::Knowledge);
     let scan = extractor::hazards(&template, &data.partition);
-    let schema_types = schema::types(&template);
     let (live, live_prov, account, mut schemas, schema_denied) = if live_mode {
         let needs = live::Needs {
             registry: checks.iter().any(|c| type_of(c).is_some()),
@@ -300,19 +341,22 @@ fn assess(args: &ScanArgs) -> Result<(Report, Template, extractor::PartitionFact
     } else {
         (None, None, None, None, false)
     };
-    if schemas.is_none()
-        && !live_mode
-        && !schema_types.is_empty()
-        && let Some(url) = schema::bundle_url(&data.partition)
-    {
-        let s = schema::fetch_bundle(&client, &url, &schema_types, false)?;
+    let bundle = match (bundle, bundle_url, &data.bundle) {
+        (Some(s), Some(url), _) => Some((s, url)),
+        (_, _, Some((url, zip))) if !live_mode && !schema_types.is_empty() => Some((
+            schema::read_bundle(zip, url, Some(&schema_types), false)?,
+            url.clone(),
+        )),
+        _ => None,
+    };
+    if let Some((s, url)) = bundle {
         schemas = Some((
             schema::SchemaProvenance::new(schema::SchemaSource::Bundle, Some(url), &s),
             s,
         ));
     }
     if let Some((_, s)) = &schemas {
-        for (id, checks) in schema::checks(&template, s) {
+        for (id, checks) in schema::checks(&template, s, data.tf.as_ref()) {
             depth.entry(id).or_default().extend(checks);
         }
     }
@@ -337,10 +381,15 @@ fn assess(args: &ScanArgs) -> Result<(Report, Template, extractor::PartitionFact
         target_account: args.account.clone(),
         input_environments: template.envs(),
         partitions_version: partition::VERSION.into(),
-        knowledge: listed.then(|| KnowledgeProvenance {
-            url: knowledge::URL.into(),
-            unknown: data.knowledge.unknown.iter().cloned().collect(),
-        }),
+        knowledge: data
+            .urls
+            .as_ref()
+            .map(|(url, cfn, products)| KnowledgeProvenance {
+                url: url.clone(),
+                cloudformation_url: cfn.clone(),
+                products_url: products.clone(),
+                unknown: data.knowledge.unknown.iter().cloned().collect(),
+            }),
         user_guide,
         fetched_at,
         terraform: data.tf.as_ref().map(|tf| TerraformProvenance {
@@ -524,19 +573,40 @@ fn compare(args: &CompareArgs) -> Result<crate::compare::Comparison> {
     }
     let (from_facts, to_facts) = (partition::facts(&args.from)?, partition::facts(&args.to)?);
     let client = http::Client::new(Duration::from_secs(args.timeout))?;
-    let live_mode = args.profile.is_some() || args.role_arn.is_some();
-    let listed = knowledge::regions(&client)?;
+    let live_mode = args.live || args.profile.is_some() || args.role_arn.is_some();
+    if args.properties && !live_mode {
+        return Err(ScanError::Input(
+            "--properties reads the --to Region's schemas from the account and needs --live, --profile or --role-arn".into(),
+        ));
+    }
+    let (from_cn, to_cn) = (
+        from_facts.target_partition == china::PARTITION,
+        to_facts.target_partition == china::PARTITION,
+    );
+    let listed = if from_cn && to_cn {
+        BTreeSet::new()
+    } else {
+        knowledge::regions(&client)?
+    };
     let (from_url, to_url) = (
         schema::bundle_url(&from_facts),
         schema::bundle_url(&to_facts),
+    );
+    // China has no product data, whatever the Region list says.
+    let (from_products, to_products) = (
+        !from_cn && listed.contains(&args.from),
+        !to_cn && listed.contains(&args.to),
     );
     let scope = compare::scope(
         &args.from,
         &args.to,
         &compare::Sources {
-            from_listed: listed.contains(&args.from),
-            to_listed: listed.contains(&args.to),
+            from_listed: from_products || from_cn,
+            to_listed: to_products || to_cn,
+            from_products,
+            to_products,
             live: live_mode,
+            properties: args.properties,
             from_bundle: from_url.is_some(),
             to_bundle: to_url.is_some(),
         },
@@ -546,12 +616,66 @@ fn compare(args: &CompareArgs) -> Result<crate::compare::Comparison> {
         config: true,
         ..knowledge::Needs::default()
     };
-    // One Region at a time: the server is rate-limited.
-    let from = knowledge::fetch(&client, &args.from, &all)?;
-    let to = if scope.products {
-        knowledge::fetch(&client, &args.to, &all)?
-    } else {
-        knowledge::Knowledge::default()
+    // Regions outside China come from one availability fetch, China Regions from their
+    // schema bundle; property bundles of the others download alongside.
+    let mut regions: Vec<&str> = Vec::new();
+    if !from_cn {
+        regions.push(&args.from);
+    }
+    if !to_cn && to_products {
+        regions.push(&args.to);
+    }
+    let to_bundle = scope.to_schemas == Some(schema::SchemaSource::Bundle);
+    let (avail, from_china, to_china, from_zip, to_zip) = std::thread::scope(|s| {
+        let fc = s.spawn(|| {
+            from_cn
+                .then(|| china::fetch(&client, &from_facts, None))
+                .transpose()
+        });
+        let tc = s.spawn(|| {
+            to_cn
+                .then(|| china::fetch(&client, &to_facts, None))
+                .transpose()
+        });
+        let fz = s.spawn(|| {
+            from_url
+                .as_ref()
+                .filter(|_| !from_cn && scope.to_schemas.is_some())
+                .map(|u| client.get_bytes(u))
+                .transpose()
+        });
+        let tz = s.spawn(|| {
+            to_url
+                .as_ref()
+                .filter(|_| !to_cn && to_bundle)
+                .map(|u| client.get_bytes(u))
+                .transpose()
+        });
+        let avail = (!regions.is_empty())
+            .then(|| provider::availability(&client, &regions, &all))
+            .transpose();
+        let join = "compare fetch does not panic";
+        (
+            avail,
+            fc.join().expect(join),
+            tc.join().expect(join),
+            fz.join().expect(join),
+            tz.join().expect(join),
+        )
+    });
+    let (avail, from_china, to_china) = (avail?, from_china?, to_china?);
+    let (from_zip, to_zip) = (from_zip?, to_zip?);
+    let cfn_url = avail.as_ref().map(|a| a.cfn_url.to_string());
+    let products_url = avail.as_ref().map(|a| a.products_url.to_string());
+    let mut fetched = avail.map(|a| a.regions).unwrap_or_default();
+    let to = match &to_china {
+        Some(c) => c.knowledge.clone(),
+        None if !to_cn && to_products => fetched.pop().unwrap_or_default(),
+        None => knowledge::Knowledge::default(),
+    };
+    let from = match &from_china {
+        Some(c) => c.knowledge.clone(),
+        None => fetched.pop().unwrap_or_default(),
     };
     let fetched_at = report::now_utc();
     let caller = live_mode
@@ -574,22 +698,35 @@ fn compare(args: &CompareArgs) -> Result<crate::compare::Comparison> {
     };
     let from_types = compare::available_types(&from);
     let shared: BTreeSet<String> = from_types.intersection(&to_types).cloned().collect();
+    let zip_of = |china: &Option<china::China>, zip: Option<Vec<u8>>| match china {
+        Some(c) => c.bundle.clone(),
+        None => zip,
+    };
+    let (from_zip, to_zip) = (zip_of(&from_china, from_zip), zip_of(&to_china, to_zip));
     let mut from_prov = None;
     let mut schemas = None;
-    if let (Some(url), Some(source)) = (&from_url, scope.to_schemas) {
-        let a = schema::fetch_bundle(&client, url, &shared, true)?;
+    if let (Some(url), Some(source), Some(zip)) = (&from_url, scope.to_schemas, &from_zip) {
+        let a = schema::read_bundle(zip, url, Some(&shared), true)?;
         from_prov = Some(schema::SchemaProvenance::new(
             schema::SchemaSource::Bundle,
             Some(url.clone()),
             &a,
         ));
-        // The scope reads a bundle for `to` only where one exists.
-        let (b, url) = match (&caller, to_url) {
-            (Some(c), _) => (schema::fetch_live(c, &shared, true)?, None),
-            (None, u) => (
-                schema::fetch_bundle(&client, u.as_deref().unwrap_or_default(), &shared, true)?,
-                u,
+        // The scope reads live schemas only in live mode, a bundle only where one exists.
+        let (b, url) = match (&caller, source, &to_zip, &to_url) {
+            (Some(c), schema::SchemaSource::Live, ..) => {
+                (schema::fetch_live(c, &shared, true)?, None)
+            }
+            (_, _, Some(zip), Some(u)) => (
+                schema::read_bundle(zip, u, Some(&shared), true)?,
+                Some(u.clone()),
             ),
+            _ => {
+                return Err(ScanError::DataSource(format!(
+                    "no schemas for {} were read",
+                    args.to
+                )));
+            }
         };
         schemas = Some((a, schema::SchemaProvenance::new(source, url, &b), b));
     }
@@ -605,6 +742,13 @@ fn compare(args: &CompareArgs) -> Result<crate::compare::Comparison> {
         CompareProvenance {
             tool_version: env!("CARGO_PKG_VERSION").into(),
             knowledge_url: knowledge::URL.into(),
+            cloudformation_url: cfn_url,
+            products_url,
+            china_bundle_urls: [&from_china, &to_china]
+                .into_iter()
+                .flatten()
+                .map(|c| c.bundle_url.clone())
+                .collect(),
             fetched_at,
             live_account_id,
             from_schemas: from_prov,
@@ -659,6 +803,25 @@ mod tests {
                 .to_string()
                 .contains("the same Region")
         );
+    }
+
+    #[test]
+    fn compare_properties_needs_live_mode() {
+        let Command::Compare(c) = Cli::try_parse_from([
+            "esc-preflight",
+            "compare",
+            "--from",
+            "eu-west-1",
+            "--to",
+            "eusc-de-east-1",
+            "--properties",
+        ])
+        .unwrap()
+        .command
+        else {
+            panic!("compare");
+        };
+        assert!(compare(&c).unwrap_err().to_string().contains("--profile"));
     }
 
     /// Rejected before any input is read or any host contacted.

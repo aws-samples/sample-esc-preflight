@@ -2,6 +2,20 @@
   "$defs": {
     "CompareProvenance": {
       "properties": {
+        "china_bundle_urls": {
+          "description": "The schema bundles that gave China Regions their resource types.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "cloudformation_url": {
+          "description": "Where the CloudFormation types and config values of Regions outside China came\nfrom: the Builder Center capabilities API, or the Knowledge MCP server when the\nAPI failed. Null when both Regions are in China.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "fetched_at": {
           "description": "When the public data was fetched.",
           "type": "string"
@@ -18,10 +32,18 @@
           "description": "The schemas read for each Region; both null when properties are not compared."
         },
         "knowledge_url": {
+          "description": "The AWS Knowledge MCP server, for Regions outside China.",
           "type": "string"
         },
         "live_account_id": {
           "description": "The account `to` was read from, when a profile was given.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "products_url": {
+          "description": "Where product states of Regions outside China came from; null when both are\nin China.",
           "type": [
             "string",
             "null"
@@ -42,10 +64,13 @@
         }
       },
       "required": [
+        "china_bundle_urls",
+        "cloudformation_url",
         "fetched_at",
         "from_schemas",
         "knowledge_url",
         "live_account_id",
+        "products_url",
         "to_schemas",
         "tool_version"
       ],
@@ -107,6 +132,11 @@
         {
           "const": "to-unlisted",
           "description": "The Knowledge MCP server has no data for `to`: products and config values are\nnot compared.",
+          "type": "string"
+        },
+        {
+          "const": "products-uncompared",
+          "description": "A Region publishes no product or config value data (China): products and config\nvalues are not compared.",
           "type": "string"
         },
         {

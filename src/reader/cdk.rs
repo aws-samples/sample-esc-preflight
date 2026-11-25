@@ -125,6 +125,9 @@ impl Walk {
                 deps.into_iter().map(|d| format!("{id}/{d}")).collect(),
             );
         }
+        for (export, output) in parsed.exports {
+            self.t.exports.insert(export, format!("{id}/{output}"));
+        }
         for (name, mut o) in parsed.outputs {
             let full = format!("{id}/{name}");
             o.logical_id.clone_from(&full);

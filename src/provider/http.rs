@@ -1,5 +1,6 @@
 //! Minimal HTTPS client: fixed timeouts, bounded retries, and a host allowlist.
 
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
 use crate::error::{Result, ScanError};
@@ -7,6 +8,7 @@ use crate::error::{Result, ScanError};
 /// The only hosts the public tier may contact.
 pub const ALLOWED_HOSTS: &[&str] = &[
     "knowledge-mcp.global.api.aws",
+    "prod.capabilities.builder.aws.com",
     "docs.aws.eu",
     // Terraform provider type maps, for Terraform input only.
     "registry.terraform.io",
@@ -28,6 +30,8 @@ const MAX_WAIT_SECS: u64 = 60;
 
 pub struct Client {
     inner: reqwest::blocking::Client,
+    /// HTTP 429 answers so far, for callers that adapt how many calls they run at once.
+    throttled: AtomicU32,
 }
 
 impl Client {
@@ -40,7 +44,15 @@ impl Client {
             .redirect(reqwest::redirect::Policy::none())
             .build()
             .map_err(|e| ScanError::DataSource(format!("cannot build HTTP client: {e}")))?;
-        Ok(Self { inner })
+        Ok(Self {
+            inner,
+            throttled: AtomicU32::new(0),
+        })
+    }
+
+    /// How many HTTP 429 answers this client has seen.
+    pub fn throttled(&self) -> u32 {
+        self.throttled.load(Ordering::Relaxed)
     }
 
     /// GETs `url` and returns the body.
@@ -95,6 +107,7 @@ impl Client {
                     return Err(ScanError::DataSource(format!("{url}: 404 Not Found")));
                 }
                 Ok(resp) if resp.status() == reqwest::StatusCode::TOO_MANY_REQUESTS => {
+                    self.throttled.fetch_add(1, Ordering::Relaxed);
                     if waits == THROTTLE_WAITS {
                         return Err(ScanError::DataSource(format!(
                             "{url}: rate limit still reached after {waits} waits; try again later"

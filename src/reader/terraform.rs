@@ -3,6 +3,8 @@
 //! Planned values already have modules, `count` and `for_each` resolved. Values known
 //! only after apply are absent, so they can never produce a hazard.
 
+use std::collections::{BTreeMap, BTreeSet};
+
 use serde_json::Value;
 
 use crate::error::{Result, ScanError};
@@ -51,6 +53,7 @@ pub fn from_value(doc: &Value) -> Result<Template> {
                 origin: Origin::TfAws,
                 env: (env != DeployEnv::default()).then(|| env.clone()),
                 cdk_path: None,
+                deployed: None,
             },
         );
     }
@@ -62,7 +65,312 @@ pub fn from_value(doc: &Value) -> Result<Template> {
         &mut t.constants,
     );
     t.out_of_scope.sort();
+    references(&doc["configuration"]["root_module"], &mut t);
+    policy_documents(doc, &mut t);
     Ok(t)
+}
+
+/// A policy argument set from an `aws_iam_policy_document` data source is unknown in
+/// the plan when the data source is read at apply time. The data source's own
+/// statements are known then, so they take the argument's place for the checks.
+fn policy_documents(doc: &Value, t: &mut Template) {
+    let mut docs: std::collections::BTreeMap<String, String> = Default::default();
+    fn read(module: &Value, docs: &mut std::collections::BTreeMap<String, String>) {
+        for r in module["resources"].as_array().into_iter().flatten() {
+            if r["mode"] == "data"
+                && r["type"] == "aws_iam_policy_document"
+                && let Some(address) = r["address"].as_str()
+            {
+                docs.insert(base(address), document(&r["values"]));
+            }
+        }
+        for child in module["child_modules"].as_array().into_iter().flatten() {
+            read(child, docs);
+        }
+    }
+    read(&doc["prior_state"]["values"]["root_module"], &mut docs);
+    for c in doc["resource_changes"].as_array().into_iter().flatten() {
+        if c["mode"] == "data"
+            && c["type"] == "aws_iam_policy_document"
+            && let Some(address) = c["address"].as_str()
+        {
+            docs.entry(base(address))
+                .or_insert_with(|| document(&c["change"]["after"]));
+        }
+    }
+    if docs.is_empty() {
+        return;
+    }
+    let mut uses: Vec<(String, String, String)> = Vec::new();
+    fn walk_config(module: &Value, prefix: &str, out: &mut Vec<(String, String, String)>) {
+        for r in module["resources"].as_array().into_iter().flatten() {
+            let Some(address) = r["address"].as_str() else {
+                continue;
+            };
+            for (arg, e) in r["expressions"].as_object().into_iter().flatten() {
+                for reference in e["references"].as_array().into_iter().flatten() {
+                    if let Some(d) = reference
+                        .as_str()
+                        .and_then(|s| s.strip_suffix(".json"))
+                        .filter(|s| s.starts_with("data.aws_iam_policy_document."))
+                    {
+                        out.push((
+                            format!("{prefix}{address}"),
+                            arg.clone(),
+                            format!("{prefix}{}", strip_index(d)),
+                        ));
+                    }
+                }
+            }
+        }
+        for (name, call) in module["module_calls"].as_object().into_iter().flatten() {
+            walk_config(&call["module"], &format!("{prefix}module.{name}."), out);
+        }
+    }
+    walk_config(&doc["configuration"]["root_module"], "", &mut uses);
+    for r in t.resources.values_mut() {
+        let b = base(&r.logical_id);
+        for (_, arg, d) in uses.iter().filter(|(a, ..)| *a == b) {
+            let (Some(text), Some(props)) = (docs.get(d), r.properties.as_object_mut()) else {
+                continue;
+            };
+            if props.get(arg).is_none_or(Value::is_null) {
+                props.insert(arg.clone(), Value::String(text.clone()));
+            }
+        }
+    }
+}
+
+/// The rendered JSON when the plan has it, else the statements as written.
+fn document(values: &Value) -> String {
+    match values["json"].as_str() {
+        Some(json) => json.to_string(),
+        None => serde_json::json!({"statement": values["statement"]}).to_string(),
+    }
+}
+
+/// Each resource's dependencies, from the references in the configuration's
+/// expressions and `depends_on`, followed through data sources, module inputs and
+/// outputs, and a module's `depends_on`. Also records the arguments each resource sets.
+fn references(root: &Value, t: &mut Template) {
+    let mut deps: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    let mut set: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    config(root, "", &BTreeMap::new(), &[], &mut deps, &mut set);
+    let planned: Vec<(String, String)> = t.resources.keys().map(|a| (a.clone(), base(a))).collect();
+    for (address, b) in &planned {
+        if let Some(args) = set.get(b) {
+            t.configured.insert(address.clone(), args.clone());
+        }
+        let mut targets = BTreeSet::new();
+        resolve(b, &deps, &mut BTreeSet::new(), &mut targets);
+        let found: Vec<String> = planned
+            .iter()
+            .filter(|(other, ob)| {
+                other != address
+                    && targets
+                        .iter()
+                        .any(|d| ob == d || (d.ends_with('.') && ob.starts_with(d.as_str())))
+            })
+            .map(|(other, _)| other.clone())
+            .collect();
+        if !found.is_empty() {
+            t.depends_on.insert(address.clone(), found);
+        }
+    }
+}
+
+/// What `key` depends on, with data sources replaced by what they depend on.
+fn resolve(
+    key: &str,
+    deps: &BTreeMap<String, Vec<String>>,
+    seen: &mut BTreeSet<String>,
+    out: &mut BTreeSet<String>,
+) {
+    for d in deps.get(key).into_iter().flatten() {
+        if is_data(d) || d.contains("out:") {
+            if seen.insert(d.clone()) {
+                resolve(d, deps, seen, out);
+            }
+        } else {
+            out.insert(d.clone());
+        }
+    }
+}
+
+fn is_data(address: &str) -> bool {
+    address.starts_with("data.") || address.contains(".data.")
+}
+
+/// Walks one module of the configuration. `inputs` maps the module's variables to
+/// what the calling expressions depend on; `after` is the module call's `depends_on`.
+fn config(
+    module: &Value,
+    prefix: &str,
+    inputs: &BTreeMap<String, Vec<String>>,
+    after: &[String],
+    out: &mut BTreeMap<String, Vec<String>>,
+    set: &mut BTreeMap<String, BTreeSet<String>>,
+) {
+    let targets_of = |refs: &[String]| -> Vec<String> {
+        let mut t: Vec<String> = Vec::new();
+        // `module.x.out` comes with a bare `module.x`; the output is the precise one.
+        let module_of = |r: &str| -> Option<(String, usize)> {
+            let p: Vec<&str> = r.split('.').collect();
+            (p[0] == "module" && p.len() >= 2).then(|| (strip_index(p[1]).to_string(), p.len()))
+        };
+        let outputs: BTreeSet<String> = refs
+            .iter()
+            .filter_map(|r| module_of(r).filter(|(_, n)| *n >= 3).map(|(m, _)| m))
+            .collect();
+        let bare = |r: &str| module_of(r).is_some_and(|(m, n)| n == 2 && outputs.contains(&m));
+        for reference in refs.iter().filter(|r| !bare(r)) {
+            match reference.strip_prefix("var.") {
+                Some(rest) => {
+                    let name = rest.split('.').next().unwrap_or(rest);
+                    t.extend(inputs.get(name).into_iter().flatten().cloned());
+                }
+                None => t.extend(target(reference, prefix)),
+            }
+        }
+        t.sort();
+        t.dedup();
+        t
+    };
+    for r in module["resources"].as_array().into_iter().flatten() {
+        let Some(address) = r["address"].as_str() else {
+            continue;
+        };
+        let mut refs = Vec::new();
+        collect(&r["expressions"], &mut refs);
+        let mut targets = targets_of(&refs);
+        // `depends_on = [module.m]` means the whole module, beside any output of it.
+        for d in strings(&r["depends_on"]) {
+            targets.extend(target(&d, prefix));
+        }
+        targets.extend(after.iter().cloned());
+        let key = format!("{prefix}{address}");
+        if r["mode"] == "managed" {
+            set.insert(
+                key.clone(),
+                r["expressions"]
+                    .as_object()
+                    .into_iter()
+                    .flatten()
+                    .map(|(k, _)| k.clone())
+                    .collect(),
+            );
+        }
+        if !targets.is_empty() {
+            out.entry(key).or_default().extend(targets);
+        }
+    }
+    for (name, call) in module["module_calls"].as_object().into_iter().flatten() {
+        let mut inner = BTreeMap::new();
+        for (var, e) in call["expressions"].as_object().into_iter().flatten() {
+            let mut refs = Vec::new();
+            collect(e, &mut refs);
+            inner.insert(var.clone(), targets_of(&refs));
+        }
+        let mut later = targets_of(&strings(&call["depends_on"]));
+        later.extend(after.iter().cloned());
+        config(
+            &call["module"],
+            &format!("{prefix}module.{name}."),
+            &inner,
+            &later,
+            out,
+            set,
+        );
+    }
+    // A module output depends on what its expression references. Locals are not in
+    // the plan, so an output that goes through one depends on the whole module.
+    for (name, o) in module["outputs"].as_object().into_iter().flatten() {
+        let mut refs = Vec::new();
+        collect(&o["expression"], &mut refs);
+        let mut targets = targets_of(&refs);
+        if refs.iter().any(|r| r.starts_with("local.")) && !prefix.is_empty() {
+            targets.push(prefix.to_string());
+        }
+        if !targets.is_empty() {
+            out.insert(format!("{prefix}out:{name}"), targets);
+        }
+    }
+}
+
+fn strings(v: &Value) -> Vec<String> {
+    v.as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(String::from)
+        .collect()
+}
+
+/// `aws_vpc.main.id` -> `aws_vpc.main`; `data.aws_iam_policy_document.d.json` ->
+/// `data.aws_iam_policy_document.d`; `module.net.subnet_ids` -> the output
+/// `module.net.out:subnet_ids`, resolved to what it references; `module.net` -> every
+/// resource of the module.
+/// Locals and meta references name no resource.
+fn target(reference: &str, prefix: &str) -> Option<String> {
+    let parts: Vec<&str> = reference.split('.').collect();
+    match parts.as_slice() {
+        ["module", name, output, ..] => Some(format!(
+            "{prefix}module.{}.out:{}",
+            strip_index(name),
+            strip_index(output)
+        )),
+        ["module", name] => Some(format!("{prefix}module.{}.", strip_index(name))),
+        ["data", ty, name, ..] => Some(format!("{prefix}data.{ty}.{}", strip_index(name))),
+        [first, ..]
+            if ["var", "local", "path", "count", "each", "self", "terraform"].contains(first) =>
+        {
+            None
+        }
+        [ty, name, ..] => Some(format!("{prefix}{ty}.{}", strip_index(name))),
+        _ => None,
+    }
+}
+
+fn collect(v: &Value, out: &mut Vec<String>) {
+    match v {
+        Value::Object(m) => {
+            for (k, x) in m {
+                if k == "references" {
+                    out.extend(
+                        x.as_array()
+                            .into_iter()
+                            .flatten()
+                            .filter_map(Value::as_str)
+                            .map(String::from),
+                    );
+                } else {
+                    collect(x, out);
+                }
+            }
+        }
+        Value::Array(a) => a.iter().for_each(|x| collect(x, out)),
+        _ => {}
+    }
+}
+
+fn strip_index(s: &str) -> &str {
+    s.split('[').next().unwrap_or(s)
+}
+
+/// A planned address without `count` and `for_each` indexes:
+/// `module.net[0].aws_subnet.a["x"]` -> `module.net.aws_subnet.a`.
+fn base(address: &str) -> String {
+    let mut out = String::new();
+    let mut depth = 0;
+    for c in address.chars() {
+        match c {
+            '[' => depth += 1,
+            ']' => depth -= 1,
+            _ if depth == 0 => out.push(c),
+            _ => {}
+        }
+    }
+    out
 }
 
 /// The aws provider writes its region into every resource, which also covers aliased
@@ -103,6 +411,7 @@ fn walk(module: &Value, base: &DeployEnv, t: &mut Template) {
                 origin,
                 env: (env != DeployEnv::default()).then_some(env),
                 cdk_path: None,
+                deployed: None,
             },
         );
     }
