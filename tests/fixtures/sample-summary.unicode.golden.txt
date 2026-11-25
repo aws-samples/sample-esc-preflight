@@ -1,21 +1,32 @@
-◆ esc-preflight · 8 resources · eusc-de-east-1
-  capabilities API, Knowledge MCP · ESC User Guide 16 pages · public mode
-
-  AVAILABILITY
-  ✔ available            6
-  ✘ not available        1   AWS::QBusiness::Application (not expanding)
-  ⚠ disputed             1   AWS::CloudFront::Distribution (planned 2026 Q4)
-
-  PORTABILITY
-  ⚠ hardcoded fields     3   3 resources: `amazonaws.com`, `eu-central-1`, `arn:aws:`, +1 more
-
-  REQUIRED CHANGES  2 flag · 1 propose · 2 fix
-  ✘ flag     hardcoded `eu-central-1a`  → choose a zone in the target
-  ✘ flag     qbusiness not expanding    → remove or replace qbusiness
-             AWS::QBusiness::Application
-  ● propose  hardcoded `eu-central-1`   → `${AWS::Region}`
-  ● fix      hardcoded `amazonaws.com`  → `${AWS::URLSuffix}`
-  ● fix      hardcoded `arn:aws:`       → `arn:${AWS::Partition}:`
-
-⚠ eusc-de-east-1 publishes no CloudFormation schema bundle, so resource properties were not checked
-  against it. Run in live mode to check them with cloudformation:DescribeType.
+╭─ esc-preflight test ─────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                  │
+│ ╭──────────────────────────────────────────────────────────────────────────────────────────────╮ │
+│ │ template.yaml  CloudFormation template · 8 resources                                         │ │
+│ │ → eusc-de-east-1  public mode · capabilities API, Knowledge MCP, ESC User Guide              │ │
+│ ╰──────────────────────────────────────────────────────────────────────────────────────────────╯ │
+│                                                                                                  │
+│ ✘ Not ready for eusc-de-east-1                                                                   │
+│   1 blocker · 2 fixes ready · 1 to review · 1 to decide · 1 to verify                            │
+│                                                                                                  │
+├─ Availability                                                                   6 of 8 available │
+│   ✘ AWS::QBusiness::Application    not expanding                                                 │
+│   ? AWS::CloudFront::Distribution  planned 2026 Q4 (type listed, test it before relying on it)   │
+│                                                                                                  │
+├─ Required changes                                                     2 flag · 1 propose · 2 fix │
+│   ✘ flag     Amazon Q Business not expanding → remove or replace Amazon Q Business               │
+│              └ Assistant  AWS::QBusiness::Application                                            │
+│   ● flag     hardcoded `eu-central-1a`       → choose a zone in the target                       │
+│              └ Subnet                                                                            │
+│   ● propose  hardcoded `eu-central-1`        → `${AWS::Region}`                                  │
+│              └ Fn                                                                                │
+│   ● fix      hardcoded `amazonaws.com`       → `${AWS::URLSuffix}`                               │
+│              └ Fn                                                                                │
+│   ● fix      hardcoded `arn:aws:`            → `arn:${AWS::Partition}:`                          │
+│              └ FnRole                                                                            │
+│                                                                                                  │
+├─ Not checked                                                                                     │
+│   ! Resource properties: eusc-de-east-1 publishes no CloudFormation schema bundle.               │
+│     └ live mode checks them: esc-preflight scan template.yaml --profile <name>                   │
+│                                                                                                  │
+│ JSON report not written  add --out report.json, or pipe stdout (| jq, > file)                    │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

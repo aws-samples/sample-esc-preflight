@@ -67,9 +67,9 @@ pub fn fetch(client: &Client, facts: &PartitionFacts, needs: Option<&Needs>) -> 
             // Without it, a type the bundle lacks stays unknown.
             let known = known.and_then(|k| {
                 k.map_err(|e| {
-                    eprintln!(
+                    crate::tui::note(&format!(
                         "esc-preflight: {e}; resource types {region} does not register are reported as unknown"
-                    );
+                    ));
                 })
                 .ok()
             });

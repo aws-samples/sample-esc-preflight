@@ -39,6 +39,10 @@ pub struct KnowledgeProvenance {
 #[derive(Debug, Clone)]
 pub struct Provenance {
     pub tool_version: String,
+    /// The input as named on the command line, `.` or `stdin`.
+    pub input: String,
+    /// Stacks of a CDK assembly or template, by the stack prefixes of the ids.
+    pub stacks: usize,
     pub source_format: SourceFormat,
     pub input_kind: crate::model::InputKind,
     pub target_region: String,
@@ -189,8 +193,11 @@ pub struct Report {
     pub summary: Summary,
     pub outcome: Outcome,
     pub findings: Vec<Finding>,
+    /// The hazards and dependencies behind the required changes; the tests read them.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub hazards: Vec<crate::extractor::Hazard>,
     pub deviations: Vec<Deviation>,
+    #[cfg_attr(not(test), allow(dead_code))]
     pub dependencies: Vec<Dependency>,
     /// Differences the ESC User Guide documents for the services in the input.
     pub documented_differences: Vec<Documented>,
@@ -448,9 +455,9 @@ fn availability_change(f: &Finding, target: &str, ctx: &Context) -> RequiredChan
             format!("remove or replace {svc}"),
         )
     } else if type_gap || f.service.is_none() {
-        let what = match &f.service {
-            Some(s) => format!("{s} type not registered"),
-            None => "resource type not registered".into(),
+        let what = match f.resource_type.split("::").nth(1) {
+            Some(ns) => format!("{ns} type missing in CloudFormation"),
+            None => "resource type missing in CloudFormation".into(),
         };
         let substitute = ctx
             .facts
@@ -463,17 +470,20 @@ fn availability_change(f: &Finding, target: &str, ctx: &Context) -> RequiredChan
                 .unwrap_or_else(|| "use another type or deploy it without CloudFormation".into()),
         )
     } else if let Some(rm) = &f.roadmap {
+        // The product's own name reads better than the service key.
+        let name = rm.product.as_str();
         remediation::brief(
-            format!("{svc} {}", rm.short()),
+            format!("{name} {}", rm.short()),
             match (&rm.status, &rm.launch) {
-                (State::Planned, Some(q)) => format!("replace {svc} or wait for {q}"),
-                _ => format!("remove or replace {svc}"),
+                (State::Planned, Some(q)) => format!("replace {name} or wait for {q}"),
+                _ => format!("remove or replace {name}"),
             },
         )
     } else {
+        let name = f.resource_type.split("::").nth(1).unwrap_or(svc);
         remediation::brief(
-            format!("{svc} not available"),
-            format!("remove or replace {svc}"),
+            format!("{name} not available"),
+            format!("remove or replace {name}"),
         )
     }
     .about(&f.resource_type);
@@ -703,656 +713,12 @@ pub fn gaps_only(r: &mut Report) {
     });
 }
 
-/// How the terminal summary may draw. Glyphs need a terminal; color additionally
-/// honours `NO_COLOR`.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct Style {
-    pub color: bool,
-    pub unicode: bool,
-}
+pub use crate::summary::text_summary;
+#[cfg(test)]
+use crate::tui::Style;
 
 /// Introduces the synth command in a region warning.
-const CDK_HINT: &str = "For a CDK app without a hardcoded env:";
-
-/// Required-change lines shown before the rest is left to the JSON report.
-const MAX_CHANGE_LINES: usize = 8;
-/// Warning prose wraps at this width.
-const WRAP: usize = 100;
-/// Longest "what" column before it is cut with an ellipsis.
-const MAX_WHAT: usize = 42;
-/// Longest action and detail text before it is cut.
-const MAX_ACTION: usize = 54;
-const MAX_DETAIL: usize = 76;
-
-/// The human-readable summary on stderr. Every line is built from structured fields
-/// of the report, never by parsing its prose, so the same report gives the same text.
-pub fn text_summary(r: &Report, st: Style) -> String {
-    let s = &r.summary;
-    let p = &r.data_provenance;
-    let pen = Pen::new(st);
-    let Pen {
-        ok,
-        bad,
-        warn,
-        unk,
-        dot,
-        ..
-    } = pen;
-
-    let mut out = vec![
-        pen.paint(
-            BOLD,
-            &format!(
-                "{}esc-preflight{dot}{} resources{dot}{}",
-                pen.g("◆ ", ""),
-                s.resources,
-                p.target_region
-            ),
-        ),
-        format!(
-            "  {}",
-            pen.paint(
-                DIM,
-                &[
-                    p.knowledge.as_ref().map(|k| {
-                        if k.url == crate::provider::china::ENDPOINTS_URL {
-                            "China schema bundle, SDK endpoints".to_string()
-                        } else if k.cloudformation_url == crate::provider::capabilities::URL {
-                            "capabilities API, Knowledge MCP".to_string()
-                        } else {
-                            "Knowledge MCP".to_string()
-                        }
-                    }),
-                    p.user_guide
-                        .as_ref()
-                        .map(|g| format!("ESC User Guide {} pages", g.pages)),
-                    Some(
-                        if p.live.is_some() {
-                            "live mode"
-                        } else {
-                            "public mode"
-                        }
-                        .into()
-                    ),
-                ]
-                .into_iter()
-                .flatten()
-                .collect::<Vec<_>>()
-                .join(dot)
-            )
-        ),
-        String::new(),
-    ];
-
-    out.push(pen.paint(BOLD, "  AVAILABILITY"));
-    pen.row(&mut out, ok, GREEN, "available", s.available, String::new());
-    let na = types_of(r, |f| f.verdict == Verdict::NotAvailable);
-    pen.row(
-        &mut out,
-        if s.not_available > 0 { bad } else { ok },
-        if s.not_available > 0 { RED } else { GREEN },
-        "not available",
-        s.not_available,
-        na,
-    );
-    if s.cannot_assess > 0 {
-        let custom = r
-            .findings
-            .iter()
-            .filter(|f| f.verdict == Verdict::CannotAssess)
-            .all(|f| {
-                f.resource_type.starts_with("Custom::")
-                    || f.resource_type.ends_with("CustomResource")
-            });
-        let detail = if custom {
-            "custom resources, backed by their own code".to_string()
-        } else {
-            types_of(r, |f| f.verdict == Verdict::CannotAssess)
-        };
-        pen.row(
-            &mut out,
-            unk,
-            YELLOW,
-            "cannot assess",
-            s.cannot_assess,
-            detail,
-        );
-    }
-    if s.disputed > 0 {
-        let d = types_of(r, |f| f.verdict == Verdict::Disputed);
-        pen.row(&mut out, warn, YELLOW, "disputed", s.disputed, d);
-    }
-    if s.divergences > 0 {
-        let d = types_of(r, |f| f.divergence);
-        pen.row(&mut out, warn, YELLOW, "live vs public", s.divergences, d);
-    }
-
-    out.push(String::new());
-    out.push(pen.paint(BOLD, "  PORTABILITY"));
-    out.extend(portability_rows(r, &pen));
-    out.push(String::new());
-    out.extend(change_lines(r, &pen));
-    out.extend(warning_lines(r, &pen));
-    out.join("\n") + "\n"
-}
-
-/// The PORTABILITY rows; one line when there is nothing to report.
-fn portability_rows(r: &Report, pen: &Pen) -> Vec<String> {
-    let (s, p) = (&r.summary, &r.data_provenance);
-    let Pen {
-        ok, bad, warn, dot, ..
-    } = *pen;
-    let mut out = Vec::new();
-    if s.hazards > 0 {
-        let mut lits: Vec<&crate::extractor::Literal> =
-            r.hazards.iter().flat_map(|h| &h.literals).collect();
-        // Literals that break the deployment first.
-        lits.sort_by_key(|l| l.impact);
-        let values = unique(lits.iter().map(|l| l.value.as_str()));
-        let resources = unique(r.hazards.iter().map(|h| h.logical_id.as_str())).len();
-        let breaking = r
-            .hazards
-            .iter()
-            .filter(|h| {
-                h.literals
-                    .iter()
-                    .any(|l| l.impact == crate::extractor::Impact::Breaks)
-            })
-            .count();
-        // Room for the breaking count, when not all of them break.
-        let room = if breaking < s.hazards { 1 } else { 3 };
-        let shown = list(
-            &values
-                .iter()
-                .map(|v| format!("`{}`", clean(v)))
-                .collect::<Vec<_>>(),
-            room,
-        );
-        // The count is property values (fields) that contain a literal; the detail
-        // names the distinct literals, so the two do not have to match.
-        pen.row(
-            &mut out,
-            warn,
-            YELLOW,
-            "hardcoded fields",
-            s.hazards,
-            format!(
-                "{}{resources} {}: {shown}",
-                if breaking < s.hazards {
-                    format!("{breaking} breaking{dot}")
-                } else {
-                    String::new()
-                },
-                plural(resources, "resource")
-            ),
-        );
-    }
-    if s.environment_literal_places > 0 {
-        let envs: Vec<String> = r
-            .environment_literals
-            .iter()
-            .map(|e| clean(&env_label(&e.env)))
-            .collect();
-        let verb = match p.source_format {
-            SourceFormat::Cloudformation => "synthesized",
-            SourceFormat::TerraformPlan => "planned",
-        };
-        pen.row(
-            &mut out,
-            warn,
-            YELLOW,
-            "env literals",
-            s.environment_literal_places,
-            format!("{verb} for {}", list(&envs, 2)),
-        );
-    }
-    let rules_of = |keep: &dyn Fn(&Deviation) -> bool| {
-        unique(
-            r.deviations
-                .iter()
-                .filter(|d| keep(d))
-                .map(|d| d.rule.replace('-', " ")),
-        )
-    };
-    // Where the rules come from: the ESC User Guide, other AWS pages, or both.
-    let sources_of = |keep: &dyn Fn(&Deviation) -> bool| {
-        let by = |b: DecidedBy| r.deviations.iter().any(|d| keep(d) && d.decided_by == b);
-        match (by(DecidedBy::Guide), by(DecidedBy::Rule)) {
-            (true, true) => "ESC User Guide, AWS docs",
-            (false, true) => "AWS docs",
-            _ => "ESC User Guide",
-        }
-    };
-    if s.deviation_blockers > 0 {
-        let rules = rules_of(&|d| d.blocks());
-        // A documented deviation means the feature does not work in the target.
-        pen.row(
-            &mut out,
-            bad,
-            RED,
-            "deviations",
-            s.deviation_blockers,
-            format!("{} ({})", list(&rules, 2), sources_of(&|d| d.blocks())),
-        );
-    }
-    if s.guide_conflicts > 0 {
-        let rules = rules_of(&|d| d.conflict.is_some());
-        pen.row(
-            &mut out,
-            warn,
-            YELLOW,
-            "guide conflicts",
-            s.guide_conflicts,
-            format!("{} (guide likely outdated)", list(&rules, 2)),
-        );
-    }
-    if s.caveats > 0 {
-        let rules = rules_of(&|d| d.severity == Severity::Caveat);
-        pen.row(
-            &mut out,
-            warn,
-            YELLOW,
-            "caveats",
-            s.caveats,
-            format!(
-                "{} ({})",
-                list(&rules, 2),
-                sources_of(&|d| d.severity == Severity::Caveat)
-            ),
-        );
-    }
-    if s.dependencies > 0 {
-        let rules = unique(r.dependencies.iter().map(|d| d.rule.replace('-', " ")));
-        pen.row(
-            &mut out,
-            warn,
-            YELLOW,
-            "dependencies",
-            s.dependencies,
-            format!("{} (AWS docs)", list(&rules, 2)),
-        );
-    }
-    if s.account_blockers > 0 {
-        pen.row(
-            &mut out,
-            bad,
-            RED,
-            "account blockers",
-            s.account_blockers,
-            "the target account blocks the deployment (live)".into(),
-        );
-    }
-    if s.depth_blockers > 0 {
-        pen.row(
-            &mut out,
-            bad,
-            RED,
-            "depth blockers",
-            s.depth_blockers,
-            if r.findings
-                .iter()
-                .flat_map(|f| &f.depth)
-                .any(|d| d.kind == crate::depth::DepthKind::Property && d.offered == Some(false))
-            {
-                "values or properties the region does not offer".into()
-            } else {
-                "values the region does not offer".into()
-            },
-        );
-    }
-    if out.is_empty() {
-        out.push(format!(
-            "  {} nothing hardcoded or region-specific",
-            pen.paint(GREEN, ok)
-        ));
-    }
-    out
-}
-
-/// The REQUIRED CHANGES heading and the changes, grouped by what they say in short,
-/// worst tier first.
-fn change_lines(r: &Report, pen: &Pen) -> Vec<String> {
-    let (s, st) = (&r.summary, pen.st);
-    let Pen {
-        ok,
-        bad,
-        dot,
-        arrow,
-        ..
-    } = *pen;
-    let mut out = Vec::new();
-    let tiers = [
-        (Tier::Flag, s.flags),
-        (Tier::Propose, s.proposals),
-        (Tier::Fix, s.fixes),
-    ];
-    let counts: Vec<String> = tiers
-        .iter()
-        .filter(|(_, n)| *n > 0)
-        .map(|(t, n)| format!("{n} {}", t.label()))
-        .collect();
-    out.push(format!(
-        "{}  {}",
-        pen.paint(BOLD, "  REQUIRED CHANGES"),
-        if counts.is_empty() {
-            "none".to_string()
-        } else {
-            counts.join(dot)
-        }
-    ));
-    let groups = change_groups(r);
-    if groups.is_empty() {
-        out.push(format!("  {} no changes needed", pen.paint(GREEN, ok)));
-    }
-    let shown = &groups[..groups.len().min(MAX_CHANGE_LINES)];
-    let tier_label = |grp: &Group| match grp.n {
-        1 => grp.tier.label().to_string(),
-        n if st.unicode => format!("{} ×{n}", grp.tier.label()),
-        n => format!("{} ({n})", grp.tier.label()),
-    };
-    let tier_w = shown
-        .iter()
-        .map(|x| tier_label(x).chars().count())
-        .max()
-        .unwrap_or(0);
-    let ell = pen.g("…", "~");
-    let what_w = shown
-        .iter()
-        .map(|x| x.shown_what(ell).chars().count())
-        .max()
-        .unwrap_or(0);
-    for grp in shown {
-        // Colors mean one thing each: red blocks deployment, yellow warns, green is
-        // fine, cyan is code to type, dim is metadata. Only a flag blocks, so only
-        // its glyph is colored; the tier word stays plain.
-        let glyph = match grp.tier {
-            Tier::Flag => pen.paint(RED, bad),
-            Tier::Propose | Tier::Fix => pen.g("●", "*").to_string(),
-        };
-        let action = clip(&grp.action, MAX_ACTION, ell);
-        // A replacement is code to type: cyan instead of backticks when colored.
-        let action = match action.strip_prefix('`').and_then(|a| a.strip_suffix('`')) {
-            Some(code) if grp.code && st.color => pen.paint(CYAN, code),
-            _ => action,
-        };
-        let what = grp.shown_what(ell);
-        let pad = what_w - what.chars().count();
-        let tier = tier_label(grp);
-        out.push(format!(
-            "  {glyph} {tier:<tier_w$}  {what}{}  {} {action}",
-            " ".repeat(pad),
-            pen.paint(DIM, arrow),
-        ));
-        // The resource types behind a service-level line, under the "what" column.
-        if !grp.subjects.is_empty() {
-            let res = if grp.resources > 1 {
-                format!("{} resources: ", grp.resources)
-            } else {
-                String::new()
-            };
-            let types = clip(
-                &format!("{res}{}", list(&grp.subjects, 2)),
-                MAX_WHAT + 4 + MAX_ACTION,
-                ell,
-            );
-            out.push(format!(
-                "  {}  {}",
-                " ".repeat(tier_w + 2),
-                pen.paint(DIM, &types)
-            ));
-        }
-        if let Some(m) = &grp.mitigation {
-            let m = clip(
-                &format!("known mitigation: {m}"),
-                MAX_WHAT + 4 + MAX_ACTION,
-                ell,
-            );
-            out.push(format!(
-                "  {}  {}",
-                " ".repeat(tier_w + 2),
-                pen.paint(DIM, &m)
-            ));
-        }
-    }
-    if groups.len() > MAX_CHANGE_LINES {
-        let rest: usize = groups[MAX_CHANGE_LINES..].iter().map(|x| x.n).sum();
-        out.push(pen.paint(
-            DIM,
-            &format!("  {} {rest} more in the JSON report", pen.g("…", "...")),
-        ));
-    }
-    out
-}
-
-/// The warnings, each command on its own line after its prose.
-fn warning_lines(r: &Report, pen: &Pen) -> Vec<String> {
-    let warn = pen.warn;
-    let mut out = Vec::new();
-    if !r.warnings.is_empty() {
-        out.push(String::new());
-    }
-    for (i, w) in r.warnings.iter().enumerate() {
-        if i > 0 {
-            out.push(String::new());
-        }
-        let split = r.warning_commands.iter().find(|(k, _, _)| *k == i);
-        let text = clean(split.map_or(w.message.as_str(), |(_, prose, _)| prose.as_str()));
-        let cmd = split.map(|(_, _, c)| clean(c));
-        for (k, l) in wrap(&text, WRAP - 2).iter().enumerate() {
-            let lead = if k == 0 {
-                pen.paint(YELLOW, warn)
-            } else {
-                " ".repeat(warn.chars().count())
-            };
-            out.push(format!("{lead} {l}"));
-        }
-        if let Some(c) = cmd {
-            out.push(format!("  {}", pen.paint(DIM, CDK_HINT)));
-            out.push(format!(
-                "    {} {}",
-                pen.paint(DIM, "$"),
-                pen.paint(CYAN, &c)
-            ));
-        }
-    }
-    out
-}
-
-/// The glyphs and colors of the terminal summary in one style.
-#[derive(Clone, Copy)]
-struct Pen {
-    st: Style,
-    ok: &'static str,
-    bad: &'static str,
-    warn: &'static str,
-    unk: &'static str,
-    dot: &'static str,
-    arrow: &'static str,
-}
-
-const RED: &str = "31";
-const YELLOW: &str = "33";
-const GREEN: &str = "32";
-const CYAN: &str = "36";
-const BOLD: &str = "1";
-const DIM: &str = "2;3";
-
-impl Pen {
-    fn new(st: Style) -> Self {
-        let g = |uni, ascii| if st.unicode { uni } else { ascii };
-        Self {
-            st,
-            ok: g("✔", "ok"),
-            bad: g("✘", "x"),
-            warn: g("⚠", "!"),
-            unk: "?",
-            dot: g(" · ", ", "),
-            arrow: g("→", "->"),
-        }
-    }
-
-    fn g(&self, uni: &'static str, ascii: &'static str) -> &'static str {
-        if self.st.unicode { uni } else { ascii }
-    }
-
-    fn paint(&self, code: &str, text: &str) -> String {
-        if self.st.color {
-            format!("\x1b[{code}m{text}\x1b[0m")
-        } else {
-            text.to_string()
-        }
-    }
-
-    /// Rows: glyph, color, label, count, detail. Zero rows are hidden, except
-    /// "available" and "not available", which always answer the main question.
-    fn row(
-        &self,
-        out: &mut Vec<String>,
-        glyph: &str,
-        code: &str,
-        label: &str,
-        n: usize,
-        detail: String,
-    ) {
-        let count = self.paint(BOLD, &format!("{n:>4}"));
-        let detail = if detail.is_empty() {
-            String::new()
-        } else {
-            format!("   {}", clip(&detail, MAX_DETAIL, self.g("…", "~")))
-        };
-        // ASCII glyphs differ in width ("ok", "x"); pad them so labels line up.
-        let w = if self.st.unicode { 1 } else { 2 };
-        out.push(format!(
-            "  {} {label:<18}{count}{detail}",
-            self.paint(code, &format!("{glyph:<w$}"))
-        ));
-    }
-}
-
-struct Group {
-    tier: Tier,
-    what: String,
-    action: String,
-    /// `action` is a replacement to type, not prose.
-    code: bool,
-    n: usize,
-    /// Distinct resource types, for lines that name a service or feature.
-    subjects: Vec<String>,
-    resources: usize,
-    /// " in N resources", kept apart so clipping `what` never cuts the count.
-    count: String,
-    /// The first known mitigation, as its summary.
-    mitigation: Option<String>,
-}
-
-impl Group {
-    fn shown_what(&self, ellipsis: &str) -> String {
-        let max = MAX_WHAT.saturating_sub(self.count.chars().count());
-        format!("{}{}", clip(&self.what, max, ellipsis), self.count)
-    }
-}
-
-/// Required changes that read the same in short, worst tier first, then the most
-/// frequent. A group of several resources says how many.
-fn change_groups(r: &Report) -> Vec<Group> {
-    let format_of = |c: &RequiredChange| match r.data_provenance.source_format {
-        SourceFormat::TerraformPlan => 2,
-        SourceFormat::Cloudformation if c.cdk_path.is_some() => 1,
-        SourceFormat::Cloudformation => 0,
-    };
-    let mut groups: Vec<(Group, Vec<&str>)> = Vec::new();
-    for c in &r.required_changes {
-        // A single, uniform replacement is the most precise action there is.
-        let reps: Vec<&str> = c
-            .edits
-            .iter()
-            .map(|e| {
-                e.replace.as_ref().map(|r| match format_of(c) {
-                    1 => r.cdk.as_str(),
-                    2 => r.terraform.as_str(),
-                    _ => r.cloudformation.as_str(),
-                })
-            })
-            .collect::<Option<Vec<_>>>()
-            .unwrap_or_default();
-        let (action, code) = match reps.first() {
-            Some(first) if reps.iter().all(|x| x == first) => (format!("`{first}`"), true),
-            _ => (c.brief.action.clone(), false),
-        };
-        let (what, action) = (clean(&c.brief.what), clean(&action));
-        let i = match groups
-            .iter()
-            .position(|(x, _)| x.tier == c.tier && x.what == what && x.action == action)
-        {
-            Some(i) => {
-                groups[i].0.n += 1;
-                i
-            }
-            None => {
-                groups.push((
-                    Group {
-                        tier: c.tier,
-                        what,
-                        action,
-                        code,
-                        n: 1,
-                        subjects: Vec::new(),
-                        resources: 0,
-                        count: String::new(),
-                        mitigation: None,
-                    },
-                    Vec::new(),
-                ));
-                groups.len() - 1
-            }
-        };
-        let (x, ids) = &mut groups[i];
-        if x.mitigation.is_none() {
-            x.mitigation = c.mitigations.first().map(|m| clean(&m.summary));
-        }
-        if !ids.contains(&c.logical_id.as_str()) {
-            ids.push(&c.logical_id);
-        }
-        if let Some(t) = &c.brief.subject
-            && !x.subjects.contains(&clean(t))
-        {
-            x.subjects.push(clean(t));
-        }
-    }
-    let mut out: Vec<Group> = groups
-        .into_iter()
-        .map(|(mut x, ids)| {
-            x.resources = ids.len();
-            // Without a subject line, say how many resources share the line.
-            if x.subjects.is_empty() && ids.len() > 1 {
-                x.count = format!(" in {} resources", ids.len());
-            }
-            x
-        })
-        .collect();
-    out.sort_by(|a, b| {
-        b.tier
-            .cmp(&a.tier)
-            .then(b.n.cmp(&a.n))
-            .then(a.what.cmp(&b.what))
-    });
-    out
-}
-
-/// The distinct resource types of the findings that match, at most two, each with its
-/// product's roadmap state.
-fn types_of(r: &Report, keep: impl Fn(&Finding) -> bool) -> String {
-    let types = unique(
-        r.findings
-            .iter()
-            .filter(|f| keep(f))
-            .map(|f| match &f.roadmap {
-                Some(rm) => format!("{} ({})", clean(&f.resource_type), rm.short()),
-                None => clean(&f.resource_type),
-            }),
-    );
-    list(&types, 2)
-}
+pub(crate) const CDK_HINT: &str = "For a CDK app without a hardcoded env:";
 
 /// Text from the input with control characters replaced, so a template cannot send
 /// terminal escape sequences and every character takes one column.
@@ -1369,25 +735,6 @@ pub(crate) fn list(items: &[String], max: usize) -> String {
     }
 }
 
-/// Greedy word wrap; a word longer than the width stays whole on its own line.
-fn wrap(text: &str, width: usize) -> Vec<String> {
-    let mut lines = Vec::new();
-    let mut cur = String::new();
-    for w in text.split_whitespace() {
-        if !cur.is_empty() && cur.chars().count() + 1 + w.chars().count() > width {
-            lines.push(std::mem::take(&mut cur));
-        }
-        if !cur.is_empty() {
-            cur.push(' ');
-        }
-        cur.push_str(w);
-    }
-    if !cur.is_empty() {
-        lines.push(cur);
-    }
-    lines
-}
-
 /// The items in first-seen order, without repeats.
 pub(crate) fn unique<T: PartialEq>(it: impl IntoIterator<Item = T>) -> Vec<T> {
     let mut out = Vec::new();
@@ -1397,24 +744,6 @@ pub(crate) fn unique<T: PartialEq>(it: impl IntoIterator<Item = T>) -> Vec<T> {
         }
     }
     out
-}
-
-fn plural(n: usize, word: &str) -> String {
-    if n == 1 {
-        word.into()
-    } else {
-        format!("{word}s")
-    }
-}
-
-fn clip(s: &str, max: usize, ellipsis: &str) -> String {
-    if s.chars().count() <= max {
-        s.to_string()
-    } else {
-        let mut t: String = s.chars().take(max - 1).collect();
-        t.push_str(ellipsis);
-        t
-    }
 }
 
 /// RFC 3339 UTC timestamp from the system clock, without a date-time dependency.
@@ -1444,6 +773,29 @@ pub fn now_utc() -> String {
 
 #[cfg(test)]
 pub(crate) mod tests {
+    /// The scan summary of `r` without a run's time or JSON destination.
+    fn text_summary(r: &Report, st: Style) -> String {
+        crate::summary::text_summary(r, st, &crate::tui::Run::default())
+    }
+
+    /// The rows inside the frame, without its borders.
+    fn rows(text: &str) -> Vec<String> {
+        text.lines()
+            .map(|l| {
+                let c: Vec<char> = l.chars().collect();
+                if c.len() > 4 {
+                    c[2..c.len() - 2]
+                        .iter()
+                        .collect::<String>()
+                        .trim_end()
+                        .to_string()
+                } else {
+                    String::new()
+                }
+            })
+            .collect()
+    }
+
     use super::*;
     use crate::extractor::{HazardKind, Impact};
     use crate::provider::{PublicData, guide, knowledge, partition, terraform};
@@ -1599,6 +951,8 @@ pub(crate) mod tests {
     fn prov(format: SourceFormat, envs: Vec<DeployEnv>) -> Provenance {
         Provenance {
             tool_version: "test".into(),
+            input: "template.yaml".into(),
+            stacks: 1,
             source_format: format,
             input_kind: match format {
                 SourceFormat::Cloudformation => crate::model::InputKind::Cloudformation,
@@ -1723,6 +1077,7 @@ pub(crate) mod tests {
                     Style {
                         color: false,
                         unicode: true,
+                        ..Style::default()
                     },
                     "unicode",
                 ),
@@ -1730,6 +1085,7 @@ pub(crate) mod tests {
                     Style {
                         color: false,
                         unicode: false,
+                        ..Style::default()
                     },
                     "ascii",
                 ),
@@ -1766,6 +1122,7 @@ pub(crate) mod tests {
                 Style {
                     color: false,
                     unicode: false,
+                    ..Style::default()
                 },
             );
             assert!(ascii.is_ascii(), "{name}: non-ASCII in ASCII mode");
@@ -1774,39 +1131,69 @@ pub(crate) mod tests {
                 Style {
                     color: false,
                     unicode: true,
+                    ..Style::default()
                 },
             );
-            let lines: Vec<&str> = text.lines().collect();
-            let start = lines
-                .iter()
-                .position(|l| l.starts_with("  REQUIRED CHANGES"))
-                .unwrap();
-            let block: Vec<&str> = lines[start + 1..]
-                .iter()
-                .take_while(|l| !l.is_empty())
-                .copied()
-                .collect();
+            let block = section_rows(&text, "Required changes");
+            // One-line rows share the arrow column; a long action has its own row.
             let arrows: std::collections::BTreeSet<usize> = block
                 .iter()
-                .filter_map(|l| l.char_indices().position(|(_, ch)| ch == '→'))
+                .filter(|l| !l.trim_start().starts_with('→'))
+                .filter_map(|l| l.chars().position(|ch| ch == '→'))
                 .collect();
             assert!(arrows.len() <= 1, "{name}: arrows at {arrows:?}");
-            let shown: usize = block
-                .iter()
-                .filter(|l| l.contains('→'))
-                .map(|l| {
-                    l.split_once('×')
-                        .and_then(|(_, rest)| rest.split_whitespace().next())
-                        .and_then(|n| n.parse().ok())
-                        .unwrap_or(1)
-                })
-                .sum::<usize>()
-                + block
-                    .iter()
-                    .filter_map(|l| l.trim().strip_prefix("… "))
-                    .filter_map(|l| l.split_whitespace().next()?.parse::<usize>().ok())
-                    .sum::<usize>();
-            assert_eq!(shown, r.required_changes.len(), "{name}");
+            // Every change is in a group, and the lines shown plus the rest add up.
+            let groups = crate::summary::change_groups(&r);
+            assert_eq!(
+                groups.iter().map(|g| g.n).sum::<usize>(),
+                r.required_changes.len(),
+                "{name}"
+            );
+            let shown = crate::summary::pick(&groups, crate::summary::MAX_CHANGE_LINES);
+            assert_eq!(
+                block.iter().filter(|l| l.contains('→')).count(),
+                shown.len(),
+                "{name}"
+            );
+        }
+    }
+
+    /// The rows of the section titled `title`, up to the next blank row.
+    fn section_rows(text: &str, title: &str) -> Vec<String> {
+        rows(text)
+            .into_iter()
+            .skip_while(|l| !l.contains(&format!(" {title} ")))
+            .skip(1)
+            .take_while(|l| !l.trim().is_empty())
+            .collect()
+    }
+
+    /// At the narrowest and the widest width every row fits the frame, and every code
+    /// replacement shown is whole.
+    #[test]
+    fn frames_fit_and_keep_replacements_whole() {
+        for (r, name) in fixture_reports() {
+            let groups = crate::summary::change_groups(&r);
+            let shown = crate::summary::pick(&groups, crate::summary::MAX_CHANGE_LINES);
+            for width in [crate::tui::MIN_WIDTH, crate::tui::MAX_WIDTH] {
+                for unicode in [true, false] {
+                    let st = Style {
+                        unicode,
+                        width,
+                        ..Style::default()
+                    };
+                    let text = text_summary(&r, st);
+                    for l in text.lines() {
+                        assert_eq!(crate::tui::width(l), width, "{name}: {l}");
+                    }
+                    for g in shown.iter().filter(|g| g.code) {
+                        assert!(
+                            text.contains(&format!("`{}`", g.action)),
+                            "{name} at {width}:\n{text}"
+                        );
+                    }
+                }
+            }
         }
     }
 
@@ -1828,24 +1215,30 @@ pub(crate) mod tests {
             Style {
                 color: false,
                 unicode: true,
+                ..Style::default()
             },
         );
-        assert!(text.contains(&format!("    $ {cmd}\n")), "{text}");
+        assert!(
+            text.lines()
+                .any(|l| l.contains(CDK_HINT) && l.contains(cmd)),
+            "{text}"
+        );
         assert!(!text.contains(&format!("deployed. {CDK_HINT}")), "{text}");
     }
 
     #[test]
-    fn colored_replacements_are_cyan_without_backticks() {
+    fn colored_replacements_are_accented_without_backticks() {
         let (r, _) = fixture_reports().remove(0);
         let text = text_summary(
             &r,
             Style {
                 color: true,
                 unicode: true,
+                ..Style::default()
             },
         );
         assert!(
-            text.contains("\x1b[36marn:${AWS::Partition}:\x1b[0m"),
+            text.contains("\x1b[38;5;79marn:${AWS::Partition}:\x1b[0m"),
             "{text}"
         );
         let plain = text_summary(
@@ -1853,6 +1246,7 @@ pub(crate) mod tests {
             Style {
                 color: false,
                 unicode: true,
+                ..Style::default()
             },
         );
         assert!(plain.contains("`arn:${AWS::Partition}:`"), "{plain}");
@@ -1877,23 +1271,21 @@ pub(crate) mod tests {
             Style {
                 color: false,
                 unicode: true,
+                ..Style::default()
             },
         );
-        let block: Vec<&str> = text
-            .lines()
-            .skip_while(|l| !l.starts_with("  REQUIRED CHANGES"))
-            .skip(1)
-            .take_while(|l| !l.is_empty())
-            .collect();
-        assert_eq!(
-            block.iter().filter(|l| l.contains('→')).count(),
-            MAX_CHANGE_LINES
-        );
-        let rest = r.required_changes.len() - MAX_CHANGE_LINES;
+        let block = section_rows(&text, "Required changes");
+        let max = crate::summary::MAX_CHANGE_LINES;
+        assert_eq!(block.iter().filter(|l| l.contains('→')).count(), max);
+        let groups = crate::summary::change_groups(&r);
+        let shown: usize = crate::summary::pick(&groups, max).iter().map(|g| g.n).sum();
+        let rest = r.required_changes.len() - shown;
         assert!(
             block.last().unwrap().contains(&format!("{rest} more")),
             "{text}"
         );
+        // The fixes are not hidden behind the flags.
+        assert!(block.iter().any(|l| l.contains(" fix ")), "{text}");
     }
 
     #[test]
@@ -1903,7 +1295,10 @@ pub(crate) mod tests {
 
     #[test]
     fn wrap_keeps_long_words_whole() {
-        assert_eq!(wrap("a verylongword b", 4), vec!["a", "verylongword", "b"]);
+        assert_eq!(
+            crate::tui::wrap("a verylongword b", 4),
+            vec!["a", "verylongword", "b"]
+        );
     }
 
     /// Set `UPDATE_GOLDEN=1` to rewrite the golden files after an intended change.
@@ -2140,8 +1535,14 @@ pub(crate) mod tests {
             [WarningCode::PublicDataRegionUnlisted]
         );
         let text = text_summary(&r, Style::default());
-        let sources = text.lines().nth(1).unwrap_or_default();
-        assert_eq!(sources.trim(), "public mode", "{text}");
+        let target = text
+            .lines()
+            .find(|l| l.contains("-> eusc-de-east-1"))
+            .unwrap_or_default();
+        assert!(
+            target.contains("public mode") && !target.contains("Knowledge"),
+            "{text}"
+        );
     }
 
     /// A dependency and a doc-rule deviation: their lists, counts, outcome, required
@@ -2175,15 +1576,8 @@ pub(crate) mod tests {
             "doc rules bring their remediation"
         );
         let text = text_summary(&r, Style::default());
-        assert!(
-            text.contains("lambda runtime create blocked (AWS docs)"),
-            "{text}"
-        );
-        assert!(
-            text.lines()
-                .any(|l| l.contains("dependencies") && l.contains("(AWS docs)")),
-            "{text}"
-        );
+        assert!(text.contains("lambda runtime create blocked"), "{text}");
+        assert!(text.contains("iam requested region condition"), "{text}");
     }
 
     /// A property the target schema lacks is a depth blocker decided by the schema, and
@@ -2258,10 +1652,7 @@ pub(crate) mod tests {
             )
         );
         let text = text_summary(&r, Style::default());
-        assert!(
-            text.contains("values or properties the region does not offer"),
-            "{text}"
-        );
+        assert!(text.contains("not offered"), "{text}");
     }
 
     /// Failing account checks are blockers decided by live mode; skipped ones warn.
@@ -2338,7 +1729,7 @@ pub(crate) mod tests {
                     && w.message.contains("region-opt-in"))
         );
         let text = text_summary(&r, Style::default());
-        assert!(text.contains("account blockers"), "{text}");
+        assert!(text.contains("blockers") && text.contains("SCP"), "{text}");
     }
 
     /// A Terraform policy set from a policy document read at apply time is checked

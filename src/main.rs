@@ -17,8 +17,10 @@ mod report;
 mod rules;
 mod sam;
 mod services;
+mod summary;
 #[cfg(test)]
 mod test_inputs;
+mod tui;
 mod type_mapper;
 
 fn main() {

@@ -1,14 +1,18 @@
-esc-preflight, 3 resources, eusc-de-east-1
-  capabilities API, Knowledge MCP, ESC User Guide 16 pages, public mode
-
-  AVAILABILITY
-  ok available            1
-  ok not available        0
-  ?  cannot assess        1   custom resources, backed by their own code
-  !  disputed             1   Custom::AWS (planned 2026 Q4)
-
-  PORTABILITY
-  ok nothing hardcoded or region-specific
-
-  REQUIRED CHANGES  none
-  ok no changes needed
++- esc-preflight test -----------------------------------------------------------------------------+
+|                                                                                                  |
+| +----------------------------------------------------------------------------------------------+ |
+| | template.yaml  CloudFormation template - 3 resources                                         | |
+| | -> eusc-de-east-1  public mode - capabilities API, Knowledge MCP, ESC User Guide             | |
+| +----------------------------------------------------------------------------------------------+ |
+|                                                                                                  |
+| + Ready for eusc-de-east-1   2 to verify                                                         |
+|                                                                                                  |
++- Availability                                                                   1 of 3 available |
+|   ? Custom::AWS         planned 2026 Q4 (type listed, test it before relying on it)              |
+|   ? 1 custom resource   your own code, check what it calls                                       |
+|                                                                                                  |
++- Required changes                                                                                |
+|   + no changes needed                                                                            |
+|                                                                                                  |
+| JSON report not written  add --out report.json, or pipe stdout (| jq, > file)                    |
++--------------------------------------------------------------------------------------------------+

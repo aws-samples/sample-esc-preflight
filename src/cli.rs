@@ -3,7 +3,7 @@
 use std::collections::BTreeSet;
 use std::io::IsTerminal;
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use clap::{Parser, ValueEnum};
 
@@ -14,7 +14,10 @@ use crate::provider::{self, aws_call, china, http, knowledge, live, partition, s
 use crate::report::{self, KnowledgeProvenance, Provenance, Report, TerraformProvenance};
 use crate::type_mapper::{Check, Mapping, TypeMapper};
 use crate::{depth, deviation, extractor, matcher, reader};
-use crate::{output, remediation};
+use crate::{output, remediation, tui};
+
+/// The Region `scan` and `plan` assess against without `--region`.
+pub const DEFAULT_REGION: &str = "eusc-de-east-1";
 
 #[derive(Debug, Parser)]
 #[command(
@@ -151,7 +154,7 @@ struct ScanArgs {
     #[arg(long, value_enum)]
     fail_on: Option<FailOn>,
     /// Region to assess against.
-    #[arg(long, default_value = "eusc-de-east-1")]
+    #[arg(long, default_value = DEFAULT_REGION)]
     region: String,
     /// Account the input moves to, for a move to another account. Literals of other
     /// accounts then break.
@@ -213,22 +216,28 @@ pub fn run() -> i32 {
 }
 
 fn run_scan(args: &ScanArgs) -> Result<i32> {
-    let (mut report, ..) = assess(args)?;
+    let started = Instant::now();
+    tui::start(&format!("Scanning for {}", args.region), !args.quiet);
+    let assessed = assess(args);
+    tui::stop();
+    let (mut report, ..) = assessed?;
     // The summary, which the exit code and stderr read, covers every finding.
     if !args.all {
         report::gaps_only(&mut report);
     }
-    write_json(
+    let json = write_json(
         args.out.as_deref(),
         &output::to_json(&output::scan(&report), args.pretty),
     )?;
     if !args.quiet {
-        let unicode = std::io::stderr().is_terminal();
-        let style = report::Style {
-            unicode,
-            color: unicode && std::env::var_os("NO_COLOR").is_none(),
+        let run = tui::Run {
+            elapsed: Some(started.elapsed()),
+            json,
         };
-        eprint!("{}", report::text_summary(&report, style));
+        eprint!(
+            "{}",
+            report::text_summary(&report, tui::Style::for_stderr(), &run)
+        );
     }
     Ok(match args.fail_on {
         Some(f) if fails(report.outcome, f) => 2,
@@ -236,20 +245,26 @@ fn run_scan(args: &ScanArgs) -> Result<i32> {
     })
 }
 
-/// The JSON to `out`, or to stdout when it is redirected or piped.
-fn write_json(out: Option<&std::path::Path>, json: &str) -> Result<()> {
-    match out {
-        Some(p) => std::fs::write(p, json)
-            .map_err(|e| ScanError::Input(format!("cannot write {}: {e}", p.display())))?,
-        None if !std::io::stdout().is_terminal() => print!("{json}"),
-        None => {}
-    }
-    Ok(())
+/// The JSON to `out`, or to stdout when it is redirected or piped; where it went.
+fn write_json(out: Option<&std::path::Path>, json: &str) -> Result<tui::Destination> {
+    Ok(match out {
+        Some(p) => {
+            std::fs::write(p, json)
+                .map_err(|e| ScanError::Input(format!("cannot write {}: {e}", p.display())))?;
+            tui::Destination::File(p.display().to_string())
+        }
+        None if !std::io::stdout().is_terminal() => {
+            print!("{json}");
+            tui::Destination::Stdout
+        }
+        None => tui::Destination::Nowhere,
+    })
 }
 
 /// The scan: the full report, the input and the target's partition facts.
 fn assess(args: &ScanArgs) -> Result<(Report, Template, extractor::PartitionFacts)> {
     let region = &args.region;
+    tui::phase(format!("reading {}", input_label(args.path.as_deref())));
     let template = read_input(args.path.as_deref(), region)?;
     let client = http::Client::new(Duration::from_secs(args.timeout))?;
     let mut partition = partition::facts(region)?;
@@ -258,6 +273,7 @@ fn assess(args: &ScanArgs) -> Result<(Report, Template, extractor::PartitionFact
     let live_mode = args.live || args.profile.is_some() || args.role_arn.is_some();
     // China has public data of its own; the Knowledge MCP server does not cover it.
     let china = partition.target_partition == china::PARTITION;
+    tui::phase("fetching public availability data");
     let (listed, tf) = std::thread::scope(|s| {
         let tf = s.spawn(|| {
             (template.format == SourceFormat::TerraformPlan)
@@ -338,6 +354,7 @@ fn assess(args: &ScanArgs) -> Result<(Report, Template, extractor::PartitionFact
                     .flat_map(|h| &h.literals)
                     .any(|l| l.kind == extractor::HazardKind::AvailabilityZone),
         };
+        tui::phase("checking the target account");
         let mut c = live_checks(args, &data.partition, &template, &schema_types, needs)?;
         depth = std::mem::take(&mut c.live.depth);
         offered.extend(std::mem::take(&mut c.live.offered));
@@ -370,6 +387,7 @@ fn assess(args: &ScanArgs) -> Result<(Report, Template, extractor::PartitionFact
             depth.entry(id).or_default().extend(checks);
         }
     }
+    tui::phase("assessing the resources");
     let findings = matcher::assess(
         &template,
         &data.knowledge,
@@ -386,6 +404,8 @@ fn assess(args: &ScanArgs) -> Result<(Report, Template, extractor::PartitionFact
     );
     let provenance = Provenance {
         tool_version: env!("CARGO_PKG_VERSION").into(),
+        input: input_label(args.path.as_deref()),
+        stacks: stacks(&template),
         source_format: template.format,
         input_kind: template.kind(),
         target_region: region.clone(),
@@ -487,6 +507,27 @@ fn live_checks(
     })
 }
 
+/// The input as the summary names it.
+fn input_label(path: Option<&str>) -> String {
+    match path {
+        Some(p) => p.to_string(),
+        None if !std::io::stdin().is_terminal() => "stdin".into(),
+        None => ".".into(),
+    }
+}
+
+/// Stacks in a CloudFormation input: CDK ids carry their stack before the last `/`.
+fn stacks(t: &Template) -> usize {
+    if t.format == SourceFormat::TerraformPlan {
+        return 0;
+    }
+    t.resources
+        .keys()
+        .map(|id| id.rfind('/').map_or("", |i| &id[..i]))
+        .collect::<BTreeSet<_>>()
+        .len()
+}
+
 /// The input named, piped stdin, or the current directory.
 fn read_input(path: Option<&str>, region: &str) -> Result<Template> {
     match path {
@@ -557,26 +598,57 @@ fn check_plan_args(args: &PlanArgs) -> Result<()> {
 
 fn run_plan(args: &PlanArgs) -> Result<i32> {
     check_plan_args(args)?;
-    let (report, template, facts) = assess(&args.scan)?;
-    let p = crate::plan::build(&report, &template, &facts, args.from.as_deref());
-    write_json(
+    let started = Instant::now();
+    tui::start(
+        &format!("Planning the move to {}", args.scan.region),
+        !args.scan.quiet,
+    );
+    let assessed = assess(&args.scan).map(|(report, template, facts)| {
+        tui::phase("ordering the resources into waves");
+        let p = crate::plan::build(&report, &template, &facts, args.from.as_deref());
+        (p, report)
+    });
+    tui::stop();
+    let (p, report) = assessed?;
+    let json = write_json(
         args.scan.out.as_deref(),
         &output::to_json(&output::plan(&p, &report), args.scan.pretty),
     )?;
     if !args.scan.quiet {
-        eprint!("{}", crate::plan::text_summary(&p));
+        let run = tui::Run {
+            elapsed: Some(started.elapsed()),
+            json,
+        };
+        eprint!(
+            "{}",
+            crate::summary::plan_summary(&p, &report, tui::Style::for_stderr(), &run)
+        );
     }
     Ok(0)
 }
 
 fn run_compare(args: &CompareArgs) -> Result<i32> {
-    let c = compare(args)?;
-    write_json(
+    let started = Instant::now();
+    tui::start(
+        &format!("Comparing {} with {}", args.from, args.to),
+        !args.quiet,
+    );
+    let compared = compare(args);
+    tui::stop();
+    let c = compared?;
+    let json = write_json(
         args.out.as_deref(),
         &output::to_json(&output::compare(&c), args.pretty),
     )?;
     if !args.quiet {
-        eprint!("{}", crate::compare::text_summary(&c));
+        let run = tui::Run {
+            elapsed: Some(started.elapsed()),
+            json,
+        };
+        eprint!(
+            "{}",
+            crate::summary::compare_summary(&c, tui::Style::for_stderr(), &run)
+        );
     }
     Ok(0)
 }
@@ -629,6 +701,7 @@ fn compare(args: &CompareArgs) -> Result<crate::compare::Comparison> {
         },
     )
     .map_err(ScanError::Input)?;
+    tui::phase(format!("fetching {} and {}", args.from, args.to));
     let all = knowledge::Needs {
         config: true,
         ..knowledge::Needs::default()
@@ -706,6 +779,9 @@ fn compare(args: &CompareArgs) -> Result<crate::compare::Comparison> {
             )
         })
         .transpose()?;
+    if caller.is_some() {
+        tui::phase(format!("reading the {} registry", args.to));
+    }
     let (to_types, live_account_id) = match &caller {
         Some(c) => {
             let (account, _) = live::identity(c)?;
@@ -732,6 +808,10 @@ fn compare(args: &CompareArgs) -> Result<crate::compare::Comparison> {
         // The scope reads live schemas only in live mode, a bundle only where one exists.
         let (b, url) = match (&caller, source, &to_zip, &to_url) {
             (Some(c), schema::SchemaSource::Live, ..) => {
+                tui::phase(format!(
+                    "reading {} resource schemas, takes minutes",
+                    shared.len()
+                ));
                 (schema::fetch_live(c, &shared, true)?, None)
             }
             (_, _, Some(zip), Some(u)) => (

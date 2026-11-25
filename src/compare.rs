@@ -12,7 +12,6 @@ use serde::Serialize;
 
 use crate::provider::knowledge::{Knowledge, State};
 use crate::provider::schema::{SchemaProvenance, Schemas};
-use crate::report::clean;
 
 #[derive(Debug, Clone)]
 pub struct Comparison {
@@ -342,95 +341,6 @@ pub fn build(
     }
 }
 
-/// The terminal summary: counts, then the first entries of each list.
-pub fn text_summary(c: &Comparison) -> String {
-    const SHOWN: usize = 8;
-    let mut out = vec![format!("esc-preflight compare, {} -> {}", c.from, c.to)];
-    let p = &c.data_provenance;
-    let mut sources = Vec::new();
-    match p.cloudformation_url.as_deref() {
-        Some(crate::provider::capabilities::URL) => {
-            sources.push("capabilities API, Knowledge MCP".to_string());
-        }
-        Some(_) => sources.push("Knowledge MCP".to_string()),
-        None => {}
-    }
-    if !p.china_bundle_urls.is_empty() {
-        sources.push("China schema bundle".into());
-    }
-    if p.from_schemas.is_some() && p.to_schemas.is_some() {
-        sources.push("schemas".into());
-    }
-    if p.live_account_id.is_some() {
-        sources.push(format!("live mode for {}", c.to));
-    }
-    out.push(format!("  {}", sources.join(", ")));
-    let mut section = |title: &str, items: Vec<String>| {
-        out.push(String::new());
-        out.push(format!("  {title}  {}", items.len()));
-        for i in items.iter().take(SHOWN) {
-            out.push(format!("    {i}"));
-        }
-        if items.len() > SHOWN {
-            out.push(format!(
-                "    +{} more in the JSON report",
-                items.len() - SHOWN
-            ));
-        }
-    };
-    let state = |s: Option<State>, launch: &Option<String>| match (s, launch) {
-        (Some(State::Planned), Some(q)) => format!("planned for {q}"),
-        (Some(s), _) => crate::remediation::id(s),
-        (None, _) => "not listed".into(),
-    };
-    let products = !c.warnings.iter().any(|w| {
-        matches!(
-            w.code,
-            CompareWarningCode::PublicDataRegionUnlisted | CompareWarningCode::ProductsUnchecked
-        )
-    });
-    if products {
-        section(
-            &format!("PRODUCTS not in {}", c.to),
-            c.products
-                .iter()
-                .map(|g| format!("{} ({})", clean(&g.name), state(g.to_state, &g.to_launch)))
-                .collect(),
-        );
-    }
-    section(
-        &format!("RESOURCE TYPES not in {}", c.to),
-        c.resource_types
-            .iter()
-            .map(|g| clean(&g.resource_type))
-            .collect(),
-    );
-    if products {
-        section(
-            &format!("CONFIG VALUES not in {}", c.to),
-            c.config_values
-                .iter()
-                .map(|g| format!("{}: {}", clean(&g.key), g.missing.len()))
-                .collect(),
-        );
-    }
-    if p.from_schemas.is_some() && p.to_schemas.is_some() {
-        section(
-            &format!("PROPERTIES not in {}", c.to),
-            c.properties
-                .iter()
-                .map(|g| format!("{}: {}", clean(&g.resource_type), g.missing.join(", ")))
-                .collect(),
-        );
-    }
-    for w in &c.warnings {
-        out.push(String::new());
-        out.push(format!("  ! {}", clean(&w.message)));
-    }
-    out.push(String::new());
-    out.join("\n")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -706,19 +616,30 @@ mod tests {
                 Vec::new(),
             )],
         };
-        let t = text_summary(&c);
-        assert!(t.contains("PRODUCTS not in eusc-de-east-1  10"), "{t}");
+        let summary = |c: &Comparison| {
+            crate::summary::compare_summary(
+                c,
+                crate::tui::Style::default(),
+                &crate::tui::Run::default(),
+            )
+        };
+        let t = summary(&c);
+        assert!(t.contains(" Products "), "{t}");
+        assert!(
+            t.lines()
+                .any(|l| l.contains("not expanding") && l.contains("10") && l.contains("+7 more")),
+            "{t}"
+        );
         let mut uncompared = c.clone();
         uncompared.warnings[0].code = CompareWarningCode::ProductsUnchecked;
-        let u = text_summary(&uncompared);
+        let u = summary(&uncompared);
         assert!(
-            !u.contains("PRODUCTS") && !u.contains("CONFIG VALUES"),
+            !u.contains(" Products ") && !u.contains(" Config values "),
             "{u}"
         );
         assert!(
-            t.contains("P0 (not-expanding)") && t.contains("+2 more"),
-            "{t}"
+            !t.contains(" Properties "),
+            "no schemas, no property section"
         );
-        assert!(!t.contains("PROPERTIES"), "no schemas, no property section");
     }
 }

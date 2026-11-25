@@ -13,7 +13,7 @@ Two more commands help plan a move: `plan` says how each resource reaches the ta
 
 It runs locally, read-only, and makes no model calls.
 
-![esc-preflight scan of a CDK app in live mode](docs/scan.png)
+![esc-preflight scanning a CDK app, then its summary](docs/scan.gif)
 
 ## What is this good for?
 
@@ -47,7 +47,7 @@ Run in your project directory:
 * AWS SAM templates are read as the CloudFormation they deploy: `Globals` apply, and each SAM resource is checked as its base type (an `AWS::Serverless::Function` as an `AWS::Lambda::Function`) with the properties SAM passes through. Hardcoded values in `Globals` are reported at `Globals/<section>`. Resources SAM generates from event sources are not checked; scan the processed template for those.
 * For a target other than ESC, add `--region <region>` and synthesize or plan for that Region.
 * For a move to another account, add `--account <id>`: account IDs other than the target's and the input's own then break.
-* The summary goes to stderr. The JSON report goes to `--out <file>`, or to stdout when it is redirected.
+* The summary goes to stderr; on a terminal, a progress line shows what the run is doing until the summary replaces it. The JSON report goes to `--out <file>`, or to stdout when it is redirected; the summary's last line says where it went. Without a terminal the summary is plain ASCII without color, and `NO_COLOR` turns color off.
 * Add `--profile <profile>` to also check your account in the target (live mode, recommended).
 
 ## Plan
@@ -198,7 +198,7 @@ The server's answers go into the gap register; the scanner's report alone decide
 | `--pretty` | | Indent the JSON report |
 | `--region <region>` | `eusc-de-east-1` | Region to check against |
 | `--timeout <seconds>` | `60` | Per-request timeout |
-| `-q`, `--quiet` | | No summary |
+| `-q`, `--quiet` | | No summary and no progress line |
 
 `esc-preflight plan [OPTIONS] [PATH]` takes the scan options and `--from <region>`, the Region the workload runs in today; it overrides the Region the input was produced for. `--out` takes the plan JSON; `--fail-on` and `--all` are rejected.
 

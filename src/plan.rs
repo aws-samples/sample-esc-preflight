@@ -13,7 +13,7 @@ use serde_json::Value;
 
 use crate::model::{Origin, SourceFormat, Template};
 use crate::remediation::CauseType;
-use crate::report::{Report, clean};
+use crate::report::Report;
 use crate::rules::{self, Boundary, Content, DataDecision, Kind, Layer, MovePath};
 
 #[derive(Debug, Clone)]
@@ -573,100 +573,6 @@ fn moves_data(e: &PlanEntry) -> bool {
     matches!(e.path, MovePath::Replicate | MovePath::Restore)
 }
 
-/// The terminal summary: paths, waves, and the resources that need attention.
-pub fn text_summary(p: &Plan) -> String {
-    const SHOWN: usize = 8;
-    let s = &p.summary;
-    let prov = &p.data_provenance;
-    let mut out = vec![format!(
-        "esc-preflight plan, {} resources, {} -> {}{}",
-        s.resources,
-        prov.source_region.as_deref().unwrap_or("unknown source"),
-        prov.target_region,
-        match prov.crosses_partition {
-            Some(true) => " (another partition)",
-            _ => "",
-        }
-    )];
-    out.push(String::new());
-    out.push(format!(
-        "  PATHS  redeploy {}  replicate {}  restore {}  blocked {}  unknown {}",
-        s.redeploy, s.replicate, s.restore, s.blocked, s.unknown
-    ));
-    out.push(String::new());
-    out.push(format!("  WAVES  {}", s.waves));
-    let last = p.resources.iter().map(|e| e.wave).max().unwrap_or(0);
-    for w in 1..=last {
-        let in_wave: Vec<&PlanEntry> = p.resources.iter().filter(|e| e.wave == w).collect();
-        if in_wave.is_empty() {
-            continue;
-        }
-        let moving = in_wave.iter().filter(|e| moves_data(e)).count();
-        out.push(format!(
-            "    {w}  {} resources{}",
-            in_wave.len(),
-            if moving > 0 {
-                format!(", {moving} with data to move")
-            } else {
-                String::new()
-            }
-        ));
-    }
-    let mut list = |title: &str, items: Vec<String>| {
-        if items.is_empty() {
-            return;
-        }
-        out.push(String::new());
-        out.push(format!("  {title}  {}", items.len()));
-        for i in items.iter().take(SHOWN) {
-            out.push(format!("    {i}"));
-        }
-        if items.len() > SHOWN {
-            out.push(format!(
-                "    +{} more in the JSON report",
-                items.len() - SHOWN
-            ));
-        }
-    };
-    list(
-        "DATA TO MOVE",
-        p.resources
-            .iter()
-            .filter(|e| moves_data(e))
-            .map(|e| {
-                format!(
-                    "{}  {}: {}",
-                    clean(&e.logical_id),
-                    clean(&e.resource_type),
-                    e.via.as_deref().unwrap_or_default()
-                )
-            })
-            .collect(),
-    );
-    list(
-        "BLOCKED",
-        p.resources
-            .iter()
-            .filter(|e| e.path == MovePath::Blocked)
-            .map(|e| format!("{}  by {}", clean(&e.logical_id), e.blocked_by.join(", ")))
-            .collect(),
-    );
-    list(
-        "UNKNOWN",
-        p.resources
-            .iter()
-            .filter(|e| e.path == MovePath::Unknown)
-            .map(|e| format!("{}  {}", clean(&e.logical_id), clean(&e.resource_type)))
-            .collect(),
-    );
-    for w in &p.warnings {
-        out.push(String::new());
-        out.push(format!("  ! {}", clean(&w.message)));
-    }
-    out.push(String::new());
-    out.join("\n")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -772,7 +678,17 @@ mod tests {
             (e.path, e.blocked_by.clone()),
             (MovePath::Blocked, vec!["availability".to_string()])
         );
-        assert!(text_summary(&p).contains("BLOCKED  1"));
+        let text = crate::summary::plan_summary(
+            &p,
+            &report,
+            crate::tui::Style::default(),
+            &crate::tui::Run::default(),
+        );
+        assert!(
+            text.lines()
+                .any(|l| l.contains(" Blocked ") && l.contains("1 resource ")),
+            "{text}"
+        );
     }
 
     #[test]
@@ -820,8 +736,14 @@ mod tests {
         );
         assert_eq!(by_id(&p, "App/Other/Vpc").wave, 1);
         assert!(by_id(&p, "A").wave >= 3, "a cycle ends");
-        let text = text_summary(&p);
-        assert!(!text.contains("0 resources"), "{text}");
+        let report = crate::report::tests::empty_report("eusc-de-east-1");
+        let text = crate::summary::plan_summary(
+            &p,
+            &report,
+            crate::tui::Style::default(),
+            &crate::tui::Run::default(),
+        );
+        assert!(!text.contains(" 0 resources"), "{text}");
     }
 
     /// `--from` wins over the input's environment, which is often the target.

@@ -119,7 +119,9 @@ impl Client {
                         .and_then(|v| v.to_str().ok()?.trim().parse::<u64>().ok())
                         .unwrap_or(10)
                         .min(MAX_WAIT_SECS);
-                    eprintln!("esc-preflight: rate limit reached at {url}; retrying in {secs} s");
+                    crate::tui::note(&format!(
+                        "esc-preflight: rate limit reached at {url}; retrying in {secs} s"
+                    ));
                     std::thread::sleep(Duration::from_secs(secs));
                     waits += 1;
                     continue;

@@ -29,6 +29,8 @@ After an intended change to the output, regenerate the golden files and the thre
 | `src/depth.rs` | Values the target must offer |
 | `src/account.rs` | Live account checks |
 | `src/plan.rs`, `src/compare.rs` | The `plan` and `compare` outputs |
+| `src/summary.rs`, `src/summary/` | The terminal summaries of `scan`, `plan` and `compare`, built from the in-memory results |
+| `src/tui.rs` | The terminal look the summaries share: frame, tabs, colors, ASCII fallback, terminal width, and the progress line on stderr |
 | `src/provider/schema.rs` | CloudFormation resource schemas: per-Region bundles and `DescribeType`; reads the bundle zip with `miniz_oxide` |
 | `src/provider/` (others) | Builder Center capabilities API, Knowledge MCP, AWS China sources, ESC User Guide, Terraform provider data, signed AWS calls, partition facts |
 

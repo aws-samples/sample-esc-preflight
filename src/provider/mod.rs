@@ -139,9 +139,9 @@ pub fn availability(
             capabilities::URL
         }
         Err(e) => {
-            eprintln!(
+            crate::tui::note(&format!(
                 "esc-preflight: {e}; reading products from the AWS Knowledge MCP server only"
-            );
+            ));
             knowledge::URL
         }
     };
@@ -157,9 +157,9 @@ pub fn availability(
             })
         }
         Err(e) => {
-            eprintln!(
+            crate::tui::note(&format!(
                 "esc-preflight: {e}; reading CloudFormation availability from the AWS Knowledge MCP server"
-            );
+            ));
             for (k, r) in out.iter_mut().zip(regions) {
                 let c = knowledge::fetch(client, r, needs, Parts::CfnOnly)?;
                 k.types.extend(c.types);
