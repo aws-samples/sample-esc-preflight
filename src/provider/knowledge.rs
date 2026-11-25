@@ -66,6 +66,12 @@ pub struct Knowledge {
     pub services: BTreeMap<String, bool>,
     /// Products and features by name.
     pub products: BTreeMap<String, Product>,
+    /// Features by their service and name, from the capabilities API; empty when it
+    /// failed and for AWS China.
+    pub features: BTreeMap<(String, String), Product>,
+    /// Names that stand for one feature of several services with different states;
+    /// `compare` reads their `<service>: <feature>` entries instead.
+    pub merged: BTreeSet<String>,
     /// Config values the region offers, by parent key such as
     /// `AWS::EC2::Instance::InstanceType`. Empty unless config values were needed.
     pub config: BTreeMap<String, BTreeSet<String>>,
@@ -421,21 +427,22 @@ fn norm(s: &str) -> String {
 impl Knowledge {
     /// Takes product states from the capabilities API, which lists more products. Its
     /// `notAvailable` does not say whether the product is expanding, so this server's
-    /// not-expanding state stays; so does its state for a name the API lists with
-    /// different states, and products only this server lists.
-    pub fn add_products_from(
-        &mut self,
-        products: BTreeMap<String, super::capabilities::ProductState>,
-    ) {
-        for (name, (state, launch, conflict)) in products {
-            let own = self.products.get(&name);
-            let keep = own.is_some_and(|p| {
-                conflict || (state == State::NotAvailable && p.state == State::NotExpanding)
+    /// not-expanding state stays, as do products only this server lists.
+    pub fn add_products_from(&mut self, p: super::capabilities::Products) {
+        for (name, (state, launch)) in p.products {
+            let keep = self.products.get(&name).is_some_and(|own| {
+                state == State::NotAvailable && own.state == State::NotExpanding
             });
             if !keep {
                 self.products.insert(name, Product { state, launch });
             }
         }
+        self.features = p
+            .features
+            .into_iter()
+            .map(|(k, (state, launch))| (k, Product { state, launch }))
+            .collect();
+        self.merged = p.merged;
     }
 
     /// Adds CloudFormation types and config values from the capabilities API; config
@@ -732,19 +739,29 @@ pub(crate) mod tests {
             .into(),
             ..Knowledge::default()
         };
-        k.add_products_from(
-            [
-                ("Gone", (State::NotAvailable, None, false)),
-                ("Dup", (State::Available, None, true)),
-                ("Old", (State::Available, None, false)),
-                ("New", (State::Planned, Some("2027 Q1".to_string()), false)),
+        k.add_products_from(super::super::capabilities::Products {
+            products: [
+                ("Gone", (State::NotAvailable, None)),
+                ("Dup", (State::Available, None)),
+                ("Svc: Dup", (State::Available, None)),
+                ("Old", (State::Available, None)),
+                ("New", (State::Planned, Some("2027 Q1".to_string()))),
             ]
             .map(|(n, s)| (n.to_string(), s))
             .into(),
-        );
+            features: [(
+                ("AWS Lambda".to_string(), "X".to_string()),
+                (State::Available, None),
+            )]
+            .into(),
+            merged: ["Dup".to_string()].into(),
+        });
         let st = |n: &str| k.products[n].state;
         assert_eq!(st("Gone"), State::NotExpanding);
-        assert_eq!(st("Dup"), State::NotAvailable);
+        assert_eq!(st("Dup"), State::Available);
+        assert_eq!(st("Svc: Dup"), State::Available);
+        assert_eq!(k.features.len(), 1);
+        assert!(k.merged.contains("Dup"));
         assert_eq!(st("Old"), State::Available);
         assert_eq!(st("Only here"), State::Planning);
         assert_eq!(k.products["New"].launch.as_deref(), Some("2027 Q1"));

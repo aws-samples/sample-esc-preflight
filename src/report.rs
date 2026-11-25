@@ -13,17 +13,13 @@ use crate::provider::knowledge::State;
 use crate::provider::live::LiveProvenance;
 use crate::remediation::{self, Cause, CauseType, Context, RequiredChange, Tier};
 
-/// Version of the JSON report's shape. Adding a field or an enum value keeps it;
-/// removing or renaming a field, or changing what one means, increments it.
-pub const SCHEMA_VERSION: u32 = 1;
-
 #[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
 pub struct TerraformProvenance {
     pub aws_provider_version: String,
     pub awscc_provider_version: String,
 }
 
-#[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
+#[derive(Debug, Clone)]
 pub struct KnowledgeProvenance {
     /// Where products, services and APIs came from: the AWS Knowledge MCP server, or the
     /// AWS SDK endpoint data for China.
@@ -40,10 +36,11 @@ pub struct KnowledgeProvenance {
     pub unknown: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
+#[derive(Debug, Clone)]
 pub struct Provenance {
     pub tool_version: String,
     pub source_format: SourceFormat,
+    pub input_kind: crate::model::InputKind,
     pub target_region: String,
     /// The account the input moves to, when `--account` is given.
     pub target_account: Option<String>,
@@ -65,13 +62,10 @@ pub struct Provenance {
     /// publishes no schema bundle and live mode is off.
     pub schemas: Option<crate::provider::schema::SchemaProvenance>,
     /// CloudFormation resource types in the input, for the unchecked-properties warning.
-    #[serde(skip)]
     pub schema_types: usize,
     /// Live mode was refused `cloudformation:DescribeType`.
-    #[serde(skip)]
     pub schema_denied: bool,
     /// Macros in the template's `Transform`, which skip the property checks.
-    #[serde(skip)]
     pub macros: Vec<String>,
 }
 
@@ -86,23 +80,27 @@ pub struct Summary {
     pub planned: usize,
     /// Property values with a hardcoded hazard; each is one place to fix.
     pub hazards: usize,
-    /// Property values written for the input's own environment (see `environment_literals`).
-    pub environment_literals: usize,
+    /// Hazards with a literal that breaks in the target, and hazards whose literals
+    /// only tie the input to one Region or account; together `hazards`.
+    pub hazards_breaking: usize,
+    pub hazards_portability: usize,
+    /// Property values written for the input's own environment (see
+    /// `run.input_environments`).
+    pub environment_literal_places: usize,
     pub divergences: usize,
     /// Depth checks whose value the target region does not offer, plus a zone
-    /// shortfall (see `zones`).
+    /// shortfall.
     pub depth_blockers: usize,
     /// Account checks that block deployment (see `account`).
     pub account_blockers: usize,
     /// Resources that use a feature the ESC User Guide or another AWS page documents as
     /// not available.
-    pub deviations: usize,
+    pub deviation_blockers: usize,
     /// Guide restrictions the public availability data contradicts; warnings, not blockers.
     pub guide_conflicts: usize,
     /// Features that work with a documented difference.
     pub caveats: usize,
-    /// Documented dependencies outside the target, one per resource and rule (see
-    /// `dependencies`).
+    /// Documented dependencies outside the target, one per resource and rule.
     pub dependencies: usize,
     /// Required changes by tier: applied as stated, applied after a yes, owner decides.
     pub fixes: usize,
@@ -133,8 +131,9 @@ pub struct Outcome {
 impl Outcome {
     pub fn of(s: &Summary) -> Self {
         Self {
-            blocker: s.depth_blockers + s.deviations + s.not_available + s.account_blockers > 0,
-            hazard: s.hazards + s.environment_literals + s.dependencies > 0,
+            blocker: s.depth_blockers + s.deviation_blockers + s.not_available + s.account_blockers
+                > 0,
+            hazard: s.hazards + s.environment_literal_places + s.dependencies > 0,
             disputed: s.disputed + s.cannot_assess + s.guide_conflicts > 0,
         }
     }
@@ -146,9 +145,9 @@ pub enum WarningCode {
     /// The input was produced for another Region than the target.
     InputRegionMismatch,
     /// The public availability data does not know some types, services or operations.
-    KnowledgeUnknown,
+    PublicDataUnknown,
     /// No public availability data covers the target; live mode decides alone.
-    KnowledgeRegionUnlisted,
+    PublicDataRegionUnlisted,
     /// No source answered for instance types, engine versions or node types the input
     /// sets (AWS China publishes none), so they were not checked.
     ValuesUnchecked,
@@ -162,16 +161,30 @@ pub enum WarningCode {
     AccountChecksSkipped,
 }
 
+/// A run-level condition. `code` is stable and `message` is prose for people;
+/// `items` names what the condition is about (types, values, rule ids, Regions).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
-pub struct Warning {
-    pub code: WarningCode,
+pub struct Warning<C> {
+    pub code: C,
     pub message: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub items: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
+impl<C> Warning<C> {
+    pub fn new(code: C, message: String, items: Vec<String>) -> Self {
+        Self {
+            code,
+            message,
+            items,
+        }
+    }
+}
+
+/// The scan in memory. The terminal summary reads it as it is; `output::scan` shapes
+/// the JSON from it.
+#[derive(Debug, Clone)]
 pub struct Report {
-    #[schemars(extend("const" = 1))]
-    pub schema_version: u32,
     pub data_provenance: Provenance,
     pub summary: Summary,
     pub outcome: Outcome,
@@ -182,17 +195,15 @@ pub struct Report {
     /// Differences the ESC User Guide documents for the services in the input.
     pub documented_differences: Vec<Documented>,
     pub environment_literals: Vec<EnvLiterals>,
-    pub zones: Option<ZoneCheck>,
     pub required_changes: Vec<RequiredChange>,
     /// Terraform resources of providers other than aws and awscc.
     pub out_of_scope: Vec<OutOfScope>,
     /// Live mode's checks of the target account; null in public mode.
     pub account: Option<crate::account::AccountChecks>,
-    pub warnings: Vec<Warning>,
+    pub warnings: Vec<Warning<WarningCode>>,
     /// For a warning that carries a command: its index, the prose without the
     /// command, and the command, so the terminal shows the command on its own line.
     /// The JSON warning has both in one message.
-    #[serde(skip)]
     pub warning_commands: Vec<(usize, String, String)>,
 }
 
@@ -220,8 +231,10 @@ pub fn build(
     let mut s = Summary {
         resources: findings.len(),
         hazards: hazards.len(),
-        environment_literals: env_literals.iter().map(|e| e.places).sum(),
-        deviations: guide.deviations.iter().filter(|d| d.blocks()).count(),
+        hazards_breaking: hazards.iter().filter(|h| breaks(h)).count(),
+        hazards_portability: hazards.iter().filter(|h| !breaks(h)).count(),
+        environment_literal_places: env_literals.iter().map(|e| e.places).sum(),
+        deviation_blockers: guide.deviations.iter().filter(|d| d.blocks()).count(),
         guide_conflicts: guide
             .deviations
             .iter()
@@ -350,6 +363,12 @@ pub fn build(
         let finding = findings.iter().find(|f| f.logical_id == c.logical_id);
         c.cdk_path = finding.and_then(|f| f.cdk_path.clone());
         c.decided_by = decided_by(c, finding, &guide);
+        if c.cause.kind != CauseType::Hazard && c.resource_type.is_none() {
+            c.resource_type = finding.map(|f| f.resource_type.clone());
+        }
+        if c.cause.kind == CauseType::Availability {
+            c.roadmap = finding.and_then(|f| f.roadmap.clone());
+        }
         if matches!(c.cause.kind, CauseType::Availability | CauseType::Deviation)
             && let Some(f) = finding
         {
@@ -369,16 +388,28 @@ pub fn build(
             Tier::Flag => s.flags += 1,
         }
     }
-    let unchecked: Vec<String> = unique(
-        findings
-            .iter()
-            .flat_map(|f| &f.depth)
-            .filter(|d| d.offered.is_none() && crate::depth::is_public(d.kind))
-            .map(|d| format!("{} {}", d.path, d.value)),
+    let open: Vec<(&Finding, &crate::depth::DepthCheck)> = findings
+        .iter()
+        .flat_map(|f| f.depth.iter().map(move |d| (f, d)))
+        .filter(|(_, d)| d.offered.is_none() && crate::depth::is_public(d.kind))
+        .collect();
+    let label = |f: &Finding, d: &crate::depth::DepthCheck| {
+        format!(
+            "{} {}",
+            crate::output::property_path(&f.resource_type, &d.path),
+            d.value
+        )
+    };
+    let unchecked: Vec<String> = unique(open.iter().map(|(f, d)| label(f, d)));
+    // The values live mode can check; it probes only some kinds.
+    let probed: Vec<String> = unique(
+        open.iter()
+            .filter(|(_, d)| crate::depth::live_probes(d.kind))
+            .map(|(f, d)| label(f, d)),
     );
-    let (warnings, warning_commands) = warnings(&provenance, &guide, ctx, produce, &unchecked);
+    let (warnings, warning_commands) =
+        warnings(&provenance, &guide, ctx, produce, &unchecked, &probed);
     Report {
-        schema_version: SCHEMA_VERSION,
         data_provenance: provenance,
         outcome: Outcome::of(&s),
         summary: s,
@@ -388,13 +419,18 @@ pub fn build(
         dependencies: guide.dependencies,
         documented_differences: guide.documented,
         environment_literals: env_literals,
-        zones,
         required_changes: changes,
         out_of_scope,
         account: ctx.account.cloned(),
         warnings,
         warning_commands,
     }
+}
+
+fn breaks(h: &crate::extractor::Hazard) -> bool {
+    h.literals
+        .iter()
+        .any(|l| l.impact == crate::extractor::Impact::Breaks)
 }
 
 fn availability_change(f: &Finding, target: &str, ctx: &Context) -> RequiredChange {
@@ -473,8 +509,8 @@ fn decided_by(c: &RequiredChange, finding: Option<&Finding>, guide: &GuideFindin
                     .find(|d| c.cause.ids.contains(&remediation::id(d.kind)))
             })
             .and_then(|d| d.source)
-            .map_or(DecidedBy::Knowledge, |s| match s {
-                DepthSource::Knowledge => DecidedBy::Knowledge,
+            .map_or(DecidedBy::Public, |s| match s {
+                DepthSource::Public => DecidedBy::Public,
                 DepthSource::Live => DecidedBy::Live,
                 DepthSource::Schema => DecidedBy::Schema,
             }),
@@ -484,6 +520,9 @@ fn decided_by(c: &RequiredChange, finding: Option<&Finding>, guide: &GuideFindin
     }
 }
 
+/// For a warning that carries a command: its index, the prose and the command.
+type WarningCommands = Vec<(usize, String, String)>;
+
 /// The report's warnings, and the commands split from them for the terminal.
 fn warnings(
     prov: &Provenance,
@@ -491,11 +530,12 @@ fn warnings(
     ctx: &Context,
     produce: &str,
     unchecked: &[String],
-) -> (Vec<Warning>, Vec<(usize, String, String)>) {
+    probed: &[String],
+) -> (Vec<Warning<WarningCode>>, WarningCommands) {
     let target = &prov.target_region;
-    let mut warnings: Vec<Warning> = Vec::new();
-    let mut warn = |code, message: String| {
-        let w = Warning { code, message };
+    let mut warnings: Vec<Warning<WarningCode>> = Vec::new();
+    let mut warn = |code, message: String, items: Vec<String>| {
+        let w = Warning::new(code, message, items);
         let new = !warnings.contains(&w);
         if new {
             warnings.push(w);
@@ -504,10 +544,11 @@ fn warnings(
     };
     if prov.knowledge.is_none() {
         warn(
-            WarningCode::KnowledgeRegionUnlisted,
+            WarningCode::PublicDataRegionUnlisted,
             format!(
                 "No public availability data covers {target}, so the verdicts come from live mode alone, without roadmap states."
             ),
+            vec![target.clone()],
         );
     }
     if !unchecked.is_empty() {
@@ -516,12 +557,18 @@ fn warnings(
             format!(
                 "No source says whether {target} offers {}, so these values were not checked.{}",
                 unchecked.join(", "),
-                if prov.live.is_some() {
-                    " Check them in the target before you deploy."
+                if prov.live.is_some() || probed.is_empty() {
+                    " Check them in the target before you deploy.".to_string()
+                } else if probed.len() == unchecked.len() {
+                    " Run in live mode to check them in the account.".to_string()
                 } else {
-                    " Run in live mode to check them in the account."
+                    format!(
+                        " Run in live mode to check {} in the account, and check the others in the target before you deploy.",
+                        probed.join(", ")
+                    )
                 }
             ),
+            unchecked.to_vec(),
         );
     }
     let mut warning_commands = Vec::new();
@@ -542,7 +589,11 @@ fn warnings(
             "The input was produced for {region}, not {target}. {produce} it for the target region so region-specific values resolve as they will be deployed."
         );
         if let (Some(i), Some(c)) = (
-            warn(WarningCode::InputRegionMismatch, format!("{prose}{how}")),
+            warn(
+                WarningCode::InputRegionMismatch,
+                format!("{prose}{how}"),
+                vec![region.clone()],
+            ),
             cmd,
         ) {
             warning_commands.push((i, prose, c));
@@ -550,11 +601,12 @@ fn warnings(
     }
     if let Some(k) = prov.knowledge.as_ref().filter(|k| !k.unknown.is_empty()) {
         warn(
-            WarningCode::KnowledgeUnknown,
+            WarningCode::PublicDataUnknown,
             format!(
                 "The public availability data does not know {}; only live mode can assess these resources.",
                 k.unknown.join(", ")
             ),
+            k.unknown.clone(),
         );
     }
     let conflicts = unique(
@@ -571,6 +623,7 @@ fn warnings(
                 "The ESC User Guide says these features are not available, while the public availability data lists them as available: {}. The guide is likely outdated. Ask your AWS team to confirm and to have the guide corrected.",
                 conflicts.join(", ")
             ),
+            conflicts.clone(),
         );
     }
     if let Some(a) = ctx.account {
@@ -583,6 +636,7 @@ fn warnings(
             warn(
                 WarningCode::AccountChecksSkipped,
                 format!("These account checks were skipped: {}.", skipped.join("; ")),
+                a.skipped.iter().map(|s| s.check.clone()).collect(),
             );
         }
     }
@@ -593,6 +647,7 @@ fn warnings(
                 "The template uses the transform {}, which rewrites resources when it is deployed, so resource properties were not checked against the target's schemas. Check the processed template instead.",
                 prov.macros.join(", ")
             ),
+            prov.macros.clone(),
         );
     } else if prov.schemas.is_none() && prov.schema_types > 0 {
         warn(
@@ -603,6 +658,11 @@ fn warnings(
                 format!(
                     "{target} publishes no CloudFormation schema bundle, so resource properties were not checked against it. Run in live mode to check them with cloudformation:DescribeType."
                 )
+            },
+            if prov.schema_denied {
+                vec!["cloudformation:DescribeType".to_string()]
+            } else {
+                vec![target.clone()]
             },
         );
     }
@@ -617,6 +677,7 @@ fn warnings(
                 "These rules match the input, but the ESC User Guide no longer contains the sentence they quote, so they were skipped: {}. Check the guide: the restriction may have been lifted or reworded.",
                 g.stale_rules.join(", ")
             ),
+            g.stale_rules.clone(),
         );
     }
     (warnings, warning_commands)
@@ -634,17 +695,12 @@ fn env_label(e: &DeployEnv) -> String {
 /// Gaps-only view: drops findings that are cleanly available, keeps everything
 /// that needs action or verification. Summary and provenance stay complete.
 pub fn gaps_only(r: &mut Report) {
+    r.documented_differences.clear();
     r.findings.retain(|f| {
         f.divergence
             || f.depth.iter().any(|d| d.offered != Some(true))
             || f.verdict != Verdict::Available
     });
-}
-
-pub fn to_json(v: &impl Serialize) -> String {
-    let mut s = serde_json::to_string_pretty(v).expect("serializes");
-    s.push('\n');
-    s
 }
 
 /// How the terminal summary may draw. Glyphs need a terminal; color additionally
@@ -831,7 +887,7 @@ fn portability_rows(r: &Report, pen: &Pen) -> Vec<String> {
             ),
         );
     }
-    if s.environment_literals > 0 {
+    if s.environment_literal_places > 0 {
         let envs: Vec<String> = r
             .environment_literals
             .iter()
@@ -846,7 +902,7 @@ fn portability_rows(r: &Report, pen: &Pen) -> Vec<String> {
             warn,
             YELLOW,
             "env literals",
-            s.environment_literals,
+            s.environment_literal_places,
             format!("{verb} for {}", list(&envs, 2)),
         );
     }
@@ -867,7 +923,7 @@ fn portability_rows(r: &Report, pen: &Pen) -> Vec<String> {
             _ => "ESC User Guide",
         }
     };
-    if s.deviations > 0 {
+    if s.deviation_blockers > 0 {
         let rules = rules_of(&|d| d.blocks());
         // A documented deviation means the feature does not work in the target.
         pen.row(
@@ -875,7 +931,7 @@ fn portability_rows(r: &Report, pen: &Pen) -> Vec<String> {
             bad,
             RED,
             "deviations",
-            s.deviations,
+            s.deviation_blockers,
             format!("{} ({})", list(&rules, 2), sources_of(&|d| d.blocks())),
         );
     }
@@ -1210,12 +1266,15 @@ fn change_groups(r: &Report) -> Vec<Group> {
         let reps: Vec<&str> = c
             .edits
             .iter()
-            .map(|e| match format_of(c) {
-                1 => e.replace.cdk.as_str(),
-                2 => e.replace.terraform.as_str(),
-                _ => e.replace.cloudformation.as_str(),
+            .map(|e| {
+                e.replace.as_ref().map(|r| match format_of(c) {
+                    1 => r.cdk.as_str(),
+                    2 => r.terraform.as_str(),
+                    _ => r.cloudformation.as_str(),
+                })
             })
-            .collect();
+            .collect::<Option<Vec<_>>>()
+            .unwrap_or_default();
         let (action, code) = match reps.first() {
             Some(first) if reps.iter().all(|x| x == first) => (format!("`{first}`"), true),
             _ => (c.brief.action.clone(), false),
@@ -1392,25 +1451,18 @@ pub(crate) mod tests {
 
     /// Marks every property of every object in a JSON schema as required: the reports
     /// always write every key, null where a value is absent.
-    fn require_all(v: &mut serde_json::Value) {
-        match v {
-            serde_json::Value::Object(m) => {
-                if let Some(serde_json::Value::Object(props)) = m.get("properties") {
-                    let keys: Vec<_> = props.keys().cloned().map(serde_json::Value::from).collect();
-                    m.insert("required".into(), keys.into());
-                }
-                m.values_mut().for_each(require_all);
-            }
-            serde_json::Value::Array(a) => a.iter_mut().for_each(require_all),
-            _ => {}
-        }
+    /// The JSON Schema of what `T` serializes to: keys it skips are not required.
+    pub(crate) fn output_schema<T: schemars::JsonSchema>() -> serde_json::Value {
+        let g = schemars::generate::SchemaSettings::default()
+            .for_serialize()
+            .into_generator();
+        serde_json::to_value(g.into_root_schema_for::<T>()).unwrap()
     }
 
     /// The committed `schema/<file>` is the JSON Schema of `T`. Set `UPDATE_GOLDEN=1`
     /// to rewrite it.
     pub(crate) fn assert_committed_schema<T: schemars::JsonSchema>(file: &str) {
-        let mut v = serde_json::to_value(schemars::schema_for!(T)).unwrap();
-        require_all(&mut v);
+        let v = output_schema::<T>();
         let text = format!("{}\n", serde_json::to_string_pretty(&v).unwrap());
         let path = format!("{}/schema/{file}", env!("CARGO_MANIFEST_DIR"));
         if std::env::var_os("UPDATE_GOLDEN").is_some() {
@@ -1418,7 +1470,7 @@ pub(crate) mod tests {
         }
         assert!(
             std::fs::read_to_string(&path).unwrap_or_default() == text,
-            "schema/{file} is out of date: run UPDATE_GOLDEN=1 cargo test schema, and decide whether SCHEMA_VERSION changes"
+            "schema/{file} is out of date: run UPDATE_GOLDEN=1 cargo test schema, and decide whether output::SCHEMA_VERSION changes"
         );
     }
 
@@ -1460,6 +1512,7 @@ pub(crate) mod tests {
             &Context::default(),
             "Synthesize",
             &["InstanceType m7i.large".to_string()],
+            &["InstanceType m7i.large".to_string()],
         );
         assert_eq!(w.len(), 1);
         assert_eq!(w[0].code, WarningCode::ValuesUnchecked);
@@ -1472,14 +1525,85 @@ pub(crate) mod tests {
             &Context::default(),
             "Synthesize",
             &[],
+            &[],
         );
         assert!(none.is_empty());
+        // Live mode probes no Lambda architectures, so it is not offered for them.
+        let (arch, _) = warnings(
+            &prov(SourceFormat::Cloudformation, vec![]),
+            &GuideFindings::default(),
+            &Context::default(),
+            "Synthesize",
+            &["Properties.Architectures[] arm64".to_string()],
+            &[],
+        );
+        assert!(
+            arch[0]
+                .message
+                .ends_with("Check them in the target before you deploy.")
+        );
+        assert_eq!(arch[0].items, ["Properties.Architectures[] arm64"]);
+        let both = [
+            "Properties.Architectures[] arm64".to_string(),
+            "Properties.InstanceType m7i.large".to_string(),
+        ];
+        let (mixed, _) = warnings(
+            &prov(SourceFormat::Cloudformation, vec![]),
+            &GuideFindings::default(),
+            &Context::default(),
+            "Synthesize",
+            &both,
+            &both[1..],
+        );
+        assert!(
+            mixed[0].message.contains(
+                "live mode to check Properties.InstanceType m7i.large in the account, and check the others"
+            ),
+            "{}",
+            mixed[0].message
+        );
+        // Unchecked properties name the target, or the call that was refused.
+        let (props, _) = warnings(
+            &Provenance {
+                schema_types: 1,
+                ..prov(SourceFormat::Cloudformation, vec![])
+            },
+            &GuideFindings::default(),
+            &Context::default(),
+            "Synthesize",
+            &[],
+            &[],
+        );
+        assert_eq!(
+            (props[0].code, props[0].items.as_slice()),
+            (
+                WarningCode::PropertiesUnchecked,
+                ["eusc-de-east-1".to_string()].as_slice()
+            )
+        );
+        let (denied, _) = warnings(
+            &Provenance {
+                schema_types: 1,
+                schema_denied: true,
+                ..prov(SourceFormat::Cloudformation, vec![])
+            },
+            &GuideFindings::default(),
+            &Context::default(),
+            "Synthesize",
+            &[],
+            &[],
+        );
+        assert_eq!(denied[0].items, ["cloudformation:DescribeType"]);
     }
 
     fn prov(format: SourceFormat, envs: Vec<DeployEnv>) -> Provenance {
         Provenance {
             tool_version: "test".into(),
             source_format: format,
+            input_kind: match format {
+                SourceFormat::Cloudformation => crate::model::InputKind::Cloudformation,
+                SourceFormat::TerraformPlan => crate::model::InputKind::TerraformPlan,
+            },
             target_region: "eusc-de-east-1".into(),
             target_account: None,
             input_environments: envs,
@@ -1502,10 +1626,10 @@ pub(crate) mod tests {
     }
 
     fn fixed_report(input: &str) -> String {
-        to_json(&fixed(input))
+        crate::output::to_json(&crate::output::scan(&fixed(input)), true)
     }
 
-    fn fixed(input: &str) -> Report {
+    pub(crate) fn fixed(input: &str) -> Report {
         fixed_t(reader::parse_text(input).unwrap())
     }
 
@@ -1539,7 +1663,7 @@ pub(crate) mod tests {
         };
         let mut depth = depth::checks(&t, &data.partition.target_region);
         let offered = depth::public_offered(&data.knowledge);
-        depth::resolve(&mut depth, &offered, depth::DepthSource::Knowledge);
+        depth::resolve(&mut depth, &offered, depth::DepthSource::Public);
         let findings = matcher::assess(&t, &data.knowledge, data.tf.as_ref(), None, &depth);
         let scan = extractor::hazards(&t, &data.partition);
         let (g, gp) = deviation::assess(
@@ -1871,9 +1995,20 @@ pub(crate) mod tests {
             },
         );
         assert_eq!(r.summary.depth_blockers, 1);
-        assert_eq!(r.zones.unwrap().used.len(), 3);
+        let zones = |r: &Report| {
+            r.required_changes
+                .iter()
+                .filter(|c| c.cause.kind == CauseType::Zones)
+                .count()
+        };
+        assert_eq!(zones(&r), 1);
         assert!(
-            build(
+            r.required_changes
+                .iter()
+                .any(|c| c.reason.contains("3 zones"))
+        );
+        assert_eq!(
+            zones(&build(
                 prov,
                 vec![],
                 scan,
@@ -1883,9 +2018,8 @@ pub(crate) mod tests {
                     target_zones: Some(3),
                     ..Context::default()
                 }
-            )
-            .zones
-            .is_none()
+            )),
+            0
         );
     }
 
@@ -1896,61 +2030,95 @@ pub(crate) mod tests {
         assert!(t.ends_with('Z') && t.as_bytes()[10] == b'T');
     }
 
-    /// The JSON Schema of the report. Every key is always emitted, so every property
-    /// is required.
-    fn schema() -> serde_json::Value {
-        let mut v = serde_json::to_value(schemars::schema_for!(Report)).unwrap();
-        require_all(&mut v);
-        v
-    }
-
-    /// Every key the schema declares is in the JSON, also where the value is absent.
-    fn missing_keys(
+    /// Where `v` breaks `schema`: a key the schema does not declare, a required key
+    /// that is missing, or a null or empty list, which the output leaves out.
+    pub(crate) fn schema_errors(
         v: &serde_json::Value,
         schema: &serde_json::Value,
         root: &serde_json::Value,
         at: &str,
         out: &mut Vec<String>,
     ) {
+        use serde_json::Value;
         if let Some(r) = schema["$ref"].as_str() {
             let name = r.trim_start_matches("#/$defs/");
-            return missing_keys(v, &root["$defs"][name], root, at, out);
+            return schema_errors(v, &root["$defs"][name], root, at, out);
         }
-        if v.is_null() {
-            return;
+        match v {
+            Value::Null => return out.push(format!("{at}: null")),
+            Value::Array(a) if a.is_empty() => return out.push(format!("{at}: []")),
+            _ => {}
         }
         if let Some(branches) = schema["anyOf"].as_array().or(schema["oneOf"].as_array()) {
-            for b in branches.iter().filter(|b| b["type"] != "null") {
-                missing_keys(v, b, root, at, out);
+            let fits = branches.iter().any(|b| {
+                let mut e = Vec::new();
+                schema_errors(v, b, root, at, &mut e);
+                e.is_empty() && type_fits(v, b, root)
+            });
+            if !fits {
+                out.push(format!("{at}: no branch fits"));
             }
+            return;
         }
-        if let Some(props) = schema["properties"].as_object() {
-            for (k, s) in props {
-                match v.get(k) {
-                    Some(x) => missing_keys(x, s, root, &format!("{at}.{k}"), out),
-                    None => out.push(format!("{at}.{k}")),
+        if let (Some(m), Some(props)) = (v.as_object(), schema["properties"].as_object()) {
+            for k in schema["required"].as_array().into_iter().flatten() {
+                if !m.contains_key(k.as_str().unwrap_or_default()) {
+                    out.push(format!("{at}.{k}: missing"));
                 }
+            }
+            for (k, x) in m {
+                match props.get(k) {
+                    Some(s) => schema_errors(x, s, root, &format!("{at}.{k}"), out),
+                    None => out.push(format!("{at}.{k}: undeclared")),
+                }
+            }
+        } else if let (Some(m), Some(s)) = (v.as_object(), schema.get("additionalProperties")) {
+            for (k, x) in m {
+                schema_errors(x, s, root, &format!("{at}.{k}"), out);
             }
         }
         if let (Some(items), Some(a)) = (schema.get("items"), v.as_array()) {
             for (i, x) in a.iter().enumerate() {
-                missing_keys(x, items, root, &format!("{at}[{i}]"), out);
+                schema_errors(x, items, root, &format!("{at}[{i}]"), out);
             }
         }
     }
 
+    fn type_fits(
+        v: &serde_json::Value,
+        schema: &serde_json::Value,
+        root: &serde_json::Value,
+    ) -> bool {
+        if let Some(r) = schema["$ref"].as_str() {
+            return type_fits(v, &root["$defs"][r.trim_start_matches("#/$defs/")], root);
+        }
+        let name = match v {
+            serde_json::Value::Object(_) => "object",
+            serde_json::Value::Array(_) => "array",
+            serde_json::Value::String(_) => "string",
+            serde_json::Value::Bool(_) => "boolean",
+            serde_json::Value::Number(_) => "integer",
+            serde_json::Value::Null => "null",
+        };
+        match &schema["type"] {
+            serde_json::Value::String(t) => t == name || (t == "number" && name == "integer"),
+            serde_json::Value::Array(ts) => ts.iter().any(|t| t == name),
+            _ => true,
+        }
+    }
+
     #[test]
-    fn every_key_is_always_present() {
-        let schema = schema();
+    fn reports_follow_their_schema_and_leave_out_empty_keys() {
+        let schema = output_schema::<crate::output::Scan>();
         for input in [
             crate::test_inputs::SAMPLE_TEMPLATE,
             include_str!("../tests/fixtures/tf-plan.json"),
             crate::test_inputs::CUSTOM_RESOURCES_TEMPLATE,
         ] {
             let v: serde_json::Value = serde_json::from_str(&fixed_report(input)).unwrap();
-            let mut missing = Vec::new();
-            missing_keys(&v, &schema, &schema, "", &mut missing);
-            assert!(missing.is_empty(), "{missing:?}");
+            let mut errors = Vec::new();
+            schema_errors(&v, &schema, &schema, "", &mut errors);
+            assert!(errors.is_empty(), "{errors:?}");
         }
     }
 
@@ -1969,7 +2137,7 @@ pub(crate) mod tests {
         );
         assert_eq!(
             r.warnings.iter().map(|w| w.code).collect::<Vec<_>>(),
-            [WarningCode::KnowledgeRegionUnlisted]
+            [WarningCode::PublicDataRegionUnlisted]
         );
         let text = text_summary(&r, Style::default());
         let sources = text.lines().nth(1).unwrap_or_default();
@@ -2372,7 +2540,7 @@ pub(crate) mod tests {
                 .collect::<Vec<_>>()
         };
         assert_eq!(by(CauseType::Deviation), [DecidedBy::Guide]);
-        assert_eq!(by(CauseType::Availability), [DecidedBy::Knowledge]);
+        assert_eq!(by(CauseType::Availability), [DecidedBy::Public]);
         assert!(
             by(CauseType::Hazard)
                 .iter()
@@ -2387,6 +2555,6 @@ pub(crate) mod tests {
 
     #[test]
     fn committed_schema_matches_the_report_types() {
-        assert_committed_schema::<Report>("report.schema.json");
+        assert_committed_schema::<crate::output::Scan>("report.schema.json");
     }
 }

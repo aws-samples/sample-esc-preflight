@@ -205,11 +205,16 @@ fn has_read_only(caller: &Caller, arn: &str) -> bool {
 }
 
 /// The values the region offers for one depth kind, or `None` when the probe failed.
+/// Answers at most the kinds `depth::live_probes` names, which the values-unchecked
+/// warning relies on.
 fn depth_probe(
     caller: &Caller,
     kind: DepthKind,
     checks: &BTreeMap<String, Vec<DepthCheck>>,
 ) -> Option<BTreeSet<String>> {
+    if !depth::live_probes(kind) {
+        return None;
+    }
     let ec2 = service("ec2");
     let set = |v: Result<Vec<String>>| v.ok().map(|v| v.into_iter().collect());
     match kind {
@@ -260,13 +265,13 @@ fn depth_probe(
             "Marker",
             &depth::engines(checks, kind),
         ),
-        // Covered by the Knowledge MCP data only.
+        // Not probed, see `depth::live_probes`.
         DepthKind::CacheNodeType
         | DepthKind::NeptuneEngineVersion
         | DepthKind::DocumentDbEngineVersion
-        | DepthKind::RedshiftNodeType => None,
-        // Read from the resource schemas, not probed.
-        DepthKind::Property => None,
+        | DepthKind::RedshiftNodeType
+        | DepthKind::Property
+        | DepthKind::LambdaArchitecture => None,
     }
 }
 

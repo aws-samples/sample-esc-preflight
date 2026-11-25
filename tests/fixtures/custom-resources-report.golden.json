@@ -1,26 +1,22 @@
 {
-  "schema_version": 1,
-  "data_provenance": {
+  "schema_version": 2,
+  "run": {
     "tool_version": "test",
-    "source_format": "cloudformation",
-    "target_region": "eusc-de-east-1",
-    "target_account": null,
-    "input_environments": [],
-    "partitions_version": "test",
-    "knowledge": {
-      "url": "https://knowledge-mcp.global.api.aws",
-      "cloudformation_url": "https://prod.capabilities.builder.aws.com",
-      "products_url": "https://prod.capabilities.builder.aws.com",
-      "unknown": []
-    },
-    "user_guide": {
-      "toc_url": "",
-      "stale_rules": []
-    },
+    "mode": "public",
+    "input_kind": "cloudformation",
+    "target_region": "eusc-de-east-1"
+  },
+  "sources": {
     "fetched_at": "1970-01-01T00:00:00Z",
-    "terraform": null,
-    "live": null,
-    "schemas": null
+    "public": {
+      "services_url": "https://knowledge-mcp.global.api.aws",
+      "types_urls": [
+        "https://prod.capabilities.builder.aws.com"
+      ],
+      "products_url": "https://prod.capabilities.builder.aws.com"
+    },
+    "user_guide_url": "",
+    "partition_data": "test"
   },
   "summary": {
     "resources": 3,
@@ -30,11 +26,13 @@
     "cannot_assess": 1,
     "planned": 1,
     "hazards": 0,
-    "environment_literals": 0,
+    "hazards_breaking": 0,
+    "hazards_portability": 0,
+    "environment_literal_places": 0,
     "divergences": 0,
     "depth_blockers": 0,
     "account_blockers": 0,
-    "deviations": 0,
+    "deviation_blockers": 0,
     "guide_conflicts": 0,
     "caveats": 0,
     "dependencies": 0,
@@ -50,56 +48,33 @@
   "findings": [
     {
       "logical_id": "CreateInvalidation",
-      "cdk_path": null,
       "resource_type": "Custom::AWS",
       "service": "cloudfront",
       "verdict": "disputed",
       "evidence": {
-        "knowledge": "available",
-        "live": null,
-        "live_check": null
+        "public": "available"
       },
       "roadmap": {
         "product": "Amazon CloudFront",
         "status": "planned",
         "launch": "2026 Q4"
       },
-      "note": "The public availability data lists CloudFront CreateInvalidation, but Amazon CloudFront is planned for 2026 Q4 in the target region. Check that the feature works before relying on it.",
-      "decided_by": "knowledge",
-      "depth": []
-    },
-    {
-      "logical_id": "DescribeClient",
-      "cdk_path": null,
-      "resource_type": "Custom::DescribeUserPoolClient",
-      "service": "cognito-idp",
-      "verdict": "available",
-      "evidence": {
-        "knowledge": "available",
-        "live": null,
-        "live_check": null
-      },
-      "roadmap": null,
-      "note": null,
-      "decided_by": "knowledge",
-      "depth": []
+      "note": "The public availability data lists CloudFront CreateInvalidation, but Amazon CloudFront is planned for the target region in 2026 Q4. Check that the feature works before relying on it.",
+      "decided_by": "public"
     },
     {
       "logical_id": "PortalRegistration",
-      "cdk_path": null,
       "resource_type": "Custom::PortalRegistration",
-      "service": null,
       "verdict": "cannot-assess",
-      "evidence": null,
-      "roadmap": null,
       "note": "Custom resource backed by its own code; the calls it makes cannot be read from the template. Its backing function is assessed separately.",
-      "decided_by": "scanner",
-      "depth": []
+      "decided_by": "scanner"
     }
   ],
-  "hazards": [],
-  "deviations": [],
-  "dependencies": [],
+  "available": {
+    "Custom::DescribeUserPoolClient": [
+      "DescribeClient"
+    ]
+  },
   "documented_differences": [
     {
       "page": "cognito",
@@ -112,11 +87,5 @@
         "Multi-Region secrets are not available."
       ]
     }
-  ],
-  "environment_literals": [],
-  "zones": null,
-  "required_changes": [],
-  "out_of_scope": [],
-  "account": null,
-  "warnings": []
+  ]
 }

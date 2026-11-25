@@ -1,81 +1,5 @@
 {
   "$defs": {
-    "CompareProvenance": {
-      "properties": {
-        "china_bundle_urls": {
-          "description": "The schema bundles that gave China Regions their resource types.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "cloudformation_url": {
-          "description": "Where the CloudFormation types and config values of Regions outside China came\nfrom: the Builder Center capabilities API, or the Knowledge MCP server when the\nAPI failed. Null when both Regions are in China.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "fetched_at": {
-          "description": "When the public data was fetched.",
-          "type": "string"
-        },
-        "from_schemas": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/SchemaProvenance"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "The schemas read for each Region; both null when properties are not compared."
-        },
-        "knowledge_url": {
-          "description": "The AWS Knowledge MCP server, for Regions outside China.",
-          "type": "string"
-        },
-        "live_account_id": {
-          "description": "The account `to` was read from, when a profile was given.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "products_url": {
-          "description": "Where product states of Regions outside China came from; null when both are\nin China.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "to_schemas": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/SchemaProvenance"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "tool_version": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "china_bundle_urls",
-        "cloudformation_url",
-        "fetched_at",
-        "from_schemas",
-        "knowledge_url",
-        "live_account_id",
-        "products_url",
-        "to_schemas",
-        "tool_version"
-      ],
-      "type": "object"
-    },
     "CompareSummary": {
       "properties": {
         "config_values": {
@@ -93,11 +17,6 @@
           "minimum": 0,
           "type": "integer"
         },
-        "required": [
-          "format",
-          "minimum",
-          "type"
-        ],
         "resource_types": {
           "format": "uint",
           "minimum": 0,
@@ -105,54 +24,131 @@
         }
       },
       "required": [
-        "config_values",
         "products",
-        "properties",
-        "resource_types"
-      ],
-      "type": "object"
-    },
-    "CompareWarning": {
-      "properties": {
-        "code": {
-          "$ref": "#/$defs/CompareWarningCode"
-        },
-        "message": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "code",
-        "message"
+        "resource_types",
+        "config_values",
+        "properties"
       ],
       "type": "object"
     },
     "CompareWarningCode": {
       "oneOf": [
         {
-          "const": "to-unlisted",
-          "description": "The Knowledge MCP server has no data for `to`: products and config values are\nnot compared.",
+          "const": "public-data-region-unlisted",
+          "description": "No public availability data covers the target: products and config values are\nnot compared.",
           "type": "string"
         },
         {
-          "const": "products-uncompared",
+          "const": "products-unchecked",
           "description": "A Region publishes no product or config value data (China): products and config\nvalues are not compared.",
           "type": "string"
         },
         {
-          "const": "properties-uncompared",
+          "const": "properties-unchecked",
           "description": "A Region without a schema bundle, and no live mode for it: properties are not\ncompared.",
           "type": "string"
         }
       ]
     },
-    "ConfigGap": {
+    "ComparedSchemas": {
       "properties": {
-        "key": {
-          "description": "The parent key, such as `AWS::EC2::Instance::InstanceType`.",
+        "from": {
+          "$ref": "#/$defs/SchemaRef"
+        },
+        "to": {
+          "$ref": "#/$defs/SchemaRef"
+        },
+        "types": {
+          "description": "Types whose schema both Regions gave.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "types",
+        "from",
+        "to"
+      ],
+      "type": "object"
+    },
+    "ConfigOut": {
+      "properties": {
+        "missing": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "property": {
           "type": "string"
         },
-        "missing": {
+        "resource_type": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "resource_type",
+        "property"
+      ],
+      "type": "object"
+    },
+    "DepthKind": {
+      "oneOf": [
+        {
+          "enum": [
+            "instance-type",
+            "availability-zone",
+            "foundation-model",
+            "inference-profile",
+            "rds-engine-version",
+            "cache-engine-version",
+            "cache-node-type",
+            "neptune-engine-version",
+            "document-db-engine-version",
+            "redshift-node-type"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "rds-instance-class",
+          "description": "`engine class`: an RDS DB instance class orderable for the engine; live mode.",
+          "type": "string"
+        },
+        {
+          "const": "property",
+          "description": "A top-level resource property the target's CloudFormation schema lacks.",
+          "type": "string"
+        },
+        {
+          "const": "lambda-architecture",
+          "description": "`arm64` as a Lambda function's architecture: the public availability data's\nLambda feature \"Graviton (ARM) Support\" decides.",
+          "type": "string"
+        }
+      ]
+    },
+    "InputEnvironment": {
+      "properties": {
+        "account": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "literal_places": {
+          "description": "Property values written for this environment by synthesis or planning.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "region": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "zones_used": {
+          "description": "Distinct zones of the environment the input uses.",
           "items": {
             "type": "string"
           },
@@ -160,24 +156,87 @@
         }
       },
       "required": [
-        "key",
-        "missing"
+        "literal_places"
       ],
       "type": "object"
     },
-    "ProductGap": {
-      "properties": {
-        "name": {
+    "InputKind": {
+      "description": "What produced the input; decides which replacement expression applies.",
+      "oneOf": [
+        {
+          "enum": [
+            "cloudformation",
+            "terraform-plan"
+          ],
           "type": "string"
         },
-        "to_launch": {
-          "description": "Quarter of a planned launch in `to`.",
+        {
+          "const": "cdk-assembly",
+          "description": "A CDK cloud assembly, or a template CDK synthesized: edits go to the CDK source.",
+          "type": "string"
+        },
+        {
+          "const": "sam",
+          "description": "An AWS SAM template.",
+          "type": "string"
+        }
+      ]
+    },
+    "LiveSources": {
+      "properties": {
+        "account_id": {
+          "type": "string"
+        },
+        "depth_probes": {
+          "items": {
+            "$ref": "#/$defs/DepthKind"
+          },
+          "type": "array"
+        },
+        "fetched_at": {
+          "description": "When the account was read. Scan and plan.",
           "type": [
             "string",
             "null"
           ]
         },
-        "to_state": {
+        "read_only_access": {
+          "description": "The caller's role has ReadOnlyAccess (or AdministratorAccess) attached, so an\nAccessDenied from a service means the service is not offered.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "account_id"
+      ],
+      "type": "object"
+    },
+    "Mode": {
+      "description": "Live mode read the target account; public mode used public data only.",
+      "enum": [
+        "public",
+        "live"
+      ],
+      "type": "string"
+    },
+    "ProductGroup": {
+      "properties": {
+        "launch": {
+          "description": "Quarter of a planned launch in the target.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "names": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "state": {
           "anyOf": [
             {
               "$ref": "#/$defs/State"
@@ -186,14 +245,9 @@
               "type": "null"
             }
           ],
-          "description": "The state in `to`; null when the server does not list the product there."
+          "description": "The state in the target; null when the target does not list the products."
         }
       },
-      "required": [
-        "name",
-        "to_launch",
-        "to_state"
-      ],
       "type": "object"
     },
     "PropertyGap": {
@@ -209,12 +263,128 @@
         }
       },
       "required": [
-        "missing",
-        "resource_type"
+        "resource_type",
+        "missing"
       ],
       "type": "object"
     },
-    "SchemaProvenance": {
+    "PublicSources": {
+      "properties": {
+        "products_url": {
+          "description": "Where product and roadmap states came from: the capabilities API, with the\nKnowledge MCP server for the not-expanding state. Null for China, which\npublishes none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "services_url": {
+          "description": "Where services and APIs came from: the AWS Knowledge MCP server, or the AWS SDK\nendpoint data for China.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "types_urls": {
+          "description": "Where the CloudFormation types and config values came from: the Builder Center\ncapabilities API, the Knowledge MCP server when the API failed, or a China\nRegion's schema bundle.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "Run": {
+      "description": "What ran, on what, against what.",
+      "properties": {
+        "crosses_partition": {
+          "description": "The move goes to another partition. Plan; null when the source is unknown.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "input_environments": {
+          "description": "Where the input was synthesized (CDK) or planned (Terraform). Scan.",
+          "items": {
+            "$ref": "#/$defs/InputEnvironment"
+          },
+          "type": "array"
+        },
+        "input_kind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InputKind"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What produced the input; picks the `replace` expression. Scan and plan."
+        },
+        "mode": {
+          "$ref": "#/$defs/Mode"
+        },
+        "source_region": {
+          "description": "The Region the workload runs in today. Plan and compare; for plan, null when\nneither the input nor `--from` names one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "target_account": {
+          "description": "The account the input moves to, when `--account` is given.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "target_region": {
+          "type": "string"
+        },
+        "tool_version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "tool_version",
+        "mode",
+        "target_region"
+      ],
+      "type": "object"
+    },
+    "SchemaRef": {
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/SchemaSource"
+        },
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "type": "object"
+    },
+    "SchemaSource": {
+      "oneOf": [
+        {
+          "const": "bundle",
+          "description": "The Region's public schema bundle.",
+          "type": "string"
+        },
+        {
+          "const": "live",
+          "description": "`cloudformation:DescribeType` in the target account.",
+          "type": "string"
+        }
+      ]
+    },
+    "SchemaSources": {
       "properties": {
         "source": {
           "$ref": "#/$defs/SchemaSource"
@@ -235,24 +405,89 @@
       },
       "required": [
         "source",
-        "types",
-        "url"
+        "types"
       ],
       "type": "object"
     },
-    "SchemaSource": {
-      "oneOf": [
-        {
-          "const": "bundle",
-          "description": "The Region's public schema bundle.",
+    "Sources": {
+      "description": "Where the data came from, and when.",
+      "properties": {
+        "compared_schemas": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ComparedSchemas"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The schemas whose properties were compared. Compare; null when properties were\nnot compared."
+        },
+        "fetched_at": {
+          "description": "When the public data was fetched; `live.fetched_at` is when the account was read.",
           "type": "string"
         },
-        {
-          "const": "live",
-          "description": "`cloudformation:DescribeType` in the target account.",
-          "type": "string"
+        "live": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LiveSources"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "partition_data": {
+          "description": "botocore release of the bundled partition data. Scan and plan.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "public": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PublicSources"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The public availability data; null when none covers the target, so live mode\ndecides alone."
+        },
+        "schemas": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SchemaSources"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The target's CloudFormation resource schemas the property checks read. Scan and\nplan; null when none were read."
+        },
+        "terraform": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TerraformProvenance"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "user_guide_url": {
+          "description": "The ESC User Guide's table of contents, when the target is in its partition.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
-      ]
+      },
+      "required": [
+        "fetched_at"
+      ],
+      "type": "object"
     },
     "State": {
       "enum": [
@@ -264,19 +499,31 @@
       ],
       "type": "string"
     },
-    "TypeGap": {
+    "TerraformProvenance": {
+      "properties": {
+        "aws_provider_version": {
+          "type": "string"
+        },
+        "awscc_provider_version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "aws_provider_version",
+        "awscc_provider_version"
+      ],
+      "type": "object"
+    },
+    "TypeGroup": {
       "properties": {
         "product": {
-          "description": "The product the type belongs to, as `from` lists it.",
+          "description": "The product the types belong to, as the source Region lists it; null for types\nwithout a known product.",
           "type": [
             "string",
             "null"
           ]
         },
-        "resource_type": {
-          "type": "string"
-        },
-        "to_state": {
+        "state": {
           "anyOf": [
             {
               "$ref": "#/$defs/State"
@@ -285,13 +532,36 @@
               "type": "null"
             }
           ],
-          "description": "The product's state in `to`; null when no product is known or `to` does not\nlist it."
+          "description": "The product's state in the target; null when no product is known or the target\ndoes not list it. `available` means the service is there and CloudFormation\nlacks the types."
+        },
+        "types": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "Warning": {
+      "description": "A run-level condition. `code` is stable and `message` is prose for people;\n`items` names what the condition is about (types, values, rule ids, Regions).",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/CompareWarningCode"
+        },
+        "items": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "message": {
+          "type": "string"
         }
       },
       "required": [
-        "product",
-        "resource_type",
-        "to_state"
+        "code",
+        "message"
       ],
       "type": "object"
     }
@@ -299,75 +569,61 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
     "config_values": {
-      "description": "Config values, such as instance types, `from` offers and `to` does not.",
+      "description": "Config values, such as instance types, the source offers and the target does\nnot.",
       "items": {
-        "$ref": "#/$defs/ConfigGap"
+        "$ref": "#/$defs/ConfigOut"
       },
       "type": "array"
     },
-    "data_provenance": {
-      "$ref": "#/$defs/CompareProvenance"
-    },
-    "from": {
-      "type": "string"
-    },
     "products": {
-      "description": "Products and features available in `from` and not in `to`.",
+      "description": "Products and features available in the source Region and not in the target,\nby their state there.",
       "items": {
-        "$ref": "#/$defs/ProductGap"
+        "$ref": "#/$defs/ProductGroup"
       },
       "type": "array"
     },
     "properties": {
-      "description": "Top-level properties of types both offer that `to`'s schema lacks.",
+      "description": "Top-level properties of types both offer that the target's schema lacks.",
       "items": {
         "$ref": "#/$defs/PropertyGap"
       },
       "type": "array"
     },
-    "required": [
-      "description",
-      "items",
-      "type"
-    ],
     "resource_types": {
-      "description": "CloudFormation resource types available in `from` and not in `to`.",
+      "description": "CloudFormation resource types available in the source Region and not in the\ntarget, by product.",
       "items": {
-        "$ref": "#/$defs/TypeGap"
+        "$ref": "#/$defs/TypeGroup"
       },
       "type": "array"
     },
+    "run": {
+      "$ref": "#/$defs/Run"
+    },
     "schema_version": {
-      "const": 1,
+      "const": 2,
       "format": "uint32",
       "minimum": 0,
       "type": "integer"
     },
+    "sources": {
+      "$ref": "#/$defs/Sources"
+    },
     "summary": {
       "$ref": "#/$defs/CompareSummary"
     },
-    "to": {
-      "type": "string"
-    },
     "warnings": {
       "items": {
-        "$ref": "#/$defs/CompareWarning"
+        "$ref": "#/$defs/Warning"
       },
       "type": "array"
     }
   },
   "required": [
-    "config_values",
-    "data_provenance",
-    "from",
-    "products",
-    "properties",
-    "resource_types",
     "schema_version",
-    "summary",
-    "to",
-    "warnings"
+    "run",
+    "sources",
+    "summary"
   ],
-  "title": "Comparison",
+  "title": "CompareOut",
   "type": "object"
 }

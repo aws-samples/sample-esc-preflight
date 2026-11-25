@@ -11,10 +11,10 @@ use crate::depth::DepthSource;
 use crate::error::{Result, ScanError};
 use crate::model::{SourceFormat, Template};
 use crate::provider::{self, aws_call, china, http, knowledge, live, partition, schema, terraform};
-use crate::remediation;
 use crate::report::{self, KnowledgeProvenance, Provenance, Report, TerraformProvenance};
 use crate::type_mapper::{Check, Mapping, TypeMapper};
 use crate::{depth, deviation, extractor, matcher, reader};
+use crate::{output, remediation};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -96,6 +96,9 @@ struct CompareArgs {
     /// Per-request timeout in seconds.
     #[arg(long, default_value_t = 60)]
     timeout: u64,
+    /// Indent the JSON report for reading; it is compact by default.
+    #[arg(long)]
+    pretty: bool,
     /// Do not print the summary to stderr.
     #[arg(long, short)]
     quiet: bool,
@@ -137,9 +140,13 @@ struct ScanArgs {
     /// redirected or piped.
     #[arg(long)]
     out: Option<PathBuf>,
-    /// Report every resource, not only those that need action or verification.
+    /// Report every resource, not only those that need action or verification, and
+    /// every difference the ESC User Guide documents for the services in the input.
     #[arg(long)]
     all: bool,
+    /// Indent the JSON report for reading; it is compact by default.
+    #[arg(long)]
+    pretty: bool,
     /// Exit 2 when a finding of this kind exists.
     #[arg(long, value_enum)]
     fail_on: Option<FailOn>,
@@ -211,7 +218,10 @@ fn run_scan(args: &ScanArgs) -> Result<i32> {
     if !args.all {
         report::gaps_only(&mut report);
     }
-    write_json(args.out.as_deref(), &report::to_json(&report))?;
+    write_json(
+        args.out.as_deref(),
+        &output::to_json(&output::scan(&report), args.pretty),
+    )?;
     if !args.quiet {
         let unicode = std::io::stderr().is_terminal();
         let style = report::Style {
@@ -312,7 +322,7 @@ fn assess(args: &ScanArgs) -> Result<(Report, Template, extractor::PartitionFact
     let (data, bundle) = (data?, bundle?);
     let fetched_at = report::now_utc();
     let mut offered = depth::public_offered(&data.knowledge);
-    depth::resolve(&mut depth, &offered, DepthSource::Knowledge);
+    depth::resolve(&mut depth, &offered, DepthSource::Public);
     let scan = extractor::hazards(&template, &data.partition);
     let (live, live_prov, account, mut schemas, schema_denied) = if live_mode {
         let needs = live::Needs {
@@ -377,6 +387,7 @@ fn assess(args: &ScanArgs) -> Result<(Report, Template, extractor::PartitionFact
     let provenance = Provenance {
         tool_version: env!("CARGO_PKG_VERSION").into(),
         source_format: template.format,
+        input_kind: template.kind(),
         target_region: region.clone(),
         target_account: args.account.clone(),
         input_environments: template.envs(),
@@ -548,7 +559,10 @@ fn run_plan(args: &PlanArgs) -> Result<i32> {
     check_plan_args(args)?;
     let (report, template, facts) = assess(&args.scan)?;
     let p = crate::plan::build(&report, &template, &facts, args.from.as_deref());
-    write_json(args.scan.out.as_deref(), &report::to_json(&p))?;
+    write_json(
+        args.scan.out.as_deref(),
+        &output::to_json(&output::plan(&p, &report), args.scan.pretty),
+    )?;
     if !args.scan.quiet {
         eprint!("{}", crate::plan::text_summary(&p));
     }
@@ -557,7 +571,10 @@ fn run_plan(args: &PlanArgs) -> Result<i32> {
 
 fn run_compare(args: &CompareArgs) -> Result<i32> {
     let c = compare(args)?;
-    write_json(args.out.as_deref(), &report::to_json(&c))?;
+    write_json(
+        args.out.as_deref(),
+        &output::to_json(&output::compare(&c), args.pretty),
+    )?;
     if !args.quiet {
         eprint!("{}", crate::compare::text_summary(&c));
     }
@@ -741,7 +758,6 @@ fn compare(args: &CompareArgs) -> Result<crate::compare::Comparison> {
         &args.to,
         CompareProvenance {
             tool_version: env!("CARGO_PKG_VERSION").into(),
-            knowledge_url: knowledge::URL.into(),
             cloudformation_url: cfn_url,
             products_url,
             china_bundle_urls: [&from_china, &to_china]
@@ -752,6 +768,9 @@ fn compare(args: &CompareArgs) -> Result<crate::compare::Comparison> {
             fetched_at,
             live_account_id,
             from_schemas: from_prov,
+            compared_types: schemas.as_ref().map_or(0, |(a, _, b)| {
+                a.keys().filter(|t| b.contains_key(*t)).count()
+            }),
             to_schemas: schemas.map(|(_, p, _)| p),
         },
         diff,

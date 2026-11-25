@@ -22,6 +22,7 @@ pub fn read_assembly(dir: &Path) -> Result<Template> {
         t: Template::default(),
     };
     walk.assembly(dir, 0)?;
+    walk.t.assembly = true;
     if walk.t.resources.is_empty() {
         return Err(ScanError::Input(format!(
             "{}: the cloud assembly contains no stack resources",

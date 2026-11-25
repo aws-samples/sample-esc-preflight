@@ -1,0 +1,142 @@
+{
+  "schema_version": 2,
+  "run": {
+    "tool_version": "test",
+    "mode": "public",
+    "input_kind": "cloudformation",
+    "source_region": "eu-central-1",
+    "target_region": "eusc-de-east-1",
+    "crosses_partition": true
+  },
+  "sources": {
+    "fetched_at": "1970-01-01T00:00:00Z",
+    "public": {
+      "services_url": "https://knowledge-mcp.global.api.aws",
+      "types_urls": [
+        "https://prod.capabilities.builder.aws.com"
+      ],
+      "products_url": "https://prod.capabilities.builder.aws.com"
+    },
+    "user_guide_url": "",
+    "partition_data": "test"
+  },
+  "summary": {
+    "resources": 9,
+    "waves": 3,
+    "redeploy": 4,
+    "replicate": 0,
+    "restore": 0,
+    "blocked": 1,
+    "unknown": 4,
+    "data_to_move": 0
+  },
+  "mechanisms": {
+    "move-bucket": {
+      "via": "S3 Replication, with S3 Batch Replication for existing objects",
+      "scope": "regional",
+      "holds": "data",
+      "doc": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/replication.html"
+    },
+    "move-function-code": {
+      "via": "redeploy the input; its deployment package or image must be in the target",
+      "scope": "regional",
+      "holds": "code",
+      "works_across_partitions": true,
+      "doc": "https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/best-practices.html"
+    },
+    "move-identity": {
+      "via": "redeploy the input in the target",
+      "scope": "global",
+      "holds": "configuration",
+      "works_across_partitions": true,
+      "doc": "https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/best-practices.html"
+    },
+    "move-workload-configuration": {
+      "via": "redeploy the input in the target",
+      "scope": "regional",
+      "holds": "configuration",
+      "works_across_partitions": true,
+      "doc": "https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/best-practices.html"
+    },
+    "move-zonal-network": {
+      "via": "redeploy the input in the target",
+      "scope": "zonal",
+      "holds": "configuration",
+      "works_across_partitions": true,
+      "doc": "https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/best-practices.html"
+    }
+  },
+  "resources": [
+    {
+      "logical_id": "FnRole",
+      "resource_type": "AWS::IAM::Role",
+      "path": "redeploy",
+      "rule": "move-identity",
+      "layer": "foundation",
+      "wave": 1
+    },
+    {
+      "logical_id": "Subnet",
+      "resource_type": "AWS::EC2::Subnet",
+      "path": "redeploy",
+      "rule": "move-zonal-network",
+      "layer": "foundation",
+      "wave": 1
+    },
+    {
+      "logical_id": "Bucket",
+      "resource_type": "AWS::S3::Bucket",
+      "path": "unknown",
+      "rule": "move-bucket",
+      "layer": "shared",
+      "wave": 2,
+      "note": "The move crosses partitions, and S3 Replication, with S3 Batch Replication for existing objects is not documented to work there; choose another way to move the content."
+    },
+    {
+      "logical_id": "Assistant",
+      "resource_type": "AWS::QBusiness::Application",
+      "path": "blocked",
+      "blocked_by": [
+        "availability"
+      ],
+      "note": "No mechanism rule covers this resource type."
+    },
+    {
+      "logical_id": "AutoDelete",
+      "resource_type": "Custom::S3AutoDeleteObjects",
+      "path": "unknown",
+      "wave": 3,
+      "note": "No mechanism rule covers this resource type."
+    },
+    {
+      "logical_id": "Build",
+      "resource_type": "AWS::CodeBuild::Project",
+      "path": "redeploy",
+      "rule": "move-workload-configuration",
+      "layer": "workload",
+      "wave": 3
+    },
+    {
+      "logical_id": "CDKMetadata",
+      "resource_type": "AWS::CDK::Metadata",
+      "path": "unknown",
+      "wave": 3,
+      "note": "No mechanism rule covers this resource type."
+    },
+    {
+      "logical_id": "Cdn",
+      "resource_type": "AWS::CloudFront::Distribution",
+      "path": "unknown",
+      "wave": 3,
+      "note": "No mechanism rule covers this resource type."
+    },
+    {
+      "logical_id": "Fn",
+      "resource_type": "AWS::Lambda::Function",
+      "path": "redeploy",
+      "rule": "move-function-code",
+      "layer": "workload",
+      "wave": 3
+    }
+  ]
+}

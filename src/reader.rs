@@ -253,6 +253,7 @@ fn from_value(doc: &Value, env: Option<DeployEnv>) -> Result<Template> {
     let mut template = Template {
         macros: macros(doc.get("Transform")),
         ssm_defaults: ssm_defaults(doc.get("Parameters")),
+        sam,
         ..Template::default()
     };
     for (id, body) in flat {

@@ -13,6 +13,19 @@ pub enum SourceFormat {
     TerraformPlan,
 }
 
+/// What produced the input; decides which replacement expression applies.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, schemars::JsonSchema)]
+#[serde(rename_all = "kebab-case")]
+pub enum InputKind {
+    /// A CDK cloud assembly, or a template CDK synthesized: edits go to the CDK source.
+    CdkAssembly,
+    #[default]
+    Cloudformation,
+    /// An AWS SAM template.
+    Sam,
+    TerraformPlan,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Origin {
     Cfn,
@@ -76,7 +89,7 @@ pub struct OutOfScope {
 pub enum DecidedBy {
     /// The public availability data: the Builder Center capabilities API and the AWS
     /// Knowledge MCP server, or the AWS China sources.
-    Knowledge,
+    Public,
     /// A read-only call to the target account.
     Live,
     /// A difference on the ESC User Guide.
@@ -122,9 +135,23 @@ pub struct Template {
     /// CloudFormation export names to the output that exports them
     /// (`<stack>/Outputs/<name>` in a CDK assembly).
     pub exports: BTreeMap<String, String>,
+    /// Read from a CDK cloud assembly.
+    pub assembly: bool,
+    /// The template declares the AWS SAM transform.
+    pub sam: bool,
 }
 
 impl Template {
+    pub fn kind(&self) -> InputKind {
+        let cdk = self.assembly || self.resources.values().any(|r| r.cdk_path.is_some());
+        match self.format {
+            SourceFormat::TerraformPlan => InputKind::TerraformPlan,
+            SourceFormat::Cloudformation if cdk => InputKind::CdkAssembly,
+            SourceFormat::Cloudformation if self.sam => InputKind::Sam,
+            SourceFormat::Cloudformation => InputKind::Cloudformation,
+        }
+    }
+
     /// The distinct environments the input was produced for.
     pub fn envs(&self) -> Vec<DeployEnv> {
         let set: std::collections::BTreeSet<_> = self

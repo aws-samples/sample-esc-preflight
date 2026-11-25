@@ -8,6 +8,28 @@
       ],
       "type": "string"
     },
+    "ComparedSchemas": {
+      "properties": {
+        "from": {
+          "$ref": "#/$defs/SchemaRef"
+        },
+        "to": {
+          "$ref": "#/$defs/SchemaRef"
+        },
+        "types": {
+          "description": "Types whose schema both Regions gave.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "types",
+        "from",
+        "to"
+      ],
+      "type": "object"
+    },
     "Content": {
       "oneOf": [
         {
@@ -49,11 +71,199 @@
         }
       ]
     },
+    "DepthKind": {
+      "oneOf": [
+        {
+          "enum": [
+            "instance-type",
+            "availability-zone",
+            "foundation-model",
+            "inference-profile",
+            "rds-engine-version",
+            "cache-engine-version",
+            "cache-node-type",
+            "neptune-engine-version",
+            "document-db-engine-version",
+            "redshift-node-type"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "rds-instance-class",
+          "description": "`engine class`: an RDS DB instance class orderable for the engine; live mode.",
+          "type": "string"
+        },
+        {
+          "const": "property",
+          "description": "A top-level resource property the target's CloudFormation schema lacks.",
+          "type": "string"
+        },
+        {
+          "const": "lambda-architecture",
+          "description": "`arm64` as a Lambda function's architecture: the public availability data's\nLambda feature \"Graviton (ARM) Support\" decides.",
+          "type": "string"
+        }
+      ]
+    },
+    "InputEnvironment": {
+      "properties": {
+        "account": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "literal_places": {
+          "description": "Property values written for this environment by synthesis or planning.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "region": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "zones_used": {
+          "description": "Distinct zones of the environment the input uses.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "literal_places"
+      ],
+      "type": "object"
+    },
+    "InputKind": {
+      "description": "What produced the input; decides which replacement expression applies.",
+      "oneOf": [
+        {
+          "enum": [
+            "cloudformation",
+            "terraform-plan"
+          ],
+          "type": "string"
+        },
+        {
+          "const": "cdk-assembly",
+          "description": "A CDK cloud assembly, or a template CDK synthesized: edits go to the CDK source.",
+          "type": "string"
+        },
+        {
+          "const": "sam",
+          "description": "An AWS SAM template.",
+          "type": "string"
+        }
+      ]
+    },
     "Layer": {
       "enum": [
         "foundation",
         "shared",
         "workload"
+      ],
+      "type": "string"
+    },
+    "LiveSources": {
+      "properties": {
+        "account_id": {
+          "type": "string"
+        },
+        "depth_probes": {
+          "items": {
+            "$ref": "#/$defs/DepthKind"
+          },
+          "type": "array"
+        },
+        "fetched_at": {
+          "description": "When the account was read. Scan and plan.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "read_only_access": {
+          "description": "The caller's role has ReadOnlyAccess (or AdministratorAccess) attached, so an\nAccessDenied from a service means the service is not offered.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "account_id"
+      ],
+      "type": "object"
+    },
+    "Mechanism": {
+      "description": "How a mechanism rule moves a resource, and the AWS page it rests on.",
+      "properties": {
+        "doc": {
+          "type": "string"
+        },
+        "fallback": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MechanismFallback"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The documented alternative for a move across partitions, where `via` does not\nwork or is not documented to work there; resources that take it say `fallback`."
+        },
+        "holds": {
+          "$ref": "#/$defs/Content",
+          "description": "What the resource holds: configuration, code, data or supplemental records."
+        },
+        "scope": {
+          "$ref": "#/$defs/Boundary",
+          "description": "Where the resource lives: global, regional or zonal."
+        },
+        "via": {
+          "description": "The named mechanism.",
+          "type": "string"
+        },
+        "works_across_partitions": {
+          "description": "Whether `via` works across partitions; absent where the documentation does not\nsay.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "via",
+        "scope",
+        "holds",
+        "doc"
+      ],
+      "type": "object"
+    },
+    "MechanismFallback": {
+      "properties": {
+        "doc": {
+          "type": "string"
+        },
+        "via": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "via",
+        "doc"
+      ],
+      "type": "object"
+    },
+    "Mode": {
+      "description": "Live mode read the target account; public mode used public data only.",
+      "enum": [
+        "public",
+        "live"
       ],
       "type": "string"
     },
@@ -86,7 +296,7 @@
         }
       ]
     },
-    "PlanEntry": {
+    "PlanResource": {
       "properties": {
         "blocked_by": {
           "description": "Scan findings that block the resource in the target, as cause ids.",
@@ -95,40 +305,13 @@
           },
           "type": "array"
         },
-        "boundary": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Boundary"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
         "cdk_path": {
           "type": [
             "string",
             "null"
           ]
         },
-        "content": {
-          "anyOf": [
-            {
-              "$ref": "#/$defs/Content"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "crosses_partition": {
-          "description": "Whether `via` works across partitions; null where the documentation does not say.",
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "data": {
+        "data_action": {
           "anyOf": [
             {
               "$ref": "#/$defs/DataDecision"
@@ -136,13 +319,12 @@
             {
               "type": "null"
             }
-          ]
+          ],
+          "description": "What happens to the resource's data: migrate, recreate, drain or leave."
         },
-        "doc": {
-          "type": [
-            "string",
-            "null"
-          ]
+        "fallback": {
+          "description": "The resource moves by the rule's `fallback`, not by its `via`.",
+          "type": "boolean"
         },
         "layer": {
           "anyOf": [
@@ -170,77 +352,26 @@
           "type": "string"
         },
         "rule": {
-          "description": "The mechanism rule, and the AWS page it rests on.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "via": {
-          "description": "The named mechanism.",
+          "description": "The mechanism rule, a key of `mechanisms`.",
           "type": [
             "string",
             "null"
           ]
         },
         "wave": {
-          "description": "1-based. A resource is in a later wave than everything it references, and\nfoundation, shared and workload resources start at waves 1, 2 and 3.",
+          "description": "1-based. A resource is in a later wave than everything it references, and\nfoundation, shared and workload resources start at waves 1, 2 and 3. Null for a\nblocked resource, which does not move.",
           "format": "uint",
           "minimum": 0,
-          "type": "integer"
+          "type": [
+            "integer",
+            "null"
+          ]
         }
       },
       "required": [
-        "blocked_by",
-        "boundary",
-        "cdk_path",
-        "content",
-        "crosses_partition",
-        "data",
-        "doc",
-        "layer",
         "logical_id",
-        "note",
-        "path",
         "resource_type",
-        "rule",
-        "via",
-        "wave"
-      ],
-      "type": "object"
-    },
-    "PlanProvenance": {
-      "properties": {
-        "crosses_partition": {
-          "description": "The move goes to another partition; null when the source is unknown.",
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "source_format": {
-          "$ref": "#/$defs/SourceFormat"
-        },
-        "source_region": {
-          "description": "The input's environment, else `--from`; null when neither names a Region.",
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "target_region": {
-          "type": "string"
-        },
-        "tool_version": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "crosses_partition",
-        "source_format",
-        "source_region",
-        "target_region",
-        "tool_version"
+        "path"
       ],
       "type": "object"
     },
@@ -290,29 +421,14 @@
         }
       },
       "required": [
-        "blocked",
-        "data_to_move",
+        "resources",
+        "waves",
         "redeploy",
         "replicate",
-        "resources",
         "restore",
+        "blocked",
         "unknown",
-        "waves"
-      ],
-      "type": "object"
-    },
-    "PlanWarning": {
-      "properties": {
-        "code": {
-          "$ref": "#/$defs/PlanWarningCode"
-        },
-        "message": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "code",
-        "message"
+        "data_to_move"
       ],
       "type": "object"
     },
@@ -350,48 +466,309 @@
         }
       ]
     },
-    "SourceFormat": {
-      "enum": [
-        "cloudformation",
-        "terraform-plan"
+    "PublicSources": {
+      "properties": {
+        "products_url": {
+          "description": "Where product and roadmap states came from: the capabilities API, with the\nKnowledge MCP server for the not-expanding state. Null for China, which\npublishes none.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "services_url": {
+          "description": "Where services and APIs came from: the AWS Knowledge MCP server, or the AWS SDK\nendpoint data for China.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "types_urls": {
+          "description": "Where the CloudFormation types and config values came from: the Builder Center\ncapabilities API, the Knowledge MCP server when the API failed, or a China\nRegion's schema bundle.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "Run": {
+      "description": "What ran, on what, against what.",
+      "properties": {
+        "crosses_partition": {
+          "description": "The move goes to another partition. Plan; null when the source is unknown.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "input_environments": {
+          "description": "Where the input was synthesized (CDK) or planned (Terraform). Scan.",
+          "items": {
+            "$ref": "#/$defs/InputEnvironment"
+          },
+          "type": "array"
+        },
+        "input_kind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InputKind"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "What produced the input; picks the `replace` expression. Scan and plan."
+        },
+        "mode": {
+          "$ref": "#/$defs/Mode"
+        },
+        "source_region": {
+          "description": "The Region the workload runs in today. Plan and compare; for plan, null when\nneither the input nor `--from` names one.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "target_account": {
+          "description": "The account the input moves to, when `--account` is given.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "target_region": {
+          "type": "string"
+        },
+        "tool_version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "tool_version",
+        "mode",
+        "target_region"
       ],
-      "type": "string"
+      "type": "object"
+    },
+    "SchemaRef": {
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/SchemaSource"
+        },
+        "url": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "type": "object"
+    },
+    "SchemaSource": {
+      "oneOf": [
+        {
+          "const": "bundle",
+          "description": "The Region's public schema bundle.",
+          "type": "string"
+        },
+        {
+          "const": "live",
+          "description": "`cloudformation:DescribeType` in the target account.",
+          "type": "string"
+        }
+      ]
+    },
+    "SchemaSources": {
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/SchemaSource"
+        },
+        "types": {
+          "description": "Resource types whose schema was read.",
+          "format": "uint",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "url": {
+          "description": "The bundle read, for `bundle`.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "source",
+        "types"
+      ],
+      "type": "object"
+    },
+    "Sources": {
+      "description": "Where the data came from, and when.",
+      "properties": {
+        "compared_schemas": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ComparedSchemas"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The schemas whose properties were compared. Compare; null when properties were\nnot compared."
+        },
+        "fetched_at": {
+          "description": "When the public data was fetched; `live.fetched_at` is when the account was read.",
+          "type": "string"
+        },
+        "live": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LiveSources"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "partition_data": {
+          "description": "botocore release of the bundled partition data. Scan and plan.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "public": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PublicSources"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The public availability data; null when none covers the target, so live mode\ndecides alone."
+        },
+        "schemas": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SchemaSources"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The target's CloudFormation resource schemas the property checks read. Scan and\nplan; null when none were read."
+        },
+        "terraform": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TerraformProvenance"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "user_guide_url": {
+          "description": "The ESC User Guide's table of contents, when the target is in its partition.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "fetched_at"
+      ],
+      "type": "object"
+    },
+    "TerraformProvenance": {
+      "properties": {
+        "aws_provider_version": {
+          "type": "string"
+        },
+        "awscc_provider_version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "aws_provider_version",
+        "awscc_provider_version"
+      ],
+      "type": "object"
+    },
+    "Warning": {
+      "description": "A run-level condition. `code` is stable and `message` is prose for people;\n`items` names what the condition is about (types, values, rule ids, Regions).",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/PlanWarningCode"
+        },
+        "items": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "type": "object"
     }
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
-    "data_provenance": {
-      "$ref": "#/$defs/PlanProvenance"
+    "mechanisms": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Mechanism"
+      },
+      "description": "The mechanism rules the resources use, by rule id.",
+      "type": "object"
     },
     "resources": {
       "items": {
-        "$ref": "#/$defs/PlanEntry"
+        "$ref": "#/$defs/PlanResource"
       },
       "type": "array"
     },
+    "run": {
+      "$ref": "#/$defs/Run"
+    },
     "schema_version": {
-      "const": 1,
+      "const": 2,
       "format": "uint32",
       "minimum": 0,
       "type": "integer"
+    },
+    "sources": {
+      "$ref": "#/$defs/Sources",
+      "description": "The sources of the scan the plan ran: `blocked` depends on them."
     },
     "summary": {
       "$ref": "#/$defs/PlanSummary"
     },
     "warnings": {
       "items": {
-        "$ref": "#/$defs/PlanWarning"
+        "$ref": "#/$defs/Warning"
       },
       "type": "array"
     }
   },
   "required": [
-    "data_provenance",
-    "resources",
     "schema_version",
-    "summary",
-    "warnings"
+    "run",
+    "sources",
+    "summary"
   ],
-  "title": "Plan",
+  "title": "PlanOut",
   "type": "object"
 }

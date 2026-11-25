@@ -16,12 +16,17 @@ use crate::services::service;
 #[derive(Debug, Clone, Default, PartialEq, Serialize, schemars::JsonSchema)]
 pub struct AccountChecks {
     /// `opt-in-not-required`, `opted-in` or `not-opted-in`, as EC2 reports it.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub region_opt_in: Option<String>,
     /// One entry per quota the input counts against.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub quotas: Vec<QuotaCheck>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub scp: Option<ScpCheck>,
     /// AWS public SSM parameters the input resolves.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub ssm_parameters: Vec<SsmParameterCheck>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub skipped: Vec<Skipped>,
 }
 
@@ -55,6 +60,7 @@ pub struct QuotaCheck {
     /// What the input alone needs.
     pub needed: u64,
     /// What the account already uses in the target; null when it could not be read.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub used: Option<u64>,
     /// Values the input sets with a reference or function, so they are not counted.
     /// Negative values (Terraform's `-1`, no reservation) count as zero.
@@ -77,10 +83,12 @@ pub enum QuotaSource {
 pub struct ScpCheck {
     pub status: ScpStatus,
     /// Service control policies that apply to the account, through its OUs and root.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub policies: Vec<ScpPolicy>,
     /// Services the input uses that the SCPs deny in any Region: an allow list at one
     /// level of the organization that does not name them, or a `Deny` of all their
     /// actions without conditions.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub services_denied: Vec<ScpServiceDenial>,
 }
 
@@ -91,6 +99,7 @@ pub struct ScpServiceDenial {
     /// The account, OU or root whose policies deny it.
     pub target: String,
     /// The denying policy; null when no policy at the target allows the service.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub policy: Option<String>,
 }
 
@@ -129,6 +138,7 @@ pub enum ScpVerdict {
 pub struct SsmParameterCheck {
     pub name: String,
     /// Where the input uses it: resource logical ids or `Parameters/<name>`.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub used_by: Vec<String>,
     pub exists: bool,
 }
@@ -591,8 +601,12 @@ fn services_denied(
             if docs.is_empty() {
                 continue;
             }
+            // An Allow limited to some resources does not allow the service as such.
             let allowed = docs.iter().flat_map(|(_, s)| s).any(|s| {
                 s["Effect"] == "Allow"
+                    && s.get("NotResource").is_none()
+                    && (s.get("Resource").is_none()
+                        || patterns(&s["Resource"]).iter().any(|r| r == "*"))
                     && patterns(&s["Action"]).iter().any(|p| {
                         covers(p, &action) || p.to_ascii_lowercase().starts_with(&format!("{svc}:"))
                     })
@@ -887,6 +901,15 @@ mod tests {
         let svc: Vec<&str> = n.iter().map(|x| x.service.as_str()).collect();
         assert_eq!(svc, ["dynamodb", "sqs"]);
         assert!(services_denied(&[lvl("acct", &[full])], &services).is_empty());
+        // An Allow of some resources only does not allow the service.
+        let some_tables = r#"{"Statement":[{"Effect":"Allow","Action":"*","Resource":"*"},{"Effect":"Allow","Action":"dynamodb:*","Resource":"arn:aws:dynamodb:*:*:table/app-*"}]}"#;
+        let scoped = r#"{"Statement":[{"Effect":"Allow","Action":["s3:*","lambda:*","sqs:*"],"Resource":"*"},{"Effect":"Allow","Action":"dynamodb:*","Resource":"arn:aws:dynamodb:*:*:table/app-*"}]}"#;
+        assert!(services_denied(&[lvl("acct", &[some_tables])], &services).is_empty());
+        let s = services_denied(&[lvl("acct", &[scoped])], &services);
+        assert_eq!(
+            s.iter().map(|x| x.service.as_str()).collect::<Vec<_>>(),
+            ["dynamodb"]
+        );
         assert_eq!(
             iam_prefix("AWS::StepFunctions::StateMachine").as_deref(),
             Some("states")

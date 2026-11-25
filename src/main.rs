@@ -8,6 +8,7 @@ mod extractor;
 mod matcher;
 mod mitigations;
 mod model;
+mod output;
 mod plan;
 mod provider;
 mod reader;

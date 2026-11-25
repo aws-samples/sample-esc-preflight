@@ -36,7 +36,7 @@ struct Page {
     next_token: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Item {
     id: String,
@@ -55,78 +55,136 @@ struct Item {
     planning: Vec<Named>,
 }
 
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 struct Named {
     name: String,
     #[serde(rename = "plannedDate")]
     planned_date: Option<String>,
 }
 
-/// A product's or feature's state in one Region, with the planned quarter, and
-/// whether the name is listed more than once with different states.
-pub type ProductState = (super::knowledge::State, Option<String>, bool);
+/// A product's or feature's state in one Region, with the planned quarter.
+pub type ProductState = (super::knowledge::State, Option<String>);
 
-/// Products and features by name, for each of `regions`. A name listed more than
-/// once (the same feature under several services) keeps its most available state
-/// and is marked when the states differ.
-pub fn fetch_products(
-    client: &Client,
-    regions: &[&str],
-) -> Result<BTreeMap<String, BTreeMap<String, ProductState>>> {
+/// The products and features of one Region.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Products {
+    /// By name. A feature name several services list with different states, in any
+    /// of the Regions fetched together, is also listed per service as
+    /// `<service>: <feature>`, since each service's state is right for that service.
+    pub products: BTreeMap<String, ProductState>,
+    /// Every feature by its service and name.
+    pub features: BTreeMap<(String, String), ProductState>,
+    /// Bare names that stand for such features of several services, with the most
+    /// available state: a lookup by name finds the feature where some service
+    /// offers it, and `compare` reads the per-service entries instead.
+    pub merged: BTreeSet<String>,
+}
+
+/// Products and features for each of `regions`.
+pub fn fetch_products(client: &Client, regions: &[&str]) -> Result<BTreeMap<String, Products>> {
     products_of(&items_at(client, SERVICES_ROUTE, regions)?, regions)
 }
 
-fn products_of(
-    items: &[Item],
-    regions: &[&str],
-) -> Result<BTreeMap<String, BTreeMap<String, ProductState>>> {
+/// One listing of a name: its parent service, whether it is a service, its state.
+type Listing<'a> = (Option<&'a str>, bool, ProductState);
+
+fn rank(s: super::knowledge::State) -> u8 {
     use super::knowledge::State;
-    let mut out: BTreeMap<String, BTreeMap<String, ProductState>> = regions
-        .iter()
-        .map(|r| ((*r).to_string(), BTreeMap::new()))
-        .collect();
-    let rank = |s: State| match s {
+    match s {
         State::Available => 0,
         State::Planned => 1,
         State::Planning => 2,
         State::NotExpanding => 3,
         State::NotAvailable => 4,
-    };
-    for item in items {
-        let name = item.name.trim();
-        for (region, products) in &mut out {
-            let find = |l: &[Named]| {
-                l.iter()
-                    .find(|n| n.name == *region)
-                    .map(|n| n.planned_date.clone())
-            };
-            let state = if find(&item.available).is_some() {
-                (State::Available, None, false)
-            } else if let Some(d) = find(&item.planned) {
-                (State::Planned, d, false)
-            } else if find(&item.planning).is_some() {
-                (State::Planning, None, false)
-            } else if find(&item.not_available).is_some() {
-                (State::NotAvailable, None, false)
-            } else {
-                continue;
-            };
-            let e = products.entry(name.to_string()).or_insert(state.clone());
-            if e.0 != state.0 {
-                if rank(state.0) < rank(e.0) {
-                    *e = state;
-                }
-                e.2 = true;
-            }
+    }
+}
+
+/// Keeps the more available of two states, so the result does not depend on order.
+fn keep_best(map: &mut BTreeMap<String, ProductState>, key: String, state: ProductState) {
+    match map.get(&key) {
+        Some(old) if rank(old.0) <= rank(state.0) => {}
+        _ => {
+            map.insert(key, state);
         }
     }
-    for (region, p) in &out {
-        if p.len() < 100 {
+}
+
+fn products_of(items: &[Item], regions: &[&str]) -> Result<BTreeMap<String, Products>> {
+    use super::knowledge::State;
+    let names: BTreeMap<&str, &str> = items
+        .iter()
+        .map(|i| (i.id.as_str(), i.name.trim()))
+        .collect();
+    let listings = |region: &str| {
+        let state_of = |item: &Item| -> Option<ProductState> {
+            let find = |l: &[Named]| {
+                l.iter()
+                    .find(|n| n.name == region)
+                    .map(|n| n.planned_date.clone())
+            };
+            if find(&item.available).is_some() {
+                Some((State::Available, None))
+            } else if let Some(d) = find(&item.planned) {
+                Some((State::Planned, d))
+            } else if find(&item.planning).is_some() {
+                Some((State::Planning, None))
+            } else {
+                find(&item.not_available).map(|_| (State::NotAvailable, None))
+            }
+        };
+        let mut by_name: BTreeMap<&str, Vec<Listing>> = BTreeMap::new();
+        for item in items {
+            if let Some(state) = state_of(item) {
+                let parent = item
+                    .parent_id
+                    .as_deref()
+                    .and_then(|id| names.get(id).copied());
+                by_name.entry(item.name.trim()).or_default().push((
+                    parent,
+                    item.kind == "SERVICE",
+                    state,
+                ));
+            }
+        }
+        by_name
+    };
+    let by_region: Vec<_> = regions.iter().map(|r| (*r, listings(r))).collect();
+    // One decision for all Regions, so `compare` matches names across them.
+    let split: BTreeSet<&str> = by_region
+        .iter()
+        .flat_map(|(_, by_name)| by_name.iter())
+        .filter(|(_, l)| l.iter().any(|(.., s)| s.0 != l[0].2.0))
+        .map(|(name, _)| *name)
+        .collect();
+    let mut out = BTreeMap::new();
+    for (region, by_name) in by_region {
+        let mut p = Products::default();
+        for (name, entries) in by_name {
+            let has_service = entries.iter().any(|(_, service, _)| *service);
+            if split.contains(name) && !has_service {
+                p.merged.insert(name.to_string());
+            }
+            for (parent, service, state) in entries {
+                if let (false, Some(parent)) = (service, parent) {
+                    p.features
+                        .insert((parent.to_string(), name.to_string()), state.clone());
+                    if split.contains(name) {
+                        keep_best(&mut p.products, format!("{parent}: {name}"), state.clone());
+                    }
+                }
+                // A service of the name decides the bare name.
+                if service || !has_service {
+                    keep_best(&mut p.products, name.to_string(), state);
+                }
+            }
+        }
+        if p.products.len() < 100 {
             return Err(ScanError::DataSource(format!(
                 "{URL}{SERVICES_ROUTE}: {} products for {region}; the response shape may have changed",
-                p.len()
+                p.products.len()
             )));
         }
+        out.insert(region.to_string(), p);
     }
     Ok(out)
 }
@@ -312,20 +370,51 @@ mod tests {
                 ..item(&format!("p{i}"), "SERVICE", None, &["a"], &[])
             })
             .collect();
-        let mut planned = item("x", "FEATURE", None, &[], &[]);
+        let mut planned = item("x", "FEATURE", Some("p0"), &[], &[]);
         planned.name = " Edge ".into();
         planned.planned = vec![named("a", Some("2027 Q1"))];
-        let mut dup1 = item("d1", "FEATURE", None, &[], &["a"]);
+        // One feature under two services, with different states.
+        let mut dup1 = item("d1", "FEATURE", Some("p1"), &[], &["a"]);
         dup1.name = "Dup".into();
-        let mut dup2 = item("d2", "FEATURE", None, &["a"], &[]);
+        let mut dup2 = item("d2", "FEATURE", Some("p2"), &["a"], &[]);
         dup2.name = "Dup".into();
-        items.extend([planned, dup1, dup2]);
-        let out = products_of(&items, &["a"]).unwrap();
+        // A service and a feature of the same name: the service keeps the bare name.
+        let mut svc = item("s", "SERVICE", None, &["a"], &[]);
+        svc.name = "Both".into();
+        let mut feat = item("f", "FEATURE", Some("p3"), &[], &["a"]);
+        feat.name = "Both".into();
+        // Equal states stay one bare entry.
+        let mut same1 = item("e1", "FEATURE", Some("p1"), &["a"], &[]);
+        same1.name = "Same".into();
+        let mut same2 = item("e2", "FEATURE", Some("p2"), &["a"], &[]);
+        same2.name = "Same".into();
+        items.extend([planned, dup1, dup2, feat, svc, same1, same2]);
+        let out = &products_of(&items, &["a"]).unwrap()["a"];
+        let p = &out.products;
+        assert_eq!(p["Edge"], (State::Planned, Some("2027 Q1".to_string())));
+        assert_eq!(p["Dup"], (State::Available, None), "the most available");
+        assert_eq!(p["P1: Dup"], (State::NotAvailable, None));
+        assert_eq!(p["P2: Dup"], (State::Available, None));
+        assert_eq!(p["Both"], (State::Available, None));
+        assert_eq!(p["P3: Both"], (State::NotAvailable, None));
+        assert_eq!(p["Same"], (State::Available, None));
+        assert!(!p.contains_key("P1: Same"));
+        assert_eq!(out.merged, ["Dup".to_string()].into());
         assert_eq!(
-            out["a"]["Edge"],
-            (State::Planned, Some("2027 Q1".to_string()), false)
+            out.features[&("P0".to_string(), "Edge".to_string())].0,
+            State::Planned
         );
-        assert_eq!(out["a"]["Dup"], (State::Available, None, true));
+        // A name split in one Region is split in every Region fetched with it.
+        let mut two = items.clone();
+        for i in two.iter_mut() {
+            i.available.push(Named {
+                name: "b".into(),
+                planned_date: None,
+            });
+        }
+        let both = products_of(&two, &["a", "b"]).unwrap();
+        assert!(both["b"].products.contains_key("P1: Dup"));
+        assert_eq!(both["b"].merged, ["Dup".to_string()].into());
         assert!(products_of(&items[..5], &["a"]).is_err());
     }
 

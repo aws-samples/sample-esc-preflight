@@ -417,6 +417,12 @@ mod tests {
             .filter_map(|r| r.feature.as_ref().filter(|f| !k.products.contains_key(*f)))
             .collect();
         assert!(gone.is_empty(), "{gone:?}");
+        let (service, feature) = crate::depth::GRAVITON_FEATURE;
+        assert!(
+            k.features
+                .contains_key(&(service.to_string(), feature.to_string())),
+            "the Lambda arm64 check reads this feature"
+        );
         let stale: Vec<_> = guide_rules()
             .into_iter()
             .filter(|(r, ..)| anchor(r, &g).is_none())
