@@ -257,13 +257,13 @@ pub fn build(
                     e.crosses_partition = Some(true);
                     e.fallback = true;
                     e.note = Some(format!(
-                        "The move crosses partitions, where {} {why}; this is the documented alternative.",
-                        m.via
+                        "The move crosses partitions, where \"{}\" {why}. The plan uses the documented alternative: {}.",
+                        m.via, f.via
                     ));
                 }
                 None => {
                     e.note = Some(format!(
-                        "The move crosses partitions, and {} {why} there; choose another way to move the content.",
+                        "The move crosses partitions, where \"{}\" {why}. Choose another way to move the content.",
                         m.via
                     ));
                     e.path = MovePath::Unknown;
@@ -607,7 +607,11 @@ mod tests {
     fn within_a_partition_mechanisms_apply() {
         let p = plan(APP, "eu-west-1", Some("eu-central-1"));
         assert_eq!(p.data_provenance.crosses_partition, Some(false));
-        assert_eq!(by_id(&p, "Table").path, MovePath::Replicate);
+        assert_eq!(
+            by_id(&p, "Table").path,
+            MovePath::Restore,
+            "export and import"
+        );
         let key = by_id(&p, "Key");
         assert_eq!(
             (key.path, key.rule.as_deref()),
@@ -628,16 +632,19 @@ mod tests {
         assert_eq!(p.data_provenance.crosses_partition, Some(true));
         let t = by_id(&p, "Table");
         assert_eq!(t.path, MovePath::Restore, "export and import");
-        assert!(
-            t.note
-                .as_deref()
-                .is_some_and(|n| n.contains("not documented"))
-        );
-        assert_eq!(t.crosses_partition, Some(true), "the fallback works there");
+        assert!(!t.fallback, "the export crosses partitions itself");
+        assert_eq!(t.crosses_partition, Some(true));
         let k = by_id(&p, "Key");
         assert_eq!(
             (k.path, k.data),
             (MovePath::Redeploy, Some(DataDecision::Recreate))
+        );
+        assert!(
+            k.note
+                .as_deref()
+                .is_some_and(|n| n.contains("documented alternative: a new key")),
+            "{:?}",
+            k.note
         );
         let r = by_id(&p, "Repo");
         assert_eq!(r.path, MovePath::Unknown);
@@ -687,6 +694,66 @@ mod tests {
         assert!(
             text.lines()
                 .any(|l| l.contains(" Blocked ") && l.contains("1 resource ")),
+            "{text}"
+        );
+        assert!(text.contains("Not ready for eu-west-1"), "{text}");
+    }
+
+    #[test]
+    fn the_summary_follows_a_move_with_iac() {
+        let t = reader::parse_text(APP).unwrap();
+        let summary = |target: &str| {
+            let facts = partition::facts(target).unwrap();
+            let report = crate::report::tests::empty_report(target);
+            let p = build(&report, &t, &facts, Some("eu-central-1"));
+            crate::summary::plan_summary(
+                &p,
+                &report,
+                crate::tui::Style::default(),
+                &crate::tui::Run::default(),
+            )
+        };
+        let text = summary("eu-west-1");
+        let line = |needle: &str| text.lines().any(|l| l.contains(needle));
+        // With a way, blocked and to decide add up to the 8 resources.
+        assert!(
+            line("7 deploy with IaC - 3 of them with data to fill - 1 to decide"),
+            "{text}"
+        );
+        assert!(line("before deploying: export the table"), "{text}");
+        assert!(
+            line("after deploying: a multi-Region replica key"),
+            "{text}"
+        );
+        assert!(
+            line("Decide how the 1 resource under To decide moves"),
+            "{text}"
+        );
+        assert!(line("retire the source in eu-central-1"), "{text}");
+        assert!(!line("At the switch"), "{text}");
+        assert!(
+            line("Ready for eu-west-1 after the decisions below"),
+            "{text}"
+        );
+        // Across partitions the key is new content, handled at the switch, not data to fill.
+        let text = summary("eusc-de-east-1");
+        let line = |needle: &str| text.lines().any(|l| l.contains(needle));
+        assert!(line(" At the switch "), "{text}");
+        assert!(line("after deploying: a new key in the target"), "{text}");
+        assert!(line("with the 1 resource under At the switch"), "{text}");
+        // Every resource with a known way: ready.
+        let vpc = reader::parse_text(r#"{"Resources":{"Vpc":{"Type":"AWS::EC2::VPC"}}}"#).unwrap();
+        let facts = partition::facts("eu-west-1").unwrap();
+        let report = crate::report::tests::empty_report("eu-west-1");
+        let p = build(&report, &vpc, &facts, Some("eu-central-1"));
+        let text = crate::summary::plan_summary(
+            &p,
+            &report,
+            crate::tui::Style::default(),
+            &crate::tui::Run::default(),
+        );
+        assert!(
+            text.contains("+ Ready for eu-west-1\n") || text.contains("+ Ready for eu-west-1 "),
             "{text}"
         );
     }

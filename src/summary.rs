@@ -513,11 +513,13 @@ fn notes(f: &mut Frame, r: &Report) -> bool {
     let pen = f.pen;
     let p = &r.data_provenance;
     let target = clean(&p.target_region);
-    let region = if p.target_region == crate::cli::DEFAULT_REGION {
-        String::new()
-    } else {
-        format!(" --region {target}")
+    let mut region = match &p.source_region {
+        Some(from) => format!(" --from {}", clean(from)),
+        None => String::new(),
     };
+    if p.target_region != crate::cli::DEFAULT_REGION {
+        region.push_str(&format!(" --to {target}"));
+    }
     let rescan = match p.input.as_str() {
         "" | "." | "stdin" => format!("esc-preflight scan{region} --profile <name>"),
         i => format!("esc-preflight scan {}{region} --profile <name>", clean(i)),

@@ -208,6 +208,9 @@ pub struct Context<'a> {
     pub facts: Option<&'a crate::extractor::PartitionFacts>,
     /// Live mode's account checks.
     pub account: Option<&'a crate::account::AccountChecks>,
+    /// The Region the input runs in today (`--from`), for resources whose input does
+    /// not state a Region. A literal of the target still means the deployment Region.
+    pub source_region: Option<&'a str>,
 }
 
 struct Decision {
@@ -239,11 +242,17 @@ fn decide(l: &Literal, h: &Hazard, ctx: &Context) -> Decision {
     let v = &l.value;
     let env = h.env.as_ref();
     // Unknown environment: likely the deployment's own value, but not provable.
-    let own = |field: Option<&String>| match field {
+    let own = |field: Option<&str>| match field {
         None => Tier::Propose,
         Some(x) if x == v => Tier::Fix,
         Some(_) => Tier::Flag,
     };
+    // The Region the resource runs in: stated by the input, else `--from`.
+    let stated = env.and_then(|e| e.region.as_deref());
+    let region = stated.or(ctx.source_region);
+    // No Region known from the input itself: a literal of the target is the
+    // deployment Region. Without `--from`, only where the input states no environment.
+    let unstated = env.is_none() || (ctx.source_region.is_some() && stated.is_none());
     match l.kind {
         HazardKind::ArnPartition => Decision {
             tier: Tier::Fix,
@@ -294,14 +303,14 @@ fn decide(l: &Literal, h: &Hazard, ctx: &Context) -> Decision {
             replace: rep("amazonaws.com", "amazonaws.com", "amazonaws.com"),
         },
         // A hand-written target Region means the Region the stack deploys to.
-        HazardKind::RegionLiteral if env.is_none() && l.impact == Impact::Portability => Decision {
+        HazardKind::RegionLiteral if unstated && l.impact == Impact::Portability => Decision {
             tier: Tier::Fix,
             action: "use the deployment Region",
             change: "Use the deployment Region instead of the literal.".into(),
             precondition: None,
             replace: region_expr(),
         },
-        HazardKind::RegionLiteral => match own(env.and_then(|e| e.region.as_ref())) {
+        HazardKind::RegionLiteral => match own(region) {
             Tier::Flag => Decision {
                 tier: Tier::Flag,
                 action: "set the target Region",
@@ -320,7 +329,7 @@ fn decide(l: &Literal, h: &Hazard, ctx: &Context) -> Decision {
                 replace: region_expr(),
             },
         },
-        HazardKind::AccountId => match own(env.and_then(|e| e.account.as_ref())) {
+        HazardKind::AccountId => match own(env.and_then(|e| e.account.as_deref())) {
             Tier::Flag => Decision {
                 tier: Tier::Flag,
                 action: "set the target account",
@@ -358,13 +367,13 @@ fn decide(l: &Literal, h: &Hazard, ctx: &Context) -> Decision {
                 .as_deref()
                 .and_then(|id| crate::rules::all().iter().find(|r| r.id == id));
             // The Region the endpoint names decides the tier, as for a Region literal.
-            let region = v.split_once('-').map_or("", |(_, r)| r).to_string();
-            let tier = if l.impact == Impact::Portability && env.is_none() {
+            let named = v.split_once('-').map_or("", |(_, r)| r).to_string();
+            let tier = if l.impact == Impact::Portability && unstated {
                 Tier::Fix
             } else {
-                match env.and_then(|e| e.region.as_ref()) {
+                match region {
                     None => Tier::Propose,
-                    Some(r) if *r == region => Tier::Fix,
+                    Some(r) if r == named => Tier::Fix,
                     Some(_) => Tier::Flag,
                 }
             };
@@ -1174,6 +1183,45 @@ mod tests {
                 Some(env("us-east-1", Some("444455556666"))),
                 &ctx
             ),
+            [Tier::Flag]
+        );
+    }
+
+    #[test]
+    fn from_names_the_region_of_inputs_that_state_none() {
+        let ctx = Context {
+            source_region: Some("eu-central-1"),
+            ..Context::default()
+        };
+        let region = |v: &str| vec![lit(HazardKind::RegionLiteral, v)];
+        assert_eq!(tiers(region("eu-central-1"), None, &ctx), [Tier::Fix]);
+        assert_eq!(tiers(region("us-east-1"), None, &ctx), [Tier::Flag]);
+        let target = Literal {
+            impact: Impact::Portability,
+            ..lit(HazardKind::RegionLiteral, "eusc-de-east-1")
+        };
+        assert_eq!(
+            tiers(vec![target], None, &ctx),
+            [Tier::Fix],
+            "the target itself"
+        );
+        // An environment without a Region, such as a Terraform plan's: --from applies.
+        let no_region = DeployEnv {
+            region: None,
+            account: Some("111122223333".into()),
+        };
+        assert_eq!(
+            tiers(region("eu-central-1"), Some(no_region.clone()), &ctx),
+            [Tier::Fix]
+        );
+        let target = Literal {
+            impact: Impact::Portability,
+            ..lit(HazardKind::RegionLiteral, "eusc-de-east-1")
+        };
+        assert_eq!(tiers(vec![target], Some(no_region), &ctx), [Tier::Fix]);
+        // A Region the input states wins over --from.
+        assert_eq!(
+            tiers(region("eu-central-1"), Some(env("us-east-1", None)), &ctx),
             [Tier::Flag]
         );
     }

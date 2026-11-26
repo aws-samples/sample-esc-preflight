@@ -603,7 +603,11 @@ mod tests {
             products: (0..10)
                 .map(|i| ProductGap {
                     name: format!("P{i}"),
-                    to_state: Some(State::NotExpanding),
+                    to_state: Some(if i < 9 {
+                        State::NotExpanding
+                    } else {
+                        State::NotAvailable
+                    }),
                     to_launch: None,
                 })
                 .collect(),
@@ -627,9 +631,14 @@ mod tests {
         assert!(t.contains(" Products "), "{t}");
         assert!(
             t.lines()
-                .any(|l| l.contains("not expanding") && l.contains("10") && l.contains("+7 more")),
+                .any(|l| l.contains("not expanding") && l.contains("9") && l.contains("+6 more")),
             "{t}"
         );
+        assert!(t.contains("9 not expanding - 1 not available"), "{t}");
+        assert!(t.contains("properties not compared"), "{t}");
+        // No roadmap in the target: marked as a blocker.
+        assert!(t.lines().any(|l| l.contains("  x not expanding")), "{t}");
+        assert!(t.lines().any(|l| l.contains("  x not available")), "{t}");
         let mut uncompared = c.clone();
         uncompared.warnings[0].code = CompareWarningCode::ProductsUnchecked;
         let u = summary(&uncompared);

@@ -16,7 +16,7 @@ use crate::type_mapper::{Check, Mapping, TypeMapper};
 use crate::{depth, deviation, extractor, matcher, reader};
 use crate::{output, remediation, tui};
 
-/// The Region `scan` and `plan` assess against without `--region`.
+/// The target Region of every command without `--to`.
 pub const DEFAULT_REGION: &str = "eusc-de-east-1";
 
 #[derive(Debug, Parser)]
@@ -47,21 +47,17 @@ enum Command {
 struct PlanArgs {
     #[command(flatten)]
     scan: ScanArgs,
-    /// The Region the workload runs in today. Overrides the Region the input was
-    /// produced for, which is often the target.
-    #[arg(long)]
-    from: Option<String>,
 }
 
 const PLAN_HELP: &str = "\
-The plan runs the scan, then reads the bundled mechanism rules: each resource is
-redeployed, replicated or restored; blocked when a scan finding blocks it; unknown
-when no rule covers its type. The plan executes nothing. --out takes the plan JSON;
-the scan options apply to the scan it runs.
+The plan runs the scan, then reads the bundled mechanism rules for a move with IaC:
+which resources redeploy, which data stores to fill before or after deploying, which
+a scan finding blocks, and which need a decision. The plan executes nothing. --out
+takes the plan JSON; the scan options apply to the scan it runs.
 
 Examples:
-  esc-preflight plan --region eusc-de-east-1
-  esc-preflight plan template.yaml --from eu-central-1 --region eusc-de-east-1 --out plan.json
+  esc-preflight plan --from eu-central-1
+  esc-preflight plan template.yaml --from eu-central-1 --to eusc-de-east-1 --out plan.json
 
 Exit codes:
   0  plan produced
@@ -75,7 +71,7 @@ struct CompareArgs {
     #[arg(long)]
     from: String,
     /// The Region to compare it with.
-    #[arg(long)]
+    #[arg(long, default_value = DEFAULT_REGION)]
     to: String,
     /// Read the --to Region's registry from the account, with the default credential
     /// chain.
@@ -115,7 +111,7 @@ from the account; --properties also reads its resource schemas, which takes seve
 minutes.
 
 Examples:
-  esc-preflight compare --from eu-central-1 --to eusc-de-east-1
+  esc-preflight compare --from eu-central-1
   esc-preflight compare --from eu-central-1 --to eusc-de-east-1 --profile esc --properties --out c.json
 
 Exit codes:
@@ -153,9 +149,16 @@ struct ScanArgs {
     /// Exit 2 when a finding of this kind exists.
     #[arg(long, value_enum)]
     fail_on: Option<FailOn>,
-    /// Region to assess against.
+    /// The Region to move to.
     #[arg(long, default_value = DEFAULT_REGION)]
-    region: String,
+    to: String,
+    /// The Region the workload runs in today. For a template that does not say which
+    /// Region it was written for, a literal of this Region means the deployment's own
+    /// Region; `plan` also applies the partition limits of the move. In `plan`, it is
+    /// the source even when a CDK assembly or Terraform plan names another Region,
+    /// whose literals keep the Region it names.
+    #[arg(long)]
+    from: Option<String>,
     /// Account the input moves to, for a move to another account. Literals of other
     /// accounts then break.
     #[arg(long, value_parser = account_id)]
@@ -215,9 +218,23 @@ pub fn run() -> i32 {
     })
 }
 
+/// `--from` and `--to` name known Regions, and not the same one.
+fn check_regions(from: Option<&str>, to: &str) -> Result<()> {
+    if let Some(f) = from {
+        partition::facts(f)?;
+        if f == to {
+            return Err(ScanError::Input(
+                "--from and --to name the same Region".into(),
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn run_scan(args: &ScanArgs) -> Result<i32> {
+    check_regions(args.from.as_deref(), &args.to)?;
     let started = Instant::now();
-    tui::start(&format!("Scanning for {}", args.region), !args.quiet);
+    tui::start(&format!("Scanning for {}", args.to), !args.quiet);
     let assessed = assess(args);
     tui::stop();
     let (mut report, ..) = assessed?;
@@ -263,7 +280,7 @@ fn write_json(out: Option<&std::path::Path>, json: &str) -> Result<tui::Destinat
 
 /// The scan: the full report, the input and the target's partition facts.
 fn assess(args: &ScanArgs) -> Result<(Report, Template, extractor::PartitionFacts)> {
-    let region = &args.region;
+    let region = &args.to;
     tui::phase(format!("reading {}", input_label(args.path.as_deref())));
     let template = read_input(args.path.as_deref(), region)?;
     let client = http::Client::new(Duration::from_secs(args.timeout))?;
@@ -405,6 +422,7 @@ fn assess(args: &ScanArgs) -> Result<(Report, Template, extractor::PartitionFact
     let provenance = Provenance {
         tool_version: env!("CARGO_PKG_VERSION").into(),
         input: input_label(args.path.as_deref()),
+        source_region: args.from.clone(),
         stacks: stacks(&template),
         source_format: template.format,
         input_kind: template.kind(),
@@ -445,6 +463,7 @@ fn assess(args: &ScanArgs) -> Result<(Report, Template, extractor::PartitionFact
             offered: Some(&offered),
             facts: Some(&data.partition),
             account: account.as_ref(),
+            source_region: args.from.as_deref(),
         },
     );
     Ok((report, template, data.partition))
@@ -469,7 +488,7 @@ fn live_checks(
     needs: live::Needs,
 ) -> Result<LiveChecks> {
     let caller = aws_call::Caller::new(
-        &args.region,
+        &args.to,
         &facts.target_dns_suffix,
         args.profile.as_deref(),
         args.role_arn.as_deref(),
@@ -478,7 +497,7 @@ fn live_checks(
     let (l, p) = live::run(&caller, needs)?;
     let account = crate::account::run(
         &caller,
-        &args.region,
+        &args.to,
         &facts.target_partition,
         &p.account_id,
         &crate::account::needs(template),
@@ -580,14 +599,6 @@ fn account_id(s: &str) -> std::result::Result<String, String> {
 
 /// Options `plan` rejects before reading any input.
 fn check_plan_args(args: &PlanArgs) -> Result<()> {
-    if let Some(f) = &args.from {
-        partition::facts(f)?;
-    }
-    if args.from.as_deref() == Some(args.scan.region.as_str()) {
-        return Err(ScanError::Input(
-            "--from and --region name the same Region".into(),
-        ));
-    }
     if args.scan.fail_on.is_some() || args.scan.all {
         return Err(ScanError::Input(
             "--fail-on and --all apply to scan, not to plan".into(),
@@ -598,14 +609,15 @@ fn check_plan_args(args: &PlanArgs) -> Result<()> {
 
 fn run_plan(args: &PlanArgs) -> Result<i32> {
     check_plan_args(args)?;
+    check_regions(args.scan.from.as_deref(), &args.scan.to)?;
     let started = Instant::now();
     tui::start(
-        &format!("Planning the move to {}", args.scan.region),
+        &format!("Planning the move to {}", args.scan.to),
         !args.scan.quiet,
     );
     let assessed = assess(&args.scan).map(|(report, template, facts)| {
         tui::phase("ordering the resources into waves");
-        let p = crate::plan::build(&report, &template, &facts, args.from.as_deref());
+        let p = crate::plan::build(&report, &template, &facts, args.scan.from.as_deref());
         (p, report)
     });
     tui::stop();
@@ -944,10 +956,18 @@ mod tests {
             "plan",
             "--from",
             "eu-west-1",
-            "--region",
+            "--to",
             "eu-west-1",
         ];
-        assert!(check(&same).unwrap_err().contains("the same Region"));
+        let Command::Plan(p) = Cli::try_parse_from(same).unwrap().command else {
+            panic!("plan");
+        };
+        assert!(
+            check_regions(p.scan.from.as_deref(), &p.scan.to)
+                .unwrap_err()
+                .to_string()
+                .contains("the same Region")
+        );
         assert!(check(&["esc-preflight", "plan", "--from", "eu-central-1"]).is_ok());
     }
 

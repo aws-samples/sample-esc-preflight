@@ -41,6 +41,8 @@ pub struct Provenance {
     pub tool_version: String,
     /// The input as named on the command line, `.` or `stdin`.
     pub input: String,
+    /// `--from`: the Region the workload runs in today.
+    pub source_region: Option<String>,
     /// Stacks of a CDK assembly or template, by the stack prefixes of the ids.
     pub stacks: usize,
     pub source_format: SourceFormat,
@@ -952,6 +954,7 @@ pub(crate) mod tests {
         Provenance {
             tool_version: "test".into(),
             input: "template.yaml".into(),
+            source_region: None,
             stacks: 1,
             source_format: format,
             input_kind: match format {

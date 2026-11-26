@@ -23,19 +23,26 @@
   "summary": {
     "resources": 9,
     "waves": 3,
-    "redeploy": 4,
+    "redeploy": 6,
     "replicate": 0,
     "restore": 0,
     "blocked": 1,
-    "unknown": 4,
+    "unknown": 2,
     "data_to_move": 0
   },
   "mechanisms": {
     "move-bucket": {
-      "via": "S3 Replication, with S3 Batch Replication for existing objects",
+      "via": "deploy the bucket in the target, then fill it with S3 Replication and S3 Batch Replication for existing objects",
       "scope": "regional",
       "holds": "data",
       "doc": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/replication.html"
+    },
+    "move-cdk-support": {
+      "via": "redeploy the input; CDK writes these for its own constructs",
+      "scope": "regional",
+      "holds": "configuration",
+      "works_across_partitions": true,
+      "doc": "https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/best-practices.html"
     },
     "move-function-code": {
       "via": "redeploy the input; its deployment package or image must be in the target",
@@ -90,7 +97,7 @@
       "rule": "move-bucket",
       "layer": "shared",
       "wave": 2,
-      "note": "The move crosses partitions, and S3 Replication, with S3 Batch Replication for existing objects is not documented to work there; choose another way to move the content."
+      "note": "The move crosses partitions, where \"deploy the bucket in the target, then fill it with S3 Replication and S3 Batch Replication for existing objects\" is not documented to work. Choose another way to move the content."
     },
     {
       "logical_id": "Assistant",
@@ -104,9 +111,10 @@
     {
       "logical_id": "AutoDelete",
       "resource_type": "Custom::S3AutoDeleteObjects",
-      "path": "unknown",
-      "wave": 3,
-      "note": "No mechanism rule covers this resource type."
+      "path": "redeploy",
+      "rule": "move-cdk-support",
+      "layer": "workload",
+      "wave": 3
     },
     {
       "logical_id": "Build",
@@ -119,9 +127,10 @@
     {
       "logical_id": "CDKMetadata",
       "resource_type": "AWS::CDK::Metadata",
-      "path": "unknown",
-      "wave": 3,
-      "note": "No mechanism rule covers this resource type."
+      "path": "redeploy",
+      "rule": "move-cdk-support",
+      "layer": "workload",
+      "wave": 3
     },
     {
       "logical_id": "Cdn",

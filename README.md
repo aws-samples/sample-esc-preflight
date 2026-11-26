@@ -9,7 +9,7 @@ Checks a CloudFormation template, CDK app or Terraform plan for compatibility wi
 * hardcoded Regions, zones, partitions, DNS suffixes, accounts and resource IDs, such as `arn:aws:`, `amazonaws.com`, `eu-central-1` or `ami-0abc...`, including values for the target itself
 * in live mode, the target account: Region opt-in, quotas, service control policies and public SSM parameters
 
-Two more commands help plan a move: `plan` says how each resource reaches the target (redeploy, replicate, restore) in waves, and `compare` lists what one Region offers and another does not.
+Two more commands help plan a move: `plan` says how each resource reaches the target with IaC, which data stores to fill and what blocks, and `compare` lists what one Region offers and another does not.
 
 It runs locally, read-only, and makes no model calls.
 
@@ -21,9 +21,9 @@ It runs locally, read-only, and makes no model calls.
 * Give your AI coding assistant a deterministic check for the IaC it writes, instead of relying on trial and error.
 * Run `esc-preflight scan --fail-on blocker` in CI, so no pipeline ships a service, feature or value ESC does not offer.
 * In an automated migration, scan, change and re-scan IaC code until no blockers remain, across repositories.
-* Plan the move of a workload: which resources redeploy, which need their data replicated or restored, and in which order.
+* Plan the move of a workload with IaC: which resources redeploy, which data stores to fill before or after deploying, and what blocks or needs a decision.
 * Compare two Regions before you choose one.
-* Move between any Regions or partitions, not only to ESC: `--region eu-west-1` for a move within the global partition, `--region us-gov-west-1` for AWS GovCloud (US), or `--region cn-north-1` for AWS China. ESC User Guide checks apply to ESC targets only.
+* Move between any Regions or partitions, not only to ESC: `--to eu-west-1` for a move within the global partition, `--to us-gov-west-1` for AWS GovCloud (US), or `--to cn-north-1` for AWS China. ESC User Guide checks apply to ESC targets only.
 
 ## Install
 
@@ -45,7 +45,8 @@ Run in your project directory:
 
 * Without a path, `scan` reads `cdk.out` or the single template in the current directory.
 * AWS SAM templates are read as the CloudFormation they deploy: `Globals` apply, and each SAM resource is checked as its base type (an `AWS::Serverless::Function` as an `AWS::Lambda::Function`) with the properties SAM passes through. Hardcoded values in `Globals` are reported at `Globals/<section>`. Resources SAM generates from event sources are not checked; scan the processed template for those.
-* For a target other than ESC, add `--region <region>` and synthesize or plan for that Region.
+* For a target other than ESC, add `--to <region>` and synthesize or plan for that Region.
+* For a template that does not say which Region it was written for, add `--from <region>` with the Region it runs in today: a literal of that Region then counts as the deployment's own Region, and its fix is the deployment Region.
 * For a move to another account, add `--account <id>`: account IDs other than the target's and the input's own then break.
 * The summary goes to stderr; on a terminal, a progress line shows what the run is doing until the summary replaces it. The JSON report goes to `--out <file>`, or to stdout when it is redirected; the summary's last line says where it went. Without a terminal the summary is plain ASCII without color, and `NO_COLOR` turns color off.
 * Add `--profile <profile>` to also check your account in the target (live mode, recommended).
@@ -53,16 +54,27 @@ Run in your project directory:
 ## Plan
 
 ```bash
-esc-preflight plan template.yaml --from eu-central-1 --region eusc-de-east-1 --out plan.json
+esc-preflight plan template.yaml --from eu-central-1 --to eusc-de-east-1 --out plan.json
 ```
 
-`plan` runs the scan, then gives every resource a path, the mechanism rule that moves it (`rule`, a key of `mechanisms`) and what happens to its data (`data_action`):
+`plan` runs the scan, then reads the bundled mechanism rules for every resource. It follows a move with IaC: deploy the stacks in the target, fill the data stores they created, switch traffic over, and retire the source. Nothing is created outside the IaC.
+
+The summary shows:
+
+* how many resources deploy with IaC and how many of them have data to fill, how many are blocked and how many need a decision
+* Data to fill: each data store and how its data gets there, either before deploying (the stack deploys from a copied export or snapshot, such as a DynamoDB table with `ImportSourceSpecification`) or after deploying (fill the resource the stack created, such as a bucket through S3 Replication)
+* At the switch: resources whose content is handled while traffic switches, such as a queue to drain or a KMS key to re-create and re-encrypt under
+* Blocked: the resources a scan blocker stops; fix them as `esc-preflight scan` says
+* To decide: types with no documented way across the partitions of the move, apart from types no rule covers yet
+* Steps: the order to follow
+
+The JSON gives every resource a path, the mechanism rule that moves it (`rule`, a key of `mechanisms`), what happens to its data (`data_action`) and a wave:
 
 | Path | Meaning |
 |---|---|
 | `redeploy` | Deploy the input again in the target |
-| `replicate` | A service mechanism copies the content, such as S3 Replication or a DynamoDB global table replica |
-| `restore` | Copy a snapshot, backup or export and restore it, such as an RDS snapshot copy |
+| `replicate` | A service mechanism copies the content into the deployed resource, such as S3 Replication |
+| `restore` | Copy a snapshot or export to the target and deploy the resource from it, such as a DynamoDB export or an RDS snapshot |
 | `blocked` | A scan finding blocks the resource: not available, a documented deviation, a value or property the target does not offer, or a failed account check |
 | `unknown` | No rule covers the resource type, or its mechanism does not work across the partitions of the move; this does not mean there is no way to move it |
 
@@ -73,9 +85,9 @@ esc-preflight plan template.yaml --from eu-central-1 --region eusc-de-east-1 --o
 | `drain` | Let the source empty before switching over, such as an SQS queue |
 | `leave` | Keep the history in the source, such as a log group |
 
-* The source Region is `--from`, else the input's environment (a CDK assembly or Terraform plan states it). Pass `--from` when you produced the input for the target, as for `scan`. Without a source, or with the target as source, the plan applies no partition limits and says so in a warning.
-* `mechanisms` describes each rule once: the mechanism (`via`), where the resource lives (`scope`), what it holds (`holds`), the AWS page (`doc`), and `works_across_partitions`, which is absent where the AWS documentation does not say. For a move to another partition, a mechanism that is not documented there takes its documented alternative, the rule's `fallback` (DynamoDB export and import, a new KMS key, an EC2 AMI stored and restored through S3), and the resource says `fallback: true`; without one, the resource becomes `unknown` with a note (S3, EFS, Secrets Manager and ECR replication, RDS snapshot copy).
-* Resources come in waves (`wave`; a `blocked` resource has none): foundation (network, identity, keys) from wave 1, shared services from wave 2, workloads from wave 3, and each resource after the resources it references: in its stack (`Ref`, `Fn::GetAtt`, `Fn::Sub`, `DependsOn`), in other stacks (`Fn::ImportValue`, nested-stack outputs), and in a Terraform plan (references, `depends_on`, module inputs and outputs, data sources). A reference cycle gets a warning.
+* The source Region is `--from`, else the input's environment (a CDK assembly or Terraform plan states it). Pass `--from` when the input does not say its Region, or when you produced it for the target. Without a source, or with the target as source, the plan applies no partition limits and says so in a warning.
+* `mechanisms` describes each rule once: the mechanism (`via`), where the resource lives (`scope`), what it holds (`holds`), the AWS page (`doc`), and `works_across_partitions`, which is absent where the AWS documentation does not say. For a move to another partition, a mechanism that is not documented there takes its documented alternative, the rule's `fallback` (a new KMS key, an EC2 AMI stored and restored through S3), and the resource says `fallback: true`; without one, the resource becomes `unknown` with a note (S3, EFS, Secrets Manager and ECR replication, RDS snapshot copy).
+* The JSON orders resources in waves (`wave`; a `blocked` resource has none): foundation (network, identity, keys) from wave 1, shared services from wave 2, workloads from wave 3, and each resource after the resources it references: in its stack (`Ref`, `Fn::GetAtt`, `Fn::Sub`, `DependsOn`), in other stacks (`Fn::ImportValue`, nested-stack outputs), and in a Terraform plan (references, `depends_on`, module inputs and outputs, data sources). A reference cycle gets a warning.
 * Findings on the whole input, such as a quota, are one warning that blocks everything until resolved. Dependencies and hardcoded literals do not block; fix them as the scan says.
 * The scan options apply to the scan `plan` runs; `--out` takes the plan JSON. `plan` executes nothing and exits 0 whenever it produced a plan.
 
@@ -93,7 +105,7 @@ esc-preflight compare --from eu-central-1 --to eusc-de-east-1
 * With `--live`, `--profile` or `--role-arn` for `--to`, its CloudFormation registry comes from the account (`cloudformation:ListTypes`). Add `--properties` to read its resource schemas as well (`cloudformation:DescribeType`), which takes several minutes for about 700 types. Without `--properties`, a `--to` that publishes a schema bundle still has its properties compared.
 * AWS China publishes no product or config value data, so a comparison with a China Region covers resource types and properties. A `--to` that no public source covers needs live mode, and then only types and properties are compared.
 * The JSON groups products by their state in `--to` and resource types by product, and splits each config value key into `resource_type` and `property`.
-* The terminal shows the first 8 entries of each list; the JSON has all of them.
+* The terminal shows the first 8 entries of each list; the JSON has all of them. Products and resource types that are not expanding to `--to` or not available there are red: neither is on its roadmap, so they need an alternative. Planned ones show their quarter.
 
 ## How it works
 
@@ -196,13 +208,14 @@ The server's answers go into the gap register; the scanner's report alone decide
 | `--fail-on blocker\|hazard\|disputed` | | Exit 2 on a matching finding; `hazard` includes `portability` literals and dependencies, `disputed` includes guide conflicts |
 | `--out <file>` | stdout when redirected | JSON report file |
 | `--pretty` | | Indent the JSON report |
-| `--region <region>` | `eusc-de-east-1` | Region to check against |
+| `--to <region>` | `eusc-de-east-1` | The Region to move to |
+| `--from <region>` | | The Region the workload runs in today, for a template that does not say it |
 | `--timeout <seconds>` | `60` | Per-request timeout |
 | `-q`, `--quiet` | | No summary and no progress line |
 
-`esc-preflight plan [OPTIONS] [PATH]` takes the scan options and `--from <region>`, the Region the workload runs in today; it overrides the Region the input was produced for. `--out` takes the plan JSON; `--fail-on` and `--all` are rejected.
+`esc-preflight plan [OPTIONS] [PATH]` takes the scan options; its `--from` also overrides the Region a CDK assembly or Terraform plan was produced for as the source of the move, while the scan's literals keep the Region the input states. `--out` takes the plan JSON; `--fail-on` and `--all` are rejected.
 
-`esc-preflight compare --from <region> --to <region>` takes `--live`, `--profile`, `--role-arn` and `--properties` (for `--to`), `--out`, `--pretty`, `--timeout` and `--quiet`.
+`esc-preflight compare --from <region> [--to <region>]` needs `--from`; `--to` defaults to `eusc-de-east-1`. It takes `--live`, `--profile`, `--role-arn` and `--properties` (for `--to`), `--out`, `--pretty`, `--timeout` and `--quiet`.
 
 Exit codes: `0` report produced, `1` invalid input, `2` `--fail-on` matched (`scan` only), `3` a data source failed, `4` live-mode authentication failed.
 

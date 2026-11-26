@@ -376,7 +376,7 @@ pub fn scan(r: &Report) -> Scan {
             tool_version: p.tool_version.clone(),
             mode: mode(p.live.is_some()),
             input_kind: Some(p.input_kind),
-            source_region: None,
+            source_region: p.source_region.clone(),
             target_region: p.target_region.clone(),
             target_account: p.target_account.clone(),
             crosses_partition: None,
@@ -1036,9 +1036,8 @@ mod tests {
 
     #[test]
     fn a_fallback_is_named_on_the_rule_and_the_resource() {
-        let t =
-            crate::reader::parse_text(r#"{"Resources":{"Table":{"Type":"AWS::DynamoDB::Table"}}}"#)
-                .unwrap();
+        let t = crate::reader::parse_text(r#"{"Resources":{"Vm":{"Type":"AWS::EC2::Instance"}}}"#)
+            .unwrap();
         let r = crate::report::tests::empty_report("eusc-de-east-1");
         let facts = crate::provider::partition::facts("eusc-de-east-1").unwrap();
         let out = plan(
@@ -1048,11 +1047,7 @@ mod tests {
         let e = &out.resources[0];
         assert!(e.fallback && e.path == MovePath::Restore, "{e:?}");
         let m = &out.mechanisms[e.rule.as_ref().unwrap()];
-        assert!(
-            m.fallback
-                .as_ref()
-                .is_some_and(|f| f.via.contains("export"))
-        );
+        assert!(m.fallback.as_ref().is_some_and(|f| f.via.contains("AMI")));
         let json = to_json(&out, false);
         valid::<PlanOut>(&json);
         assert!(json.contains(r#""fallback":true"#));

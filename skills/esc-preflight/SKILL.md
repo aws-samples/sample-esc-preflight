@@ -21,7 +21,7 @@ The `esc-preflight` CLI decides what changes; you apply its decisions in the sou
 
 ## 1. Target and input
 
-Ask for the target Region if the user did not name one; the CLI defaults to `eusc-de-east-1` (ESC). Run `esc-preflight --version`; if it is missing or older than 0.3.1, give the user the install command from `compatibility` above and stop.
+Ask for the target Region if the user did not name one; the CLI defaults to `eusc-de-east-1` (ESC). For a plain CloudFormation or SAM template, ask which Region it runs in today and pass it as `--from`. Run `esc-preflight --version`; if it is missing or older than 0.3.1, give the user the install command from `compatibility` above and stop.
 
 Produce the input for the target, then scan:
 
@@ -32,7 +32,7 @@ Produce the input for the target, then scan:
 | Terraform | `terraform plan -out tfplan && terraform show -json tfplan > plan.json`, with the target Region and credentials if the user has them; otherwise the existing Region, and say so in the report | `plan.json` |
 
 ```
-esc-preflight scan <input> --region <target> -q --out preflight-report.json
+esc-preflight scan <input> --to <target> -q --out preflight-report.json
 ```
 
 Scan one input per run: a directory with several templates exits 1 and lists them.
@@ -84,9 +84,9 @@ Produce the input again and scan with the same flags. Retry a `fix` that remains
 
 Report: target, mode (`run.mode`), `summary` and `outcome` before and after, files changed, fixes and proposals by `impact`, proposals declined, and the register path. Delete `tfplan` and `plan.json`; keep the report and the register. An empty `required_changes` list does not prove the input deploys; the register remains the owner's work.
 
-For CI, suggest `esc-preflight scan --region <target> --fail-on blocker -q`; `--fail-on hazard` also fails on `portability` literals and dependencies. Change no pipeline unless asked.
+For CI, suggest `esc-preflight scan --to <target> --fail-on blocker -q`; `--fail-on hazard` also fails on `portability` literals and dependencies. Change no pipeline unless asked.
 
-If the user plans to move a running workload, offer `esc-preflight plan <input> --region <target> --from <source> --out preflight-plan.json`, with the Region the workload runs in today as `--from`: how each resource moves, in waves. It changes nothing; summarize it in the report and edit nothing because of it.
+If the user plans to move a running workload, offer `esc-preflight plan <input> --from <source> --to <target> --out preflight-plan.json`, with the Region the workload runs in today as `--from`: what redeploys with the IaC, which data stores to fill before or after deploying and how, what to handle while traffic switches, what is blocked, and what needs a decision. It changes nothing; summarize it in the report and edit nothing because of it.
 
 ## Optional: AWS Knowledge MCP server
 

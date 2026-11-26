@@ -126,7 +126,7 @@ Live account checks:
 
 Plan and compare:
 
-- `plan` covers the most frequent resource types; `unknown` means no rule covers the type. Waves follow references within a stack, `Fn::ImportValue` across stacks of a CDK assembly, nested-stack outputs, and Terraform references; values passed into nested stacks as parameters, and Terraform references through `locals` (absent from the plan JSON), are not followed; a module output that goes through a local counts as a dependency on the whole module, which can close a cycle the configuration does not have (the warning says so). Proposals count as blocking until applied.
+- `plan` covers the most frequent resource types; `unknown` means no rule covers the type, or its mechanism is not documented across the partitions of the move. Waves, in the JSON only, follow references within a stack, `Fn::ImportValue` across stacks of a CDK assembly, nested-stack outputs, and Terraform references; values passed into nested stacks as parameters, and Terraform references through `locals` (absent from the plan JSON), are not followed; a module output that goes through a local counts as a dependency on the whole module, which can close a cycle the configuration does not have (the warning says so). Proposals count as blocking until applied.
 - `compare` compares properties only when `--from` publishes a schema bundle. The `--to` properties come from its bundle, or from the account in live mode with `--properties`.
 
 AWS China:
