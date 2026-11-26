@@ -70,11 +70,14 @@ pub enum Listed {
 /// What each source said about one resource.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 pub struct Evidence {
-    /// The AWS Knowledge MCP data for the type, operation or service.
-    pub knowledge: Listed,
+    /// The public availability data for the type, operation or service. A listed type
+    /// can still be not available, when its product is not expanding to the target.
+    pub public: Listed,
     /// The live check found the resource offered. Null without live mode or when the
     /// check could not decide.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub live: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub live_check: Option<LiveCheckKind>,
 }
 
@@ -83,6 +86,7 @@ pub struct Evidence {
 pub struct Roadmap {
     pub product: String,
     pub status: State,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub launch: Option<String>,
 }
 
@@ -100,11 +104,13 @@ impl Roadmap {
 
     fn sentence(&self) -> String {
         let state = match (self.status, &self.launch) {
-            (State::Planned, Some(q)) => format!("is planned for {q}"),
-            (State::Planned, None) => "is planned".into(),
-            (State::Planning, _) => "is being planned, without a date".into(),
-            (State::NotExpanding, _) => "is not expanding to the region".into(),
-            (State::NotAvailable | State::Available, _) => "is not available".into(),
+            (State::Planned, Some(q)) => format!("is planned for the target region in {q}"),
+            (State::Planned, None) => "is planned for the target region".into(),
+            (State::Planning, _) => "is being planned for the target region, without a date".into(),
+            (State::NotExpanding, _) => "is not expanding to the target region".into(),
+            (State::NotAvailable | State::Available, _) => {
+                "is not available in the target region".into()
+            }
         };
         format!("{} {state}", self.product)
     }
@@ -121,10 +127,10 @@ pub struct Finding {
     pub roadmap: Option<Roadmap>,
     pub note: Option<String>,
     /// The source that decided whether the resource is offered. Roadmap states always
-    /// come from the Knowledge MCP data.
+    /// come from the public availability data.
     pub decided_by: DecidedBy,
-    /// The live check contradicted the Knowledge MCP data (an AWS data-staleness signal).
-    /// Visible in the JSON as `evidence.knowledge` against `evidence.live`.
+    /// The live check contradicted the public availability data (an AWS data-staleness signal).
+    /// Visible in the JSON as `evidence.public` against `evidence.live`.
     #[serde(skip)]
     pub divergence: bool,
     /// Property values checked against what the target region offers.
@@ -208,27 +214,23 @@ pub fn assess(
             };
         match (verdict, &roadmap) {
             (Verdict::Disputed | Verdict::NotAvailable, Some(rm)) if type_listed => notes.push(format!(
-                "{} lists {}, but {} in the target region. Check that the feature works before relying on it.",
+                "{} lists {}, but {}. Check that the feature works before relying on it.",
                 if live_listed == Some(true) {
                     "The CloudFormation registry of the target region"
                 } else {
-                    "The Knowledge MCP data"
+                    "The public availability data"
                 },
                 check_label(&check),
                 rm.sentence()
             )),
-            (Verdict::NotAvailable, _) if type_gap => notes.push(format!(
-                "The service is available in the target region, but CloudFormation does not offer {} there.",
-                check_label(&check)
-            )),
-            (Verdict::NotAvailable, Some(rm)) => {
-                notes.push(format!("{}.", rm.sentence()));
-                notes.push(NOT_AVAILABLE_NOTE.into());
-            }
-            (Verdict::NotAvailable, None) => notes.push(NOT_AVAILABLE_NOTE.into()),
+            (Verdict::NotAvailable, _) if type_gap => notes.push(
+                "The service is available in the target region, but CloudFormation does not offer the resource type there.".into(),
+            ),
+            // `roadmap` states the product's state.
+            (Verdict::NotAvailable, _) => notes.push(NOT_AVAILABLE_NOTE.into()),
             (Verdict::CannotAssess, _) => notes.push(match &check {
-                Check::Type(_) => "The Knowledge MCP data does not know this type; it may be retired or newer than the data. Live mode checks it in the target registry.".into(),
-                Check::Api { .. } => "The Knowledge MCP data does not know this service.".into(),
+                Check::Type(_) => "The public availability data does not know this type; it may be retired or newer than the data. Live mode checks it in the target registry.".into(),
+                Check::Api { .. } => "The public availability data does not know this service.".into(),
             }),
             _ => {}
         }
@@ -236,7 +238,7 @@ pub fn assess(
             service,
             verdict,
             evidence: Some(Evidence {
-                knowledge: listed,
+                public: listed,
                 live: live_listed,
                 live_check,
             }),
@@ -245,7 +247,7 @@ pub fn assess(
             decided_by: if live_listed.is_some() || refused {
                 DecidedBy::Live
             } else {
-                DecidedBy::Knowledge
+                DecidedBy::Public
             },
             divergence,
             type_gap,
@@ -303,7 +305,7 @@ fn sibling_available(t: &str, k: &Knowledge, live: Option<&Live>) -> bool {
 }
 
 /// The live answer, notes explaining why there is none, and whether an access-denied
-/// answer contradicts the Knowledge MCP data.
+/// answer contradicts the public availability data.
 fn live_result(
     live: Option<&Live>,
     check: &Check,
@@ -329,7 +331,7 @@ fn live_result(
                 Some(ServiceStatus::Refused) if listed == Listed::Available => (
                     None,
                     kind,
-                    vec!["The service answered access denied although the caller has ReadOnlyAccess, while the Knowledge MCP data lists it. Check account settings and policies that may deny the service.".into()],
+                    vec!["The service answered access denied although the caller has ReadOnlyAccess, while the public availability data lists it. Check account settings and policies that may deny the service.".into()],
                     true,
                 ),
                 Some(ServiceStatus::Refused) => (Some(false), kind, Vec::new(), false),
@@ -382,7 +384,7 @@ mod tests {
     fn available_type() {
         let f = one("AWS::Lambda::Function", None);
         assert_eq!(f.verdict, Verdict::Available);
-        assert_eq!(f.evidence.unwrap().knowledge, Listed::Available);
+        assert_eq!(f.evidence.unwrap().public, Listed::Available);
         assert!(f.roadmap.is_none() && f.note.is_none());
     }
 
@@ -470,7 +472,7 @@ mod tests {
         assert_eq!(f.decided_by, DecidedBy::Live);
         assert_eq!(
             one("AWS::Lambda::Function", None).decided_by,
-            DecidedBy::Knowledge
+            DecidedBy::Public
         );
         let f = one(
             "AWS::QBusiness::Application",

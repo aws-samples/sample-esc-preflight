@@ -10,10 +10,11 @@ use serde_json::Value;
 
 use super::aws_call::{Call, Caller, Outcome, xml_values};
 use super::http::Client;
+use super::terraform::TfMaps;
 use crate::depth::{DepthCheck, DepthKind, DepthSource};
 use crate::error::{Result, ScanError};
 use crate::extractor::PartitionFacts;
-use crate::model::{Origin, Template};
+use crate::model::{Origin, Resource, Template};
 
 /// The most a bundle may inflate to; the biggest is about 40 MB unpacked.
 const MAX_INFLATED: usize = 256 << 20;
@@ -72,8 +73,9 @@ pub fn bundle_url(facts: &PartitionFacts) -> Option<String> {
         })
 }
 
-/// CloudFormation resource types the input sets properties on.
-pub fn types(template: &Template) -> BTreeSet<String> {
+/// CloudFormation resource types the input sets properties on. Terraform awscc
+/// resources count as the CloudFormation type the provider maps them to.
+pub fn types(template: &Template, tf: Option<&TfMaps>) -> BTreeSet<String> {
     // A macro rewrites resources at deployment, so what the template sets is not what
     // reaches the registry.
     if !template.macros.is_empty() {
@@ -82,16 +84,36 @@ pub fn types(template: &Template) -> BTreeSet<String> {
     template
         .resources
         .values()
-        .filter(|r| checked(&r.resource_type, r.origin))
-        .map(|r| r.resource_type.clone())
+        .filter_map(|r| cfn_type(r, tf))
+        .map(str::to_string)
         .collect()
+}
+
+/// The registry type whose schema decides `r`'s properties, if it has one.
+fn cfn_type<'a>(r: &'a Resource, tf: Option<&'a TfMaps>) -> Option<&'a str> {
+    let t = match r.origin {
+        Origin::Cfn => r.deployed_type(),
+        Origin::TfAwscc => tf?.awscc_cfn_type(&r.resource_type)?,
+        Origin::TfAws => return None,
+    };
+    checked(t).then_some(t)
+}
+
+/// awscc attributes are the CloudFormation property names in snake case.
+fn same_name(cfn: &str, tf: &str) -> bool {
+    let norm = |s: &str| -> String {
+        s.chars()
+            .filter(|c| *c != '_')
+            .map(|c| c.to_ascii_lowercase())
+            .collect()
+    };
+    norm(cfn) == norm(tf)
 }
 
 /// AWS resource types with a registry schema. SAM types are transformed before they
 /// reach the registry; custom resources take any property.
-fn checked(resource_type: &str, origin: Origin) -> bool {
-    origin == Origin::Cfn
-        && resource_type.starts_with("AWS::")
+fn checked(resource_type: &str) -> bool {
+    resource_type.starts_with("AWS::")
         && !resource_type.starts_with("AWS::Serverless::")
         && resource_type != "AWS::CloudFormation::CustomResource"
 }
@@ -103,17 +125,26 @@ pub fn fetch_bundle(
     want: &BTreeSet<String>,
     settable_only: bool,
 ) -> Result<Schemas> {
-    let zip = client.get_bytes(url)?;
-    let files: BTreeSet<String> = want.iter().map(|t| file_name(t)).collect();
+    read_bundle(&client.get_bytes(url)?, url, Some(want), settable_only)
+}
+
+/// The schemas of `want` (all without it) in the bundle `zip` downloaded from `url`.
+pub fn read_bundle(
+    zip: &[u8],
+    url: &str,
+    want: Option<&BTreeSet<String>>,
+    settable_only: bool,
+) -> Result<Schemas> {
+    let files: Option<BTreeSet<String>> = want.map(|w| w.iter().map(|t| file_name(t)).collect());
     let mut out = Schemas::new();
-    for (name, data) in unzip(&zip, |n| files.contains(n))
+    for (name, data) in unzip(zip, |n| files.as_ref().is_none_or(|f| f.contains(n)))
         .map_err(|e| ScanError::DataSource(format!("{url}: {e}")))?
     {
         let unreadable =
             || ScanError::DataSource(format!("{url}: {name} is not a resource schema"));
         let text = String::from_utf8(data).map_err(|_| unreadable())?;
         let (t, props) = properties(&text, settable_only).ok_or_else(unreadable)?;
-        if want.contains(&t) {
+        if want.is_none_or(|w| w.contains(&t)) {
             out.insert(t, props);
         }
     }
@@ -226,34 +257,50 @@ pub fn properties(schema: &str, settable_only: bool) -> Option<(String, BTreeSet
 
 /// A depth check for every top-level property the input sets that the target schema
 /// of its type lacks. Types without a target schema are not checked.
-pub fn checks(template: &Template, schemas: &Schemas) -> BTreeMap<String, Vec<DepthCheck>> {
+pub fn checks(
+    template: &Template,
+    schemas: &Schemas,
+    tf: Option<&TfMaps>,
+) -> BTreeMap<String, Vec<DepthCheck>> {
     let mut out: BTreeMap<String, Vec<DepthCheck>> = BTreeMap::new();
     if !template.macros.is_empty() {
         return out;
     }
-    for r in template
-        .resources
-        .values()
-        .filter(|r| checked(&r.resource_type, r.origin))
-    {
-        let (Some(known), Some(props)) = (schemas.get(&r.resource_type), r.properties.as_object())
+    for r in template.resources.values() {
+        let Some(t) = cfn_type(r, tf) else {
+            continue;
+        };
+        let (Some(known), Some(props)) = (schemas.get(t), r.deployed_properties().as_object())
         else {
             continue;
         };
+        let terraform = r.origin == Origin::TfAwscc;
+        let configured = template.configured.get(&r.logical_id);
         for (key, value) in props {
             // `AWS::NoValue` removes the property; `Fn::Transform` (`AWS::Include`)
-            // replaces the properties.
-            if known.contains(key)
-                || key.starts_with("Fn::")
-                || value.get("Ref") == Some(&Value::from("AWS::NoValue"))
-            {
+            // replaces the properties. A Terraform plan lists unset and computed
+            // attributes too, so only arguments the configuration sets count.
+            let skip = if terraform {
+                value.is_null()
+                    || configured.is_some_and(|c| !c.contains(key))
+                    || known.iter().any(|k| same_name(k, key))
+            } else {
+                known.contains(key)
+                    || key.starts_with("Fn::")
+                    || value.get("Ref") == Some(&Value::from("AWS::NoValue"))
+            };
+            if skip {
                 continue;
             }
             out.entry(r.logical_id.clone())
                 .or_default()
                 .push(DepthCheck {
                     kind: DepthKind::Property,
-                    path: format!("Properties.{key}"),
+                    path: if terraform {
+                        key.clone()
+                    } else {
+                        format!("Properties.{key}")
+                    },
                     value: key.clone(),
                     offered: Some(false),
                     source: Some(DepthSource::Schema),
@@ -357,6 +404,57 @@ mod tests {
     }
 
     #[test]
+    fn awscc_attributes_are_checked_against_the_mapped_schema() {
+        let mut t = Template::default();
+        t.resources.insert(
+            "awscc_lambda_function.f".into(),
+            Resource {
+                logical_id: "awscc_lambda_function.f".into(),
+                resource_type: "awscc_lambda_function".into(),
+                properties: serde_json::json!({
+                    "runtime": "python3.13",
+                    "runtime_management_config": {"update_runtime_on": "Auto"},
+                    "snap_start": null,
+                    "accelerator_config": {}
+                }),
+                origin: Origin::TfAwscc,
+                env: None,
+                cdk_path: None,
+                deployed: None,
+            },
+        );
+        let tf = super::super::terraform::tests::fixture();
+        assert!(types(&t, None).is_empty());
+        // Computed attributes of a planned update are not set by the configuration.
+        let mut planned = t.clone();
+        planned.configured.insert(
+            "awscc_lambda_function.f".into(),
+            ["runtime".to_string()].into(),
+        );
+        assert_eq!(
+            types(&t, Some(&tf)),
+            ["AWS::Lambda::Function".to_string()].into()
+        );
+        let schemas = Schemas::from([(
+            "AWS::Lambda::Function".to_string(),
+            ["Runtime", "RuntimeManagementConfig", "SnapStart"]
+                .map(String::from)
+                .into(),
+        )]);
+        let c = checks(&t, &schemas, Some(&tf));
+        let found: Vec<(&str, &str)> = c["awscc_lambda_function.f"]
+            .iter()
+            .map(|d| (d.path.as_str(), d.value.as_str()))
+            .collect();
+        assert_eq!(found, [("accelerator_config", "accelerator_config")]);
+        let schemas_only = Schemas::from([(
+            "AWS::Lambda::Function".to_string(),
+            ["Runtime".to_string()].into(),
+        )]);
+        assert!(checks(&planned, &schemas_only, Some(&tf)).is_empty());
+    }
+
+    #[test]
     fn properties_the_target_lacks_are_checks() {
         let t = reader::parse_text(
             r#"{"Resources":{
@@ -368,7 +466,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            types(&t),
+            types(&t, None),
             ["AWS::Lambda::Function", "AWS::Unknown::Thing"]
                 .map(String::from)
                 .into()
@@ -377,13 +475,13 @@ mod tests {
             "AWS::Lambda::Function".to_string(),
             ["Runtime".to_string()].into(),
         )]);
-        let c = checks(&t, &schemas);
+        let c = checks(&t, &schemas, None);
         assert_eq!(c.len(), 1, "{c:?}");
         let f = &c["F"];
         assert_eq!(f.len(), 1, "AWS::NoValue sets nothing");
         let mut m = t.clone();
         m.macros = vec!["MyMacro".into()];
-        assert!(types(&m).is_empty() && checks(&m, &schemas).is_empty());
+        assert!(types(&m, None).is_empty() && checks(&m, &schemas, None).is_empty());
         assert_eq!(
             (f[0].kind, f[0].path.as_str(), f[0].offered, f[0].source),
             (

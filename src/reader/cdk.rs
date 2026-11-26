@@ -22,6 +22,7 @@ pub fn read_assembly(dir: &Path) -> Result<Template> {
         t: Template::default(),
     };
     walk.assembly(dir, 0)?;
+    walk.t.assembly = true;
     if walk.t.resources.is_empty() {
         return Err(ScanError::Input(format!(
             "{}: the cloud assembly contains no stack resources",
@@ -124,6 +125,9 @@ impl Walk {
                 format!("{id}/{r}"),
                 deps.into_iter().map(|d| format!("{id}/{d}")).collect(),
             );
+        }
+        for (export, output) in parsed.exports {
+            self.t.exports.insert(export, format!("{id}/{output}"));
         }
         for (name, mut o) in parsed.outputs {
             let full = format!("{id}/{name}");

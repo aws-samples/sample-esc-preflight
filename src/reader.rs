@@ -15,7 +15,7 @@ use saphyr::{LoadableYamlNode, Scalar, Yaml};
 use serde_json::{Map, Number, Value};
 
 use crate::error::{Result, ScanError};
-use crate::model::{DeployEnv, OUTPUT_TYPE, Origin, Resource, Template};
+use crate::model::{DeployEnv, GLOBALS_TYPE, OUTPUT_TYPE, Origin, Resource, Template};
 
 /// Reads a file, a directory, or stdin (`-`). A directory is a cloud assembly, a CDK
 /// project with `cdk.out`, or a directory with exactly one template or Terraform plan.
@@ -249,9 +249,11 @@ fn from_value(doc: &Value, env: Option<DeployEnv>) -> Result<Template> {
         })?;
     let mut flat = Map::new();
     expand_for_each(resources, &mut flat)?;
+    let sam = crate::sam::is_sam(doc.get("Transform"));
     let mut template = Template {
         macros: macros(doc.get("Transform")),
         ssm_defaults: ssm_defaults(doc.get("Parameters")),
+        sam,
         ..Template::default()
     };
     for (id, body) in flat {
@@ -281,15 +283,47 @@ fn from_value(doc: &Value, env: Option<DeployEnv>) -> Result<Template> {
             template.macros.sort();
             template.macros.dedup();
         }
+        let properties = body.get("Properties").cloned().unwrap_or(Value::Null);
+        // Globals reach the checks of the deployed resource; literals are reported
+        // where the template writes them, so the raw properties stay as they are.
+        let deployed = sam.then(|| {
+            let mut merged = properties.clone();
+            crate::sam::merge_globals(&resource_type, &mut merged, doc.get("Globals"));
+            crate::sam::deployed(&resource_type, &merged)
+        });
+        let deployed = deployed.flatten();
         template.resources.insert(
             id.clone(),
             Resource {
                 logical_id: id,
                 resource_type,
-                properties: body.get("Properties").cloned().unwrap_or(Value::Null),
+                properties,
                 origin: Origin::Cfn,
                 env: env.clone(),
                 cdk_path: body["Metadata"]["aws:cdk:path"].as_str().map(String::from),
+                deployed,
+            },
+        );
+    }
+    // SAM Globals are scanned for hardcoded values where they are written.
+    for (section, g) in doc
+        .get("Globals")
+        .filter(|_| sam)
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+    {
+        let id = format!("{GLOBALS_TYPE}/{section}");
+        template.outputs.insert(
+            id.clone(),
+            Resource {
+                logical_id: id,
+                resource_type: GLOBALS_TYPE.into(),
+                properties: g.clone(),
+                origin: Origin::Cfn,
+                env: env.clone(),
+                cdk_path: None,
+                deployed: None,
             },
         );
     }
@@ -302,6 +336,9 @@ fn from_value(doc: &Value, env: Option<DeployEnv>) -> Result<Template> {
         .flatten()
     {
         let id = format!("Outputs/{name}");
+        if let Some(export) = o["Export"]["Name"].as_str() {
+            template.exports.insert(export.to_string(), id.clone());
+        }
         template.outputs.insert(
             id.clone(),
             Resource {
@@ -311,6 +348,7 @@ fn from_value(doc: &Value, env: Option<DeployEnv>) -> Result<Template> {
                 origin: Origin::Cfn,
                 env: env.clone(),
                 cdk_path: None,
+                deployed: None,
             },
         );
     }

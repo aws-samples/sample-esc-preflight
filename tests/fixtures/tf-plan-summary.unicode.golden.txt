@@ -1,21 +1,38 @@
-◆ esc-preflight · 15 resources · eusc-de-east-1
-  Knowledge MCP · ESC User Guide 16 pages · public mode
-
-  AVAILABILITY
-  ✔ available           15
-  ✔ not available        0
-
-  PORTABILITY
-  ⚠ hardcoded fields     3   2 breaking · 3 resources: `arn:aws:`, +3 more
-  ✘ depth blockers       1   values the region does not offer
-
-  REQUIRED CHANGES  1 flag · 2 propose · 2 fix
-  ✘ flag     hardcoded `ami-0123456789abcdef0`           → look the resource up in the target
-  ● propose  RDS engine version `postgres 16.4` not of…  → choose one of 5 offered
-  ● propose  hardcoded `111122223333`                    → `${data.aws_caller_identity.current.account_id}`
-  ● fix      hardcoded `arn:aws-eusc:`                   → `arn:${data.aws_partition.current.partition}:`
-  ● fix      hardcoded `arn:aws:`                        → `arn:${data.aws_partition.current.partition}:`
-
-⚠ These rules match the input, but the ESC User Guide no longer contains the sentence they quote, so
-  they were skipped: rds-default-backup-window, rds-default-maintenance-window. Check the guide: the
-  restriction may have been lifted or reworded.
+╭─ esc-preflight test ─────────────────────────────────────────────────────────────────────────────╮
+│                                                                                                  │
+│ ╭──────────────────────────────────────────────────────────────────────────────────────────────╮ │
+│ │ template.yaml  Terraform plan · 15 resources                                                 │ │
+│ │ → eusc-de-east-1  public mode · capabilities API, Knowledge MCP, ESC User Guide              │ │
+│ ╰──────────────────────────────────────────────────────────────────────────────────────────────╯ │
+│                                                                                                  │
+│ ✘ Not ready for eusc-de-east-1                                                                   │
+│   1 blocker · 2 fixes ready · 2 to review · 1 to decide · 1 to verify                            │
+│                                                                                                  │
+├─ Availability                                                                 15 of 15 available │
+│   ✔ every resource is available                                                                  │
+│                                                                                                  │
+├─ Required changes                                                     1 flag · 2 propose · 2 fix │
+│   ● flag     hardcoded `ami-0123456789abcdef0`              → look the resource up in the target │
+│              └ aws_instance.this                                                                 │
+│   ✘ propose  RDS engine version `postgres 16.4` not offered → choose one of 5 offered            │
+│              └ aws_db_instance.this  aws_db_instance                                             │
+│   ● propose  hardcoded `111122223333`                                                            │
+│              → `${data.aws_caller_identity.current.account_id}`                                  │
+│              └ aws_codebuild_project.this                                                        │
+│   ● fix      hardcoded `arn:aws-eusc:`                                                           │
+│              → `arn:${data.aws_partition.current.partition}:`                                    │
+│              └ aws_codebuild_project.this                                                        │
+│   ● fix      hardcoded `arn:aws:`                                                                │
+│              → `arn:${data.aws_partition.current.partition}:`                                    │
+│              └ aws_iam_policy.bedrock                                                            │
+│                                                                                                  │
+├─ To verify                                                                                       │
+│   ? 1 resource  of providers other than aws and awscc, not assessed                              │
+│                                                                                                  │
+├─ Not checked                                                                                     │
+│   ! Rules whose sentence left the ESC User Guide: rds-default-backup-window,                     │
+│     rds-default-maintenance-window.                                                              │
+│     └ check the guide: the restriction may be lifted                                             │
+│                                                                                                  │
+│ JSON report not written  add --out report.json, or pipe stdout (| jq, > file)                    │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

@@ -8,6 +8,7 @@ use std::path::Path;
 /// Hosts the binary may contact outside the AWS SDK (live mode).
 const ALLOWED_HOSTS: &[&str] = &[
     "knowledge-mcp.global.api.aws",
+    "prod.capabilities.builder.aws.com",
     "docs.aws.eu",
     "registry.terraform.io",
     "raw.githubusercontent.com",
@@ -16,7 +17,7 @@ const ALLOWED_HOSTS: &[&str] = &[
 ];
 
 /// Hosts of documentation links written into the report, never fetched.
-const LINK_ONLY_HOSTS: &[&str] = &["docs.aws.amazon.com"];
+const LINK_ONLY_HOSTS: &[&str] = &["docs.aws.amazon.com", "aws.amazon.com"];
 
 /// Hosts that appear only inside `#[cfg(test)]` fixtures and test inputs.
 const TEST_ONLY_HOSTS: &[&str] = &[

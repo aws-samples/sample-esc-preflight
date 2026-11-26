@@ -1,23 +1,30 @@
-esc-preflight, 5 resources, eusc-de-east-1
-  Knowledge MCP, ESC User Guide 16 pages, public mode
-
-  AVAILABILITY
-  ok available            5
-  ok not available        0
-
-  PORTABILITY
-  !  hardcoded fields     1   1 resource: `arn:aws:`, `us-east-1`, `444455556666`
-  !  env literals         2   synthesized for account 111122223333 in eu-central-1
-
-  REQUIRED CHANGES  1 flag, 1 propose, 1 fix
-  x flag     hardcoded `us-east-1`, `444455556666`  -> set the target Region and account
-  * propose  2 values synthesized for eu-central-1  -> synthesize again for eusc-de-east-1
-  * fix      hardcoded `arn:aws:`                   -> `arn:${AWS::Partition}:`
-
-! The input was produced for eu-central-1, not eusc-de-east-1. Synthesize it for the target region
-  so region-specific values resolve as they will be deployed.
-  For a CDK app without a hardcoded env:
-    $ AWS_REGION=eusc-de-east-1 cdk synth
-
-! eusc-de-east-1 publishes no CloudFormation schema bundle, so resource properties were not checked
-  against it. Run in live mode to check them with cloudformation:DescribeType.
++- esc-preflight test -----------------------------------------------------------------------------+
+|                                                                                                  |
+| +----------------------------------------------------------------------------------------------+ |
+| | template.yaml  CloudFormation template - 5 resources                                         | |
+| | -> eusc-de-east-1  public mode - capabilities API, Knowledge MCP, ESC User Guide             | |
+| +----------------------------------------------------------------------------------------------+ |
+|                                                                                                  |
+| * Ready for eusc-de-east-1 after the changes below   1 fix ready - 1 to review - 1 to decide     |
+|                                                                                                  |
++- Availability                                                                   5 of 5 available |
+|   + every resource is available                                                                  |
+|                                                                                                  |
++- Required changes                                                     1 flag - 1 propose - 1 fix |
+|   * flag     hardcoded `us-east-1`, `444455556666` -> set the target Region and account          |
+|              `- 2 places in Fn                                                                   |
+|   * propose  2 values synthesized for eu-central-1 -> synthesize again for eusc-de-east-1        |
+|              `- the whole input                                                                  |
+|   * fix      hardcoded `arn:aws:`                  -> `arn:${AWS::Partition}:`                   |
+|              `- Fn                                                                               |
+|                                                                                                  |
++- Not checked                                                                                     |
+|   ! Resource properties: eusc-de-east-1 publishes no CloudFormation schema bundle.               |
+|     `- live mode checks them: esc-preflight scan template.yaml --profile <name>                  |
+|                                                                                                  |
++- Notes                                                                                           |
+|   ! The input was produced for eu-central-1, not eusc-de-east-1.                                 |
+|     `- For a CDK app without a hardcoded env: AWS_REGION=eusc-de-east-1 cdk synth                |
+|                                                                                                  |
+| JSON report not written  add --out report.json, or pipe stdout (| jq, > file)                    |
++--------------------------------------------------------------------------------------------------+

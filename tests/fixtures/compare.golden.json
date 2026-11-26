@@ -1,0 +1,71 @@
+{
+  "schema_version": 2,
+  "run": {
+    "tool_version": "test",
+    "mode": "public",
+    "source_region": "eu-central-1",
+    "target_region": "eusc-de-east-1"
+  },
+  "sources": {
+    "fetched_at": "1970-01-01T00:00:00Z",
+    "public": {
+      "types_urls": [
+        "https://prod.capabilities.builder.aws.com"
+      ],
+      "products_url": "https://prod.capabilities.builder.aws.com"
+    }
+  },
+  "summary": {
+    "products": 3,
+    "resource_types": 3,
+    "config_values": 2,
+    "properties": 0
+  },
+  "products": [
+    {
+      "state": "not-expanding",
+      "names": [
+        "Amazon Kendra",
+        "AWS IoT Core"
+      ]
+    },
+    {
+      "state": "planned",
+      "launch": "2027 Q1",
+      "names": [
+        "Amazon Q Business"
+      ]
+    }
+  ],
+  "resource_types": [
+    {
+      "types": [
+        "AWS::Old::Thing"
+      ]
+    },
+    {
+      "product": "Amazon Kendra",
+      "state": "not-expanding",
+      "types": [
+        "AWS::Kendra::Index",
+        "AWS::Kendra::DataSource"
+      ]
+    }
+  ],
+  "config_values": [
+    {
+      "resource_type": "AWS::EC2::Instance",
+      "property": "InstanceType",
+      "missing": [
+        "p5.48xlarge",
+        "u-6tb1.112xlarge"
+      ]
+    }
+  ],
+  "warnings": [
+    {
+      "code": "properties-unchecked",
+      "message": "eusc-de-east-1 publishes no CloudFormation schema bundle."
+    }
+  ]
+}

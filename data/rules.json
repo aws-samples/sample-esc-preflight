@@ -5255,6 +5255,34 @@
       }
     },
     {
+      "id": "move-cdk-support",
+      "kind": "mechanism",
+      "scope": {},
+      "source": {
+        "doc": {
+          "url": "https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/best-practices.html",
+          "quote": "After you have your stacks and resources set up, you can reuse your templates to replicate your infrastructure in multiple environments."
+        }
+      },
+      "types": [
+        "AWS::CDK::Metadata",
+        "Custom::S3AutoDeleteObjects",
+        "Custom::VpcRestrictDefaultSG",
+        "Custom::CDKBucketDeployment",
+        "Custom::AWSCDKOpenIdConnectProvider",
+        "Custom::CrossRegionExportWriter",
+        "Custom::CrossRegionExportReader"
+      ],
+      "mechanism": {
+        "boundary": "regional",
+        "content": "configuration",
+        "path": "redeploy",
+        "via": "redeploy the input; CDK writes these for its own constructs",
+        "crosses_partition": true,
+        "layer": "workload"
+      }
+    },
+    {
       "id": "move-function-code",
       "kind": "mechanism",
       "scope": {},
@@ -5347,7 +5375,7 @@
         "boundary": "regional",
         "content": "data",
         "path": "replicate",
-        "via": "S3 Replication, with S3 Batch Replication for existing objects",
+        "via": "deploy the bucket in the target, then fill it with S3 Replication and S3 Batch Replication for existing objects",
         "data": "migrate",
         "crosses_partition": null,
         "layer": "shared"
@@ -5359,8 +5387,8 @@
       "scope": {},
       "source": {
         "doc": {
-          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GlobalTables.html",
-          "quote": "Global tables automatically replicate your DynamoDB table data across AWS Regions and optionally across AWS accounts without requiring you to build and maintain your own replication solution."
+          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/S3DataImport.Requesting.html",
+          "quote": "DynamoDB import allows you to import data from an Amazon S3 bucket to a new DynamoDB table."
         }
       },
       "types": [
@@ -5370,18 +5398,11 @@
       "mechanism": {
         "boundary": "regional",
         "content": "data",
-        "path": "replicate",
-        "via": "a DynamoDB global table replica in the target",
+        "path": "restore",
+        "via": "export the table to Amazon S3, copy the export to the target, and deploy the table with ImportSourceSpecification from it",
         "data": "migrate",
-        "crosses_partition": null,
-        "layer": "shared",
-        "fallback": {
-          "path": "restore",
-          "via": "export the table to Amazon S3, copy the export, import it into a new table",
-          "data": "migrate",
-          "url": "https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/S3DataImport.HowItWorks.html",
-          "quote": "During the Amazon S3 import process, DynamoDB creates a new target table that will be imported into."
-        }
+        "crosses_partition": true,
+        "layer": "shared"
       }
     },
     {
@@ -5404,7 +5425,7 @@
         "boundary": "regional",
         "content": "data",
         "path": "restore",
-        "via": "copy a snapshot to the target and restore it",
+        "via": "copy a snapshot to the target and deploy the database from it (DBSnapshotIdentifier, SnapshotIdentifier)",
         "data": "migrate",
         "crosses_partition": null,
         "layer": "shared"

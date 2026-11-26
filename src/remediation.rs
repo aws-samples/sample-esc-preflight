@@ -56,6 +56,7 @@ pub enum CauseType {
 pub struct Cause {
     #[serde(rename = "type")]
     pub kind: CauseType,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub ids: Vec<String>,
 }
 
@@ -95,6 +96,17 @@ pub struct RequiredChange {
     /// Values the target offers, for the owner to choose from.
     pub candidates: Vec<String>,
     pub doc: Option<String>,
+    /// Known ways around the gap, each from an AWS page; empty when none is known.
+    pub mitigations: Vec<crate::mitigations::Mitigation>,
+    /// The resource type, for changes about one resource that is not a hazard.
+    #[serde(skip)]
+    pub resource_type: Option<String>,
+    /// The roadmap of an unavailable resource's product.
+    #[serde(skip)]
+    pub roadmap: Option<crate::matcher::Roadmap>,
+    /// The documented sentence a deviation or dependency rests on, and its page.
+    #[serde(skip)]
+    pub documented: Option<(String, String)>,
     /// The change in a few words for the terminal summary. Built from the same
     /// structured data as the change, never parsed from its text.
     #[serde(skip)]
@@ -149,6 +161,10 @@ impl RequiredChange {
             edits: Vec::new(),
             candidates: Vec::new(),
             doc: None,
+            mitigations: Vec::new(),
+            resource_type: None,
+            roadmap: None,
+            documented: None,
             brief,
         }
     }
@@ -161,7 +177,12 @@ impl RequiredChange {
 pub struct Edit {
     pub path: String,
     pub find: String,
-    pub replace: Replacement,
+    /// The expression that replaces `find`, per source kind; `None` where the owner
+    /// decides (a flag) or chooses (a proposal with candidates).
+    pub replace: Option<Replacement>,
+    /// The whole value `find` sits in, to locate it, for edits without a replacement
+    /// and proposals.
+    pub within: Option<String>,
 }
 
 // Literal rules in `data/rules.json` deserialize into this and reject unknown keys; the
@@ -187,6 +208,9 @@ pub struct Context<'a> {
     pub facts: Option<&'a crate::extractor::PartitionFacts>,
     /// Live mode's account checks.
     pub account: Option<&'a crate::account::AccountChecks>,
+    /// The Region the input runs in today (`--from`), for resources whose input does
+    /// not state a Region. A literal of the target still means the deployment Region.
+    pub source_region: Option<&'a str>,
 }
 
 struct Decision {
@@ -218,11 +242,17 @@ fn decide(l: &Literal, h: &Hazard, ctx: &Context) -> Decision {
     let v = &l.value;
     let env = h.env.as_ref();
     // Unknown environment: likely the deployment's own value, but not provable.
-    let own = |field: Option<&String>| match field {
+    let own = |field: Option<&str>| match field {
         None => Tier::Propose,
         Some(x) if x == v => Tier::Fix,
         Some(_) => Tier::Flag,
     };
+    // The Region the resource runs in: stated by the input, else `--from`.
+    let stated = env.and_then(|e| e.region.as_deref());
+    let region = stated.or(ctx.source_region);
+    // No Region known from the input itself: a literal of the target is the
+    // deployment Region. Without `--from`, only where the input states no environment.
+    let unstated = env.is_none() || (ctx.source_region.is_some() && stated.is_none());
     match l.kind {
         HazardKind::ArnPartition => Decision {
             tier: Tier::Fix,
@@ -260,9 +290,8 @@ fn decide(l: &Literal, h: &Hazard, ctx: &Context) -> Decision {
         HazardKind::DualStackSuffix => Decision {
             tier: Tier::Flag,
             action: "pass the dual-stack suffix per partition",
-            change: format!(
-                "No pseudo parameter gives the dual-stack DNS suffix. Pass `{v}` as a parameter or map it per partition, or use the partition DNS suffix if the client does not need IPv6."
-            ),
+            change: "No pseudo parameter gives the dual-stack DNS suffix. Pass the literal as a parameter or map it per partition, or use the partition DNS suffix if the client does not need IPv6."
+                .into(),
             precondition: None,
             replace: None,
         },
@@ -274,47 +303,45 @@ fn decide(l: &Literal, h: &Hazard, ctx: &Context) -> Decision {
             replace: rep("amazonaws.com", "amazonaws.com", "amazonaws.com"),
         },
         // A hand-written target Region means the Region the stack deploys to.
-        HazardKind::RegionLiteral if env.is_none() && l.impact == Impact::Portability => Decision {
+        HazardKind::RegionLiteral if unstated && l.impact == Impact::Portability => Decision {
             tier: Tier::Fix,
             action: "use the deployment Region",
-            change: format!("Use the deployment Region instead of `{v}`."),
+            change: "Use the deployment Region instead of the literal.".into(),
             precondition: None,
             replace: region_expr(),
         },
-        HazardKind::RegionLiteral => match own(env.and_then(|e| e.region.as_ref())) {
+        HazardKind::RegionLiteral => match own(region) {
             Tier::Flag => Decision {
                 tier: Tier::Flag,
                 action: "set the target Region",
-                change: format!(
-                    "`{v}` is not the Region this resource deploys to, so it refers to something in another Region. Decide what replaces it in the target."
-                ),
+                change: "The literal is not the Region this resource deploys to, so it refers to something in another Region. Decide what replaces it in the target."
+                .into(),
                 precondition: None,
                 replace: None,
             },
             tier => Decision {
                 tier,
                 action: "use the deployment Region",
-                change: format!("Use the deployment Region instead of `{v}`."),
+                change: "Use the deployment Region instead of the literal.".into(),
                 precondition: (tier == Tier::Propose).then_some(
                     "The value means the Region the stack deploys to. The input does not say which Region it was written for.",
                 ),
                 replace: region_expr(),
             },
         },
-        HazardKind::AccountId => match own(env.and_then(|e| e.account.as_ref())) {
+        HazardKind::AccountId => match own(env.and_then(|e| e.account.as_deref())) {
             Tier::Flag => Decision {
                 tier: Tier::Flag,
                 action: "set the target account",
-                change: format!(
-                    "`{v}` is not the account this resource deploys to. Name the account that has this role in the target partition; for an AWS-owned account, look up its value for the target Region."
-                ),
+                change: "The literal is not the account this resource deploys to. Name the account that has this role in the target partition; for an AWS-owned account, look up its value for the target Region."
+                .into(),
                 precondition: None,
                 replace: None,
             },
             tier => Decision {
                 tier,
                 action: "use the deployment account",
-                change: format!("Use the deployment account instead of `{v}`."),
+                change: "Use the deployment account instead of the literal.".into(),
                 precondition: (tier == Tier::Propose).then_some(
                     "The value is the account the stack deploys to, not another account such as a central logging or an AWS-owned account.",
                 ),
@@ -329,9 +356,8 @@ fn decide(l: &Literal, h: &Hazard, ctx: &Context) -> Decision {
         HazardKind::ResourceId => Decision {
             tier: Tier::Flag,
             action: "look the resource up in the target",
-            change: format!(
-                "`{v}` names a resource in one Region and account. Pass it as a parameter or look it up in the target: for an AMI, an SSM public parameter (`{{{{resolve:ssm:/aws/service/...}}}}` in CloudFormation, `data \"aws_ssm_parameter\"` in Terraform). For a CDK lookup, synthesize again for the target."
-            ),
+            change: "The literal names a resource in one Region and account. Pass it as a parameter or look it up in the target: for an AMI, an SSM public parameter (`{{resolve:ssm:/aws/service/...}}` in CloudFormation, `data \"aws_ssm_parameter\"` in Terraform). For a CDK lookup, synthesize again for the target."
+                .into(),
             precondition: None,
             replace: None,
         },
@@ -341,13 +367,13 @@ fn decide(l: &Literal, h: &Hazard, ctx: &Context) -> Decision {
                 .as_deref()
                 .and_then(|id| crate::rules::all().iter().find(|r| r.id == id));
             // The Region the endpoint names decides the tier, as for a Region literal.
-            let region = v.split_once('-').map_or("", |(_, r)| r).to_string();
-            let tier = if l.impact == Impact::Portability && env.is_none() {
+            let named = v.split_once('-').map_or("", |(_, r)| r).to_string();
+            let tier = if l.impact == Impact::Portability && unstated {
                 Tier::Fix
             } else {
-                match env.and_then(|e| e.region.as_ref()) {
+                match region {
                     None => Tier::Propose,
-                    Some(r) if *r == region => Tier::Fix,
+                    Some(r) if r == named => Tier::Fix,
                     Some(_) => Tier::Flag,
                 }
             };
@@ -355,9 +381,9 @@ fn decide(l: &Literal, h: &Hazard, ctx: &Context) -> Decision {
                 Some(r) if tier != Tier::Flag => Decision {
                     tier,
                     action: "use the standard endpoint of the deployment Region",
-                    change: format!(
-                        "Use the standard endpoint form of the deployment Region instead of `{v}`."
-                    ),
+                    change:
+                        "Use the standard endpoint form of the deployment Region instead of the literal."
+                            .into(),
                     precondition: (tier == Tier::Propose).then_some(
                         "The endpoint means the Region the stack deploys to. The input does not say which Region it was written for.",
                     ),
@@ -366,9 +392,8 @@ fn decide(l: &Literal, h: &Hazard, ctx: &Context) -> Decision {
                 _ => Decision {
                     tier: Tier::Flag,
                     action: "set the endpoint's Region",
-                    change: format!(
-                        "`{v}` is the legacy form of an endpoint in {region}, which is not the Region this resource deploys to. Decide what replaces it in the target; to keep {region}, use the standard form `s3.{region}`."
-                    ),
+                    change: "The literal is the legacy form of an endpoint in another Region than the one this resource deploys to. Decide what replaces it in the target; to keep that Region, use the standard form `s3.<region>`."
+                .into(),
                     precondition: None,
                     replace: None,
                 },
@@ -384,7 +409,7 @@ fn zone(l: &Literal, whole: &str, env: Option<&DeployEnv>, ctx: &Context) -> Dec
     let flag = |why: String| Decision {
         tier: Tier::Flag,
         action: "choose a zone in the target",
-        change: format!("Choose the zone for `{v}` in the target. {why}"),
+        change: format!("Choose the zone in the target. {why}"),
         precondition: None,
         replace: None,
     };
@@ -419,7 +444,7 @@ fn zone(l: &Literal, whole: &str, env: Option<&DeployEnv>, ctx: &Context) -> Dec
     let by_index = |texts: [&'static str; 2]| Decision {
         tier: Tier::Propose,
         action: "use the target's zone by index",
-        change: format!("Use the target's zone at index {i} instead of `{v}`."),
+        change: "Use the target's zone at the same index instead of the literal.".into(),
         precondition: Some(texts[usize::from(i >= 2)]),
         replace: rep(
             &format!(r#"{{"Fn::Select": [{i}, {{"Fn::GetAZs": ""}}]}}"#),
@@ -469,6 +494,16 @@ fn foreign_principal(h: &Hazard) -> Option<RequiredChange> {
                 .into(),
         );
         c.impact = Some(Impact::Breaks);
+        c.edits = h
+            .literals
+            .iter()
+            .map(|l| Edit {
+                path: h.path.clone(),
+                find: l.value.clone(),
+                replace: None,
+                within: Some(clip(&h.value, WITHIN_MAX)),
+            })
+            .collect();
         c
     })
 }
@@ -523,19 +558,29 @@ pub fn hazard(h: &Hazard, ctx: &Context) -> Vec<RequiredChange> {
                 c.consequence = Some(ECR_IMAGE_REGION_CONSEQUENCE.into());
             }
         }
+        // A flag keeps where the literal is, without a replacement.
         c.edits = mine
             .iter()
-            .filter_map(|(l, d)| {
-                d.replace.clone().map(|replace| Edit {
-                    path: h.path.clone(),
-                    find: l.value.clone(),
-                    replace,
-                })
+            .map(|(l, d)| Edit {
+                path: h.path.clone(),
+                find: l.value.clone(),
+                replace: d.replace.clone(),
+                within: (tier != Tier::Fix).then(|| clip(&h.value, WITHIN_MAX)),
             })
             .collect();
         out.push(c);
     }
     out
+}
+
+/// The longest `within` value; enough to find the string in source.
+const WITHIN_MAX: usize = 200;
+
+fn clip(s: &str, max: usize) -> String {
+    match s.char_indices().nth(max) {
+        Some((i, _)) => format!("{}...", &s[..i]),
+        None => s.to_string(),
+    }
 }
 
 /// Short actions joined; a shared leading phrase is said once: "use the deployment
@@ -580,7 +625,7 @@ pub fn deviation(d: &Deviation, ctx: &Context) -> RequiredChange {
     // ESC substitutes hold where the target has a single Region; other rules state
     // their own scope.
     let usable = ctx.single_region || d.decided_by != DecidedBy::Guide;
-    match d.remediation.as_ref().filter(|_| usable) {
+    let mut c = match d.remediation.as_ref().filter(|_| usable) {
         Some(m) => {
             let mut c = RequiredChange::new(
                 &d.logical_id,
@@ -594,19 +639,18 @@ pub fn deviation(d: &Deviation, ctx: &Context) -> RequiredChange {
             c.doc = Some(m.doc.clone());
             c
         }
-        None => {
-            let mut c = RequiredChange::new(
-                &d.logical_id,
-                Tier::Flag,
-                cause,
-                reason,
-                "Decide how to remove or replace the feature in the target.".into(),
-                brief(what, "remove or replace the feature").about(&d.resource_type),
-            );
-            c.doc = Some(d.source.clone());
-            c
-        }
-    }
+        None => RequiredChange::new(
+            &d.logical_id,
+            Tier::Flag,
+            cause,
+            reason,
+            "Decide how to remove or replace the feature in the target.".into(),
+            brief(what, "remove or replace the feature").about(&d.resource_type),
+        ),
+    };
+    c.resource_type = Some(d.resource_type.clone());
+    c.documented = Some((d.documented.clone(), d.source.clone()));
+    c
 }
 
 pub fn dependency(d: &Dependency) -> RequiredChange {
@@ -630,6 +674,8 @@ pub fn dependency(d: &Dependency) -> RequiredChange {
     );
     c.consequence = Some(m.consequence.clone());
     c.doc = Some(m.doc.clone());
+    c.resource_type = Some(d.resource_type.clone());
+    c.documented = Some((d.documented.clone(), d.source.clone()));
     c
 }
 
@@ -662,11 +708,14 @@ pub fn account(a: &crate::account::AccountChecks, target_region: &str) -> Vec<Re
             "*",
             &q.rule,
             format!(
-                "the input alone needs {} of {} ({} {}), the account's {} quota in {target_region} is {}",
+                "the input needs {} of {} ({} {}){}, the account's {} quota in {target_region} is {}",
                 q.needed,
                 q.name,
                 q.service_code,
                 q.quota_code,
+                q.used
+                    .map(|u| format!(" and the account already uses {u}"))
+                    .unwrap_or_default(),
                 id(q.value_source),
                 q.quota
             ),
@@ -698,6 +747,27 @@ pub fn account(a: &crate::account::AccountChecks, target_region: &str) -> Vec<Re
             "Ask the organization's administrators to allow the target Region for the account."
                 .into(),
             brief("SCP denies the Region", "have the SCP allow the Region"),
+        ));
+    }
+    for d in a.scp.iter().flat_map(|s| &s.services_denied) {
+        out.push(flag(
+            "*",
+            "scp",
+            match &d.policy {
+                Some(p) => format!(
+                    "the service control policy {p} on {} denies every {} action",
+                    d.target, d.service
+                ),
+                None => format!(
+                    "no service control policy on {} allows {} actions",
+                    d.target, d.service
+                ),
+            },
+            "Ask the organization's administrators to allow the service for the account.".into(),
+            brief(
+                format!("SCP denies {}", d.service),
+                "have the SCP allow the service",
+            ),
         ));
     }
     for p in a.ssm_parameters.iter().filter(|p| !p.exists) {
@@ -732,6 +802,36 @@ pub fn depth(
     );
     let what = format!("{} `{}` not offered", kind_label(d.kind), d.value);
     let cause = Cause::new(CauseType::Depth, [id(d.kind)]);
+    // Where the value is: an engine check holds `engine version` and points at the
+    // version, a property check at the property, which has no value to find.
+    let place = Edit {
+        path: d.path.clone(),
+        find: match d.kind {
+            DepthKind::Property => String::new(),
+            k if k.is_engine() || k == DepthKind::RdsInstanceClass => d
+                .value
+                .split_once(' ')
+                .map_or(d.value.as_str(), |(_, v)| v)
+                .to_string(),
+            _ => d.value.clone(),
+        },
+        replace: None,
+        within: None,
+    };
+    let mut c = depth_change(logical_id, d, target_region, ctx, reason, what, cause);
+    c.edits = vec![place];
+    c
+}
+
+fn depth_change(
+    logical_id: &str,
+    d: &DepthCheck,
+    target_region: &str,
+    ctx: &Context,
+    reason: String,
+    what: String,
+    cause: Cause,
+) -> RequiredChange {
     if d.kind == DepthKind::Property {
         let mut c = RequiredChange::new(
             logical_id,
@@ -757,6 +857,10 @@ pub fn depth(
         (k, Some(s)) if k.is_engine() => (
             version_candidates(&d.value, s),
             "Versions differ in features and fixes; test the application against the chosen one.",
+        ),
+        (DepthKind::LambdaArchitecture, Some(s)) => (
+            s.iter().filter(|a| **a != d.value).cloned().collect(),
+            "Native dependencies, layers and container images built for arm64 must be rebuilt for x86_64, and price and performance differ.",
         ),
         _ => (Vec::new(), ""),
     };
@@ -790,12 +894,14 @@ fn kind_label(k: DepthKind) -> &'static str {
         DepthKind::FoundationModel => "foundation model",
         DepthKind::InferenceProfile => "inference profile",
         DepthKind::RdsEngineVersion => "RDS engine version",
+        DepthKind::RdsInstanceClass => "RDS DB instance class",
         DepthKind::CacheEngineVersion => "ElastiCache engine version",
         DepthKind::CacheNodeType => "ElastiCache node type",
         DepthKind::NeptuneEngineVersion => "Neptune engine version",
         DepthKind::DocumentDbEngineVersion => "DocumentDB engine version",
         DepthKind::RedshiftNodeType => "Redshift node type",
         DepthKind::Property => "property",
+        DepthKind::LambdaArchitecture => "Lambda architecture",
     }
 }
 
@@ -927,7 +1033,7 @@ mod tests {
         );
         assert_eq!(c.len(), 1);
         assert_eq!(c[0].tier, Tier::Flag);
-        assert!(c[0].edits.is_empty());
+        assert!(c[0].edits.iter().all(|e| e.replace.is_none()));
         assert!(c[0].change.contains("does not cross partitions"));
     }
 
@@ -1039,7 +1145,7 @@ mod tests {
         assert_eq!(c[0].tier, Tier::Fix);
         assert_eq!(c[0].edits.len(), 2);
         assert_eq!(
-            c[0].edits[0].replace.cloudformation,
+            c[0].edits[0].replace.as_ref().unwrap().cloudformation,
             "arn:${AWS::Partition}:"
         );
         assert!(c[0].precondition.is_none());
@@ -1077,6 +1183,45 @@ mod tests {
                 Some(env("us-east-1", Some("444455556666"))),
                 &ctx
             ),
+            [Tier::Flag]
+        );
+    }
+
+    #[test]
+    fn from_names_the_region_of_inputs_that_state_none() {
+        let ctx = Context {
+            source_region: Some("eu-central-1"),
+            ..Context::default()
+        };
+        let region = |v: &str| vec![lit(HazardKind::RegionLiteral, v)];
+        assert_eq!(tiers(region("eu-central-1"), None, &ctx), [Tier::Fix]);
+        assert_eq!(tiers(region("us-east-1"), None, &ctx), [Tier::Flag]);
+        let target = Literal {
+            impact: Impact::Portability,
+            ..lit(HazardKind::RegionLiteral, "eusc-de-east-1")
+        };
+        assert_eq!(
+            tiers(vec![target], None, &ctx),
+            [Tier::Fix],
+            "the target itself"
+        );
+        // An environment without a Region, such as a Terraform plan's: --from applies.
+        let no_region = DeployEnv {
+            region: None,
+            account: Some("111122223333".into()),
+        };
+        assert_eq!(
+            tiers(region("eu-central-1"), Some(no_region.clone()), &ctx),
+            [Tier::Fix]
+        );
+        let target = Literal {
+            impact: Impact::Portability,
+            ..lit(HazardKind::RegionLiteral, "eusc-de-east-1")
+        };
+        assert_eq!(tiers(vec![target], Some(no_region), &ctx), [Tier::Fix]);
+        // A Region the input states wins over --from.
+        assert_eq!(
+            tiers(region("eu-central-1"), Some(env("us-east-1", None)), &ctx),
             [Tier::Flag]
         );
     }
@@ -1182,7 +1327,10 @@ mod tests {
             Tier::Propose,
             "the input does not say its Region"
         );
-        assert_eq!(c[0].edits[0].replace.cloudformation, "s3.${AWS::Region}");
+        assert_eq!(
+            c[0].edits[0].replace.as_ref().unwrap().cloudformation,
+            "s3.${AWS::Region}"
+        );
         assert!(
             c[0].cause
                 .ids
@@ -1220,7 +1368,12 @@ mod tests {
         );
         assert_eq!(c.len(), 1);
         assert_eq!(c[0].tier, Tier::Flag);
-        assert!(c[0].edits.is_empty());
+        assert_eq!(c[0].edits.len(), 1);
+        assert!(c[0].edits[0].replace.is_none());
+        assert_eq!(
+            c[0].edits[0].within.as_deref(),
+            Some("sqs.eu-west-1.api.aws")
+        );
     }
 
     #[test]
@@ -1265,7 +1418,7 @@ mod tests {
             &live,
         );
         assert_eq!(
-            c[0].edits[0].replace.terraform,
+            c[0].edits[0].replace.as_ref().unwrap().terraform,
             "data.aws_availability_zones.available.names[1]"
         );
     }
@@ -1299,6 +1452,62 @@ mod tests {
             one(z, "eu-central-1a", "app-eu-central-1a", &live),
             Tier::Flag
         );
+    }
+
+    #[test]
+    fn arm64_without_graviton_proposes_x86_64_and_locates_engine_versions() {
+        let offered: Offered = [(
+            DepthKind::LambdaArchitecture,
+            BTreeSet::from(["x86_64".to_string()]),
+        )]
+        .into();
+        let ctx = Context {
+            offered: Some(&offered),
+            ..Context::default()
+        };
+        let check = |kind, path: &str, value: &str| DepthCheck {
+            kind,
+            path: path.into(),
+            value: value.into(),
+            offered: Some(false),
+            source: None,
+        };
+        let c = depth(
+            "F",
+            &check(DepthKind::LambdaArchitecture, "Architectures[]", "arm64"),
+            "eusc-de-east-1",
+            &ctx,
+        );
+        assert_eq!(c.tier, Tier::Propose);
+        assert_eq!(c.candidates, ["x86_64"]);
+        assert!(
+            c.consequence
+                .as_deref()
+                .is_some_and(|s| s.contains("rebuilt"))
+        );
+        assert_eq!(
+            (c.edits[0].path.as_str(), c.edits[0].find.as_str()),
+            ("Architectures[]", "arm64")
+        );
+        // An engine check holds `engine version`; the place is the version.
+        let e = depth(
+            "D",
+            &check(
+                DepthKind::RdsEngineVersion,
+                "EngineVersion",
+                "postgres 11.1",
+            ),
+            "eusc-de-east-1",
+            &Context::default(),
+        );
+        assert_eq!(e.edits[0].find, "11.1");
+        let p = depth(
+            "D",
+            &check(DepthKind::Property, "Properties.X", "X"),
+            "eusc-de-east-1",
+            &Context::default(),
+        );
+        assert!(p.edits[0].find.is_empty());
     }
 
     fn dev(remediation: bool) -> Deviation {

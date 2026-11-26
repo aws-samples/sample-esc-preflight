@@ -12,10 +12,15 @@
         "bedrock:ListFoundationModels",
         "bedrock:ListInferenceProfiles",
         "rds:DescribeDBEngineVersions",
+        "rds:DescribeOrderableDBInstanceOptions",
         "elasticache:DescribeCacheEngineVersions",
         "ec2:DescribeRegions",
         "servicequotas:GetServiceQuota",
-        "servicequotas:GetAWSDefaultServiceQuota"
+        "servicequotas:GetAWSDefaultServiceQuota",
+        "ec2:DescribeVpcs",
+        "ec2:DescribeInternetGateways",
+        "ec2:DescribeAddresses",
+        "lambda:GetAccountSettings"
       ],
       "Resource": "*"
     },

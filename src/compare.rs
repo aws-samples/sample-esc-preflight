@@ -12,14 +12,9 @@ use serde::Serialize;
 
 use crate::provider::knowledge::{Knowledge, State};
 use crate::provider::schema::{SchemaProvenance, Schemas};
-use crate::report::clean;
 
-pub const SCHEMA_VERSION: u32 = 1;
-
-#[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
+#[derive(Debug, Clone)]
 pub struct Comparison {
-    #[schemars(extend("const" = 1))]
-    pub schema_version: u32,
     pub from: String,
     pub to: String,
     pub data_provenance: CompareProvenance,
@@ -35,27 +30,34 @@ pub struct Comparison {
     pub warnings: Vec<CompareWarning>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
-pub struct CompareWarning {
-    pub code: CompareWarningCode,
-    pub message: String,
-}
+pub type CompareWarning = crate::report::Warning<CompareWarningCode>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum CompareWarningCode {
-    /// The Knowledge MCP server has no data for `to`: products and config values are
+    /// No public availability data covers the target: products and config values are
     /// not compared.
-    ToUnlisted,
+    PublicDataRegionUnlisted,
+    /// A Region publishes no product or config value data (China): products and config
+    /// values are not compared.
+    ProductsUnchecked,
     /// A Region without a schema bundle, and no live mode for it: properties are not
     /// compared.
-    PropertiesUncompared,
+    PropertiesUnchecked,
 }
 
-#[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
+#[derive(Debug, Clone)]
 pub struct CompareProvenance {
     pub tool_version: String,
-    pub knowledge_url: String,
+    /// Where the CloudFormation types and config values of Regions outside China came
+    /// from: the Builder Center capabilities API, or the Knowledge MCP server when the
+    /// API failed. Null when both Regions are in China.
+    pub cloudformation_url: Option<String>,
+    /// Where product states of Regions outside China came from; null when both are
+    /// in China.
+    pub products_url: Option<String>,
+    /// The schema bundles that gave China Regions their resource types.
+    pub china_bundle_urls: Vec<String>,
     /// When the public data was fetched.
     pub fetched_at: String,
     /// The account `to` was read from, when a profile was given.
@@ -63,6 +65,8 @@ pub struct CompareProvenance {
     /// The schemas read for each Region; both null when properties are not compared.
     pub from_schemas: Option<SchemaProvenance>,
     pub to_schemas: Option<SchemaProvenance>,
+    /// Types whose schema both Regions gave, so their properties were compared.
+    pub compared_types: usize,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, schemars::JsonSchema)]
@@ -108,7 +112,7 @@ pub struct PropertyGap {
 /// What a comparison reads, decided before any data is fetched.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Scope {
-    /// Products and config values: `to` has Knowledge MCP data.
+    /// Products and config values: both Regions have Knowledge MCP data.
     pub products: bool,
     /// Where `to`'s schemas come from; null: properties are not compared.
     pub to_schemas: Option<crate::provider::schema::SchemaSource>,
@@ -117,11 +121,17 @@ pub struct Scope {
 
 /// What is known about the two Regions before any data is fetched.
 pub struct Sources {
-    /// The Knowledge MCP server has data for the Region.
+    /// A public source has the Region's resource types: the Knowledge MCP server lists
+    /// it, or it is in China.
     pub from_listed: bool,
     pub to_listed: bool,
+    /// The Region has product and config value data: the Knowledge MCP server lists it.
+    pub from_products: bool,
+    pub to_products: bool,
     /// Live mode reads `to`.
     pub live: bool,
+    /// `--properties`: live mode reads `to`'s schemas.
+    pub properties: bool,
     /// The Region publishes a CloudFormation schema bundle.
     pub from_bundle: bool,
     pub to_bundle: bool,
@@ -131,46 +141,69 @@ pub struct Sources {
 pub fn scope(from: &str, to: &str, s: &Sources) -> Result<Scope, String> {
     use crate::provider::schema::SchemaSource;
     if !s.from_listed {
-        return Err(format!(
-            "the AWS Knowledge MCP server has no data for {from}"
-        ));
+        return Err(format!("no public availability data covers {from}"));
     }
     if !s.to_listed && !s.live {
         return Err(crate::provider::knowledge::unlisted(to));
     }
     let mut warnings = Vec::new();
-    let mut warn = |code, message| warnings.push(CompareWarning { code, message });
+    // Each warning names the Region it is about.
+    let mut warn = |code, message, region: &str| {
+        warnings.push(CompareWarning::new(code, message, vec![region.to_string()]))
+    };
+    let products = s.to_listed && s.from_products && s.to_products;
     if !s.to_listed {
         warn(
-            CompareWarningCode::ToUnlisted,
+            CompareWarningCode::PublicDataRegionUnlisted,
             format!(
-                "The AWS Knowledge MCP server has no data for {to}, so products and config values are not compared."
+                "No public availability data covers {to}, so products and config values are not compared."
             ),
+            to,
+        );
+    } else if !products {
+        let region = if s.from_products { to } else { from };
+        warn(
+            CompareWarningCode::ProductsUnchecked,
+            format!(
+                "{region} publishes no product or config value data, so products and config values are not compared."
+            ),
+            region,
         );
     }
     let to_schemas = if !s.from_bundle {
         warn(
-            CompareWarningCode::PropertiesUncompared,
+            CompareWarningCode::PropertiesUnchecked,
             format!(
                 "{from} publishes no CloudFormation schema bundle, so resource properties are not compared."
             ),
+            from,
         );
         None
-    } else if s.live {
+    } else if s.live && s.properties {
         Some(SchemaSource::Live)
     } else if s.to_bundle {
         Some(SchemaSource::Bundle)
+    } else if s.live {
+        warn(
+            CompareWarningCode::PropertiesUnchecked,
+            format!(
+                "{to} publishes no CloudFormation schema bundle, so resource properties are not compared. Add --properties to read them from the account, which takes several minutes."
+            ),
+            to,
+        );
+        None
     } else {
         warn(
-            CompareWarningCode::PropertiesUncompared,
+            CompareWarningCode::PropertiesUnchecked,
             format!(
-                "{to} publishes no CloudFormation schema bundle, so resource properties are not compared. Run with --profile to read them from the account."
+                "{to} publishes no CloudFormation schema bundle, so resource properties are not compared. Run in live mode (--live, --profile or --role-arn) with --properties to read them from the account."
             ),
+            to,
         );
         None
     };
     Ok(Scope {
-        products: s.to_listed,
+        products,
         to_schemas,
         warnings,
     })
@@ -201,9 +234,11 @@ pub fn diff(
     to_types: &BTreeSet<String>,
     schemas: Option<(&Schemas, &Schemas)>,
 ) -> Diff {
+    // A merged name stands for its per-service entries, which are compared instead.
     let products = from
         .products
         .iter()
+        .filter(|(name, _)| !from.merged.contains(*name) && !to.merged.contains(*name))
         .filter(|(_, p)| p.state == State::Available)
         .filter_map(|(name, _)| {
             let there = to.products.get(name);
@@ -289,7 +324,6 @@ pub fn build(
         config_values.clear();
     }
     Comparison {
-        schema_version: SCHEMA_VERSION,
         from: from.into(),
         to: to.into(),
         data_provenance,
@@ -305,75 +339,6 @@ pub fn build(
         properties,
         warnings,
     }
-}
-
-/// The terminal summary: counts, then the first entries of each list.
-pub fn text_summary(c: &Comparison) -> String {
-    const SHOWN: usize = 8;
-    let mut out = vec![format!("esc-preflight compare, {} -> {}", c.from, c.to)];
-    let p = &c.data_provenance;
-    let mut sources = vec!["Knowledge MCP".to_string()];
-    if p.from_schemas.is_some() && p.to_schemas.is_some() {
-        sources.push("schemas".into());
-    }
-    if p.live_account_id.is_some() {
-        sources.push(format!("live mode for {}", c.to));
-    }
-    out.push(format!("  {}", sources.join(", ")));
-    let mut section = |title: &str, items: Vec<String>| {
-        out.push(String::new());
-        out.push(format!("  {title}  {}", items.len()));
-        for i in items.iter().take(SHOWN) {
-            out.push(format!("    {i}"));
-        }
-        if items.len() > SHOWN {
-            out.push(format!(
-                "    +{} more in the JSON report",
-                items.len() - SHOWN
-            ));
-        }
-    };
-    let state = |s: Option<State>, launch: &Option<String>| match (s, launch) {
-        (Some(State::Planned), Some(q)) => format!("planned for {q}"),
-        (Some(s), _) => crate::remediation::id(s),
-        (None, _) => "not listed".into(),
-    };
-    section(
-        &format!("PRODUCTS not in {}", c.to),
-        c.products
-            .iter()
-            .map(|g| format!("{} ({})", clean(&g.name), state(g.to_state, &g.to_launch)))
-            .collect(),
-    );
-    section(
-        &format!("RESOURCE TYPES not in {}", c.to),
-        c.resource_types
-            .iter()
-            .map(|g| clean(&g.resource_type))
-            .collect(),
-    );
-    section(
-        &format!("CONFIG VALUES not in {}", c.to),
-        c.config_values
-            .iter()
-            .map(|g| format!("{}: {}", clean(&g.key), g.missing.len()))
-            .collect(),
-    );
-    if p.from_schemas.is_some() && p.to_schemas.is_some() {
-        section(
-            &format!("PROPERTIES not in {}", c.to),
-            c.properties
-                .iter()
-                .map(|g| format!("{}: {}", clean(&g.resource_type), g.missing.join(", ")))
-                .collect(),
-        );
-    }
-    for w in &c.warnings {
-        out.push(String::new());
-        out.push(format!("  ! {}", clean(&w.message)));
-    }
-    out.push(String::new());
-    out.join("\n")
 }
 
 #[cfg(test)]
@@ -483,6 +448,36 @@ mod tests {
         assert_eq!(c[0].missing, ["p5.48xlarge"]);
         assert_eq!(props[0].missing, ["New"]);
         assert!(diff(&from, &to, &to_types, None).properties.is_empty());
+        // A merged name is compared per service.
+        let mut from = from.clone();
+        let mut to = to.clone();
+        for (n, s) in [
+            ("PrivateLink Support", State::Available),
+            ("S3: PrivateLink Support", State::Available),
+        ] {
+            from.products.insert(
+                n.into(),
+                Product {
+                    state: s,
+                    launch: None,
+                },
+            );
+        }
+        to.products.insert(
+            "S3: PrivateLink Support".into(),
+            Product {
+                state: State::Planning,
+                launch: None,
+            },
+        );
+        to.merged.insert("PrivateLink Support".into());
+        let names: Vec<String> = diff(&from, &to, &to_types, None)
+            .products
+            .into_iter()
+            .map(|g| g.name)
+            .collect();
+        assert!(names.contains(&"S3: PrivateLink Support".to_string()));
+        assert!(!names.contains(&"PrivateLink Support".to_string()));
     }
 
     #[test]
@@ -495,7 +490,10 @@ mod tests {
                 &Sources {
                     from_listed: listed.0,
                     to_listed: listed.1,
+                    from_products: listed.0,
+                    to_products: listed.1,
                     live,
+                    properties: live,
                     from_bundle: bundles.0,
                     to_bundle: bundles.1,
                 },
@@ -504,7 +502,7 @@ mod tests {
         assert!(
             s((false, true), true, (true, true))
                 .unwrap_err()
-                .contains("no data for a")
+                .contains("covers a")
         );
         assert!(
             s((true, false), false, (true, true))
@@ -512,17 +510,74 @@ mod tests {
                 .contains("live mode")
         );
         let codes = |sc: &Scope| sc.warnings.iter().map(|w| w.code).collect::<Vec<_>>();
+        // Each warning names its Region.
+        let w = s((true, false), true, (false, false)).unwrap();
+        assert_eq!(
+            w.warnings
+                .iter()
+                .map(|w| (w.code, w.items.join(",")))
+                .collect::<Vec<_>>(),
+            [
+                (
+                    CompareWarningCode::PublicDataRegionUnlisted,
+                    "b".to_string()
+                ),
+                (CompareWarningCode::PropertiesUnchecked, "a".to_string())
+            ]
+        );
         let public = s((true, true), false, (true, true)).unwrap();
         assert_eq!((public.products, public.to_schemas), (true, Some(Bundle)));
         assert!(public.warnings.is_empty());
         let esc = s((true, true), false, (true, false)).unwrap();
         assert_eq!(esc.to_schemas, None);
-        assert_eq!(codes(&esc), [CompareWarningCode::PropertiesUncompared]);
+        assert_eq!(codes(&esc), [CompareWarningCode::PropertiesUnchecked]);
         let live = s((true, true), true, (true, false)).unwrap();
         assert_eq!(live.to_schemas, Some(Live));
         let unlisted = s((true, false), true, (true, false)).unwrap();
         assert!(!unlisted.products);
-        assert_eq!(codes(&unlisted), [CompareWarningCode::ToUnlisted]);
+        assert_eq!(
+            codes(&unlisted),
+            [CompareWarningCode::PublicDataRegionUnlisted]
+        );
+        let china = scope(
+            "a",
+            "cn-north-1",
+            &Sources {
+                from_listed: true,
+                to_listed: true,
+                from_products: true,
+                to_products: false,
+                live: false,
+                properties: false,
+                from_bundle: true,
+                to_bundle: true,
+            },
+        )
+        .unwrap();
+        assert_eq!((china.products, china.to_schemas), (false, Some(Bundle)));
+        assert_eq!(codes(&china), [CompareWarningCode::ProductsUnchecked]);
+        assert!(
+            china.warnings[0]
+                .message
+                .starts_with("cn-north-1 publishes")
+        );
+        let quick = scope(
+            "a",
+            "b",
+            &Sources {
+                from_listed: true,
+                to_listed: true,
+                from_products: true,
+                to_products: true,
+                live: true,
+                properties: false,
+                from_bundle: true,
+                to_bundle: false,
+            },
+        )
+        .unwrap();
+        assert_eq!(quick.to_schemas, None);
+        assert!(quick.warnings[0].message.contains("--properties"));
         let from_none = s((true, true), true, (false, true)).unwrap();
         assert_eq!(from_none.to_schemas, None);
         assert!(from_none.warnings[0].message.starts_with("a publishes"));
@@ -531,44 +586,69 @@ mod tests {
     #[test]
     fn summary_caps_long_lists() {
         let c = Comparison {
-            schema_version: SCHEMA_VERSION,
             from: "eu-central-1".into(),
             to: "eusc-de-east-1".into(),
             data_provenance: CompareProvenance {
                 tool_version: "test".into(),
-                knowledge_url: "u".into(),
+                cloudformation_url: Some("c".into()),
+                products_url: None,
+                china_bundle_urls: vec![],
                 fetched_at: "t".into(),
                 live_account_id: None,
                 from_schemas: None,
                 to_schemas: None,
+                compared_types: 0,
             },
             summary: CompareSummary::default(),
             products: (0..10)
                 .map(|i| ProductGap {
                     name: format!("P{i}"),
-                    to_state: Some(State::NotExpanding),
+                    to_state: Some(if i < 9 {
+                        State::NotExpanding
+                    } else {
+                        State::NotAvailable
+                    }),
                     to_launch: None,
                 })
                 .collect(),
             resource_types: vec![],
             config_values: vec![],
             properties: vec![],
-            warnings: vec![CompareWarning {
-                code: CompareWarningCode::ToUnlisted,
-                message: "w".into(),
-            }],
+            warnings: vec![CompareWarning::new(
+                CompareWarningCode::PropertiesUnchecked,
+                "w".into(),
+                Vec::new(),
+            )],
         };
-        let t = text_summary(&c);
-        assert!(t.contains("PRODUCTS not in eusc-de-east-1  10"), "{t}");
+        let summary = |c: &Comparison| {
+            crate::summary::compare_summary(
+                c,
+                crate::tui::Style::default(),
+                &crate::tui::Run::default(),
+            )
+        };
+        let t = summary(&c);
+        assert!(t.contains(" Products "), "{t}");
         assert!(
-            t.contains("P0 (not-expanding)") && t.contains("+2 more"),
+            t.lines()
+                .any(|l| l.contains("not expanding") && l.contains("9") && l.contains("+6 more")),
             "{t}"
         );
-        assert!(!t.contains("PROPERTIES"), "no schemas, no property section");
-    }
-
-    #[test]
-    fn committed_schema_matches_the_comparison_types() {
-        crate::report::tests::assert_committed_schema::<Comparison>("compare.schema.json");
+        assert!(t.contains("9 not expanding - 1 not available"), "{t}");
+        assert!(t.contains("properties not compared"), "{t}");
+        // No roadmap in the target: marked as a blocker.
+        assert!(t.lines().any(|l| l.contains("  x not expanding")), "{t}");
+        assert!(t.lines().any(|l| l.contains("  x not available")), "{t}");
+        let mut uncompared = c.clone();
+        uncompared.warnings[0].code = CompareWarningCode::ProductsUnchecked;
+        let u = summary(&uncompared);
+        assert!(
+            !u.contains(" Products ") && !u.contains(" Config values "),
+            "{u}"
+        );
+        assert!(
+            !t.contains(" Properties "),
+            "no schemas, no property section"
+        );
     }
 }

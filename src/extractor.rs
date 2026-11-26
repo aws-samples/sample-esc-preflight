@@ -8,7 +8,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::model::{DeployEnv, OUTPUT_TYPE, Origin, Template};
+use crate::model::{DeployEnv, GLOBALS_TYPE, OUTPUT_TYPE, Origin, Template};
 use serde::Serialize;
 use serde_json::Value;
 
@@ -149,8 +149,12 @@ pub fn hazards(template: &Template, facts: &PartitionFacts) -> Scan {
     let all_envs = template.envs();
     for r in template.resources.values().chain(template.outputs.values()) {
         let mut props = r.properties.clone();
+        let section = r.logical_id.rsplit('/').next().unwrap_or_default();
+        let globals_root = format!("{GLOBALS_TYPE}.{section}");
         let root = if r.resource_type == OUTPUT_TYPE {
             "Value"
+        } else if r.resource_type == GLOBALS_TYPE {
+            globals_root.as_str()
         } else if r.origin == Origin::Cfn {
             "Properties"
         } else {
@@ -778,6 +782,7 @@ pub(crate) mod tests {
                             account: None,
                         }),
                         cdk_path: None,
+                        deployed: None,
                     },
                 );
             }

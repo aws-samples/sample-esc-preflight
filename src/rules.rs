@@ -629,6 +629,25 @@ mod tests {
                 }
             }
         }
+        for m in crate::mitigations::all() {
+            let (url, quote) = (&m.source.url, &m.source.quote);
+            let page = pages.entry(url.clone()).or_insert_with(|| norm(&get(url)));
+            if !page.contains(&norm(quote)) {
+                missing.push(url);
+                eprintln!("data/mitigations.json: quote not on {url}");
+            }
+        }
+        for (t, s) in crate::sam::types() {
+            let page = pages
+                .entry(s.doc.clone())
+                .or_insert_with(|| norm(&get(&s.doc)));
+            for (prop, p) in &s.pass_through {
+                if !page.contains(&norm(&p.quote)) {
+                    missing.push(&p.property);
+                    eprintln!("data/sam.json {t} {prop}: quote not on {}", s.doc);
+                }
+            }
+        }
         assert!(missing.is_empty(), "{missing:?}");
     }
 

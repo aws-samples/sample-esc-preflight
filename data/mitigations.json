@@ -1,0 +1,102 @@
+{
+  "mitigations": [
+    {
+      "id": "appsync-graphql-on-lambda",
+      "types": ["AWS::AppSync::*", "aws_appsync_*", "awscc_appsync_*"],
+      "rules": [],
+      "partitions": [],
+      "kind": "self-managed",
+      "summary": "Run the GraphQL API on AWS Lambda behind Amazon API Gateway",
+      "tradeoffs": "You build, run and scale the GraphQL layer yourself; real-time subscriptions need a WebSocket endpoint.",
+      "source": {
+        "url": "https://aws.amazon.com/blogs/mobile/building-a-graphql-api-with-java-and-aws-lambda/",
+        "quote": "Lambda can be used as a compute platform to run a fully-functional GraphQL API."
+      },
+      "validation": "documented"
+    },
+    {
+      "id": "iot-fleetwise-greengrass-agl",
+      "types": ["AWS::IoTFleetWise::*", "aws_iotfleetwise_*", "awscc_iotfleetwise_*"],
+      "rules": [],
+      "partitions": [],
+      "kind": "substitute",
+      "summary": "Collect vehicle data with AWS IoT and AWS IoT Greengrass on Automotive Grade Linux",
+      "tradeoffs": "Signal decoding and campaigns that AWS IoT FleetWise manages become your code; check that AWS IoT and Greengrass are available in the target.",
+      "source": {
+        "url": "https://aws.amazon.com/blogs/iot/integrating-aws-iot-and-aws-greengrass-into-the-automotive-grade-linux-software-stack/",
+        "quote": "a reference implementation that helps you integrate AWS IoT and AWS Greengrass into the AGL software stack."
+      },
+      "validation": "documented"
+    },
+    {
+      "id": "cloudfront-from-the-global-partition",
+      "types": ["AWS::CloudFront::*", "aws_cloudfront_*", "awscc_cloudfront_*"],
+      "rules": [],
+      "partitions": ["aws-us-gov"],
+      "kind": "cross-partition",
+      "summary": "Serve the content through CloudFront in the global partition with origins in AWS GovCloud (US)",
+      "tradeoffs": "The distribution and its logs live in another partition, under another account; check that this meets your compliance requirements.",
+      "source": {
+        "url": "https://docs.aws.amazon.com/govcloud-us/latest/UserGuide/setting-up-cloudfront.html",
+        "quote": "CloudFront is not available in AWS GovCloud (US), but you can use CloudFront in the standard Regions and point to your AWS GovCloud (US) resources."
+      },
+      "validation": "documented"
+    },
+    {
+      "id": "forecast-sagemaker-deepar",
+      "types": ["AWS::Forecast::*", "aws_forecast_*", "awscc_forecast_*"],
+      "rules": [],
+      "partitions": [],
+      "kind": "substitute",
+      "summary": "Train and host forecasts with the Amazon SageMaker AI DeepAR algorithm",
+      "tradeoffs": "You prepare data, train, tune and host the model yourself; check that SageMaker AI and its built-in algorithms are available in the target.",
+      "source": {
+        "url": "https://docs.aws.amazon.com/sagemaker/latest/dg/deepar.html",
+        "quote": "The Amazon SageMaker AI DeepAR forecasting algorithm is a supervised learning algorithm for forecasting scalar (one-dimensional) time series using recurrent neural networks (RNN)."
+      },
+      "validation": "documented"
+    },
+    {
+      "id": "flink-on-emr",
+      "types": ["AWS::KinesisAnalyticsV2::*", "AWS::KinesisAnalytics::*", "aws_kinesisanalyticsv2_*", "awscc_kinesisanalyticsv2_*"],
+      "rules": [],
+      "partitions": [],
+      "kind": "self-managed",
+      "summary": "Run the Apache Flink application on Amazon EMR",
+      "tradeoffs": "You size, patch and scale the cluster; Flink checkpoints and savepoints move to storage you manage.",
+      "source": {
+        "url": "https://docs.aws.amazon.com/emr/latest/ReleaseGuide/emr-flink.html",
+        "quote": "Amazon EMR supports Flink as a YARN application so that you can manage resources along with other applications within a cluster."
+      },
+      "validation": "documented"
+    },
+    {
+      "id": "timestream-managed-prometheus",
+      "types": ["AWS::Timestream::*", "aws_timestreamwrite_*", "awscc_timestream_*"],
+      "rules": [],
+      "partitions": [],
+      "kind": "substitute",
+      "summary": "Store metrics in Amazon Managed Service for Prometheus",
+      "tradeoffs": "Covers metrics only; queries move to PromQL, and other time series need a self-managed database.",
+      "source": {
+        "url": "https://docs.aws.amazon.com/prometheus/latest/userguide/what-is-Amazon-Managed-Service-Prometheus.html",
+        "quote": "Amazon Managed Service for Prometheus is a serverless, Prometheus-compatible monitoring service for container metrics that makes it easier to securely monitor container environments at scale."
+      },
+      "validation": "documented"
+    },
+    {
+      "id": "eks-managed-node-groups",
+      "types": [],
+      "rules": ["eks-fargate"],
+      "partitions": [],
+      "kind": "substitute",
+      "summary": "Run the pods on Amazon EKS managed node groups instead of Fargate profiles",
+      "tradeoffs": "You choose instance types and keep node AMIs current; pods no longer get a per-pod isolation boundary.",
+      "source": {
+        "url": "https://docs.aws.amazon.com/eks/latest/userguide/managed-node-groups.html",
+        "quote": "Amazon EKS managed node groups automate the provisioning and lifecycle management of nodes (Amazon EC2 instances) for Amazon EKS Kubernetes clusters."
+      },
+      "validation": "documented"
+    }
+  ]
+}

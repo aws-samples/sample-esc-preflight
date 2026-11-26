@@ -18,6 +18,8 @@ pub enum DepthKind {
     FoundationModel,
     InferenceProfile,
     RdsEngineVersion,
+    /// `engine class`: an RDS DB instance class orderable for the engine; live mode.
+    RdsInstanceClass,
     CacheEngineVersion,
     CacheNodeType,
     NeptuneEngineVersion,
@@ -25,6 +27,9 @@ pub enum DepthKind {
     RedshiftNodeType,
     /// A top-level resource property the target's CloudFormation schema lacks.
     Property,
+    /// `arm64` as a Lambda function's architecture: the public availability data's
+    /// Lambda feature "Graviton (ARM) Support" decides.
+    LambdaArchitecture,
 }
 
 impl DepthKind {
@@ -43,7 +48,7 @@ impl DepthKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, schemars::JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum DepthSource {
-    Knowledge,
+    Public,
     Live,
     /// The target's CloudFormation resource schema.
     Schema,
@@ -104,7 +109,19 @@ const SINGLE: &[(&str, &str, DepthKind)] = &[
     ),
     ("AWS::Redshift::Cluster", "NodeType", RedshiftNodeType),
     ("aws_redshift_cluster", "node_type", RedshiftNodeType),
+    (
+        "AWS::Lambda::Function",
+        "Architectures[]",
+        LambdaArchitecture,
+    ),
+    ("aws_lambda_function", "architectures[]", LambdaArchitecture),
 ];
+
+/// The Lambda feature behind `arm64`, as the capabilities API names the service and
+/// the feature.
+pub const GRAVITON_FEATURE: (&str, &str) = ("AWS Lambda", "Graviton (ARM) Support");
+/// The architecture that feature adds; `x86_64` exists wherever Lambda does.
+const ARM64: &str = "arm64";
 
 /// `(resource type, version property, engine, kind)` for services with one engine.
 const FIXED_ENGINES: &[(&str, &str, &str, DepthKind)] = &[
@@ -134,8 +151,29 @@ const FIXED_ENGINES: &[(&str, &str, &str, DepthKind)] = &[
     ),
 ];
 
-/// The Knowledge MCP config parent of each kind it covers. Engine values are keyed
-/// `<engine>-<version>` there.
+/// A kind live mode probes in the target account. `provider::live::depth_probe`
+/// answers only these.
+pub fn live_probes(kind: DepthKind) -> bool {
+    // No wildcard: a new kind must be decided here, and `depth_probe` asks this first.
+    match kind {
+        InstanceType | AvailabilityZone | FoundationModel | InferenceProfile | RdsEngineVersion
+        | RdsInstanceClass | CacheEngineVersion => true,
+        CacheNodeType
+        | NeptuneEngineVersion
+        | DocumentDbEngineVersion
+        | RedshiftNodeType
+        | Property
+        | LambdaArchitecture => false,
+    }
+}
+
+/// A kind the public availability data answers where it has config values.
+pub fn is_public(kind: DepthKind) -> bool {
+    kind == LambdaArchitecture || CONFIG.iter().any(|(k, _)| *k == kind)
+}
+
+/// The config parent of each kind the public availability data covers. Engine values
+/// are keyed `<engine>-<version>` there.
 const CONFIG: &[(DepthKind, &str)] = &[
     (InstanceType, "AWS::EC2::Instance::InstanceType"),
     (RdsEngineVersion, "AWS::RDS::DBInstance::EngineVersion"),
@@ -185,6 +223,18 @@ const ENGINES: &[(&str, &str, &str, DepthKind)] = &[
         RdsEngineVersion,
     ),
     (
+        "AWS::RDS::DBInstance",
+        "Engine",
+        "DBInstanceClass",
+        RdsInstanceClass,
+    ),
+    (
+        "aws_db_instance",
+        "engine",
+        "instance_class",
+        RdsInstanceClass,
+    ),
+    (
         "AWS::ElastiCache::CacheCluster",
         "Engine",
         "EngineVersion",
@@ -216,8 +266,8 @@ pub fn checks(template: &Template, target_region: &str) -> BTreeMap<String, Vec<
     let mut out: BTreeMap<String, Vec<DepthCheck>> = BTreeMap::new();
     for r in template.resources.values() {
         let mut found = Vec::new();
-        let p = &r.properties;
-        for (_, path, kind) in SINGLE.iter().filter(|(t, ..)| *t == r.resource_type) {
+        let (p, rt) = (r.deployed_properties(), r.deployed_type());
+        for (_, path, kind) in SINGLE.iter().filter(|(t, ..)| *t == rt) {
             let (key, list) = match path.strip_suffix("[]") {
                 Some(k) => (k, true),
                 None => (*path, false),
@@ -233,19 +283,22 @@ pub fn checks(template: &Template, target_region: &str) -> BTreeMap<String, Vec<
                 v.as_str().into_iter().collect()
             };
             for value in values {
+                if *kind == LambdaArchitecture && value != ARM64 {
+                    continue;
+                }
                 if *kind != AvailabilityZone || value.starts_with(target_region) {
                     found.push(check(*kind, path, value));
                 }
             }
         }
-        for (_, e, v, kind) in ENGINES.iter().filter(|(t, ..)| *t == r.resource_type) {
+        for (_, e, v, kind) in ENGINES.iter().filter(|(t, ..)| *t == rt) {
             if let (Some(engine), Some(version)) = (p[*e].as_str(), p[*v].as_str()) {
                 // Engine names are case-insensitive in the APIs and lowercase in the data.
                 let engine = engine.to_ascii_lowercase();
                 found.push(check(*kind, v, &format!("{engine} {version}")));
             }
         }
-        for (_, v, engine, kind) in FIXED_ENGINES.iter().filter(|(t, ..)| *t == r.resource_type) {
+        for (_, v, engine, kind) in FIXED_ENGINES.iter().filter(|(t, ..)| *t == rt) {
             if let Some(version) = p[*v].as_str() {
                 found.push(check(*kind, v, &format!("{engine} {version}")));
             }
@@ -315,7 +368,8 @@ pub fn needs_config(checks: &BTreeMap<String, Vec<DepthCheck>>) -> bool {
         .any(|c| CONFIG.iter().any(|(k, _)| *k == c.kind))
 }
 
-/// What the Knowledge MCP config values offer, in the shape the checks use.
+/// What the public config values offer, and the Lambda architectures the public
+/// product data implies, in the shape the checks use.
 pub fn public_offered(k: &Knowledge) -> Offered {
     let mut out = Offered::new();
     for (kind, parent) in CONFIG {
@@ -341,6 +395,16 @@ pub fn public_offered(k: &Knowledge) -> Offered {
             })
             .collect();
         out.insert(*kind, set);
+    }
+    // AWS China publishes no features, so the architecture stays unchecked there, as
+    // it does when the capabilities API failed.
+    let (service, feature) = GRAVITON_FEATURE;
+    if let Some(p) = k.features.get(&(service.to_string(), feature.to_string())) {
+        let mut set = BTreeSet::from(["x86_64".to_string()]);
+        if p.state == crate::provider::knowledge::State::Available {
+            set.insert(ARM64.into());
+        }
+        out.insert(LambdaArchitecture, set);
     }
     out
 }
@@ -401,7 +465,10 @@ mod tests {
         );
         assert_eq!(
             v("aws_db_instance.this"),
-            [(RdsEngineVersion, "postgres 16.4".to_string())]
+            [
+                (RdsEngineVersion, "postgres 16.4".to_string()),
+                (RdsInstanceClass, "postgres db.t4g.micro".to_string())
+            ]
         );
         assert_eq!(
             v("aws_iam_policy.bedrock"),
@@ -471,12 +538,67 @@ mod tests {
         );
         assert!(!o.contains_key(&AvailabilityZone));
         let mut c = plan_checks();
-        resolve(&mut c, &o, DepthSource::Knowledge);
+        resolve(&mut c, &o, DepthSource::Public);
         let db = &c["aws_db_instance.this"][0];
-        assert_eq!(db.source, Some(DepthSource::Knowledge));
+        assert_eq!(db.source, Some(DepthSource::Public));
         assert!(db.offered.is_some());
         // Zones are left to live mode.
         assert_eq!(c["module.net.aws_subnet.private[0]"][0].offered, None);
+    }
+
+    #[test]
+    fn lambda_arm64_follows_the_graviton_feature() {
+        use crate::provider::knowledge::{Product, State};
+        let t = crate::reader::parse_text(
+            r#"{"Transform":"AWS::Serverless-2016-10-31","Resources":{
+              "A":{"Type":"AWS::Lambda::Function","Properties":{"Architectures":["arm64"]}},
+              "X":{"Type":"AWS::Lambda::Function","Properties":{"Architectures":["x86_64"]}},
+              "S":{"Type":"AWS::Serverless::Function","Properties":{"Architectures":["arm64"]}}}}"#,
+        )
+        .unwrap();
+        let c = checks(&t, "eusc-de-east-1");
+        assert!(!c.contains_key("X"), "x86_64 exists wherever Lambda does");
+        assert_eq!(
+            (
+                c["A"][0].kind,
+                c["A"][0].path.as_str(),
+                c["S"][0].value.as_str()
+            ),
+            (LambdaArchitecture, "Architectures[]", "arm64")
+        );
+        let state = |s: State| {
+            let mut k = crate::provider::knowledge::Knowledge::default();
+            let (service, feature) = GRAVITON_FEATURE;
+            k.features.insert(
+                (service.into(), feature.into()),
+                Product {
+                    state: s,
+                    launch: None,
+                },
+            );
+            // The same name under another service does not count.
+            k.products.insert(
+                feature.into(),
+                Product {
+                    state: State::Available,
+                    launch: None,
+                },
+            );
+            let mut c = c.clone();
+            resolve(&mut c, &public_offered(&k), DepthSource::Public);
+            c["A"][0].offered
+        };
+        assert_eq!(state(State::Available), Some(true));
+        assert_eq!(state(State::Planning), Some(false));
+        // Without product data (AWS China) the value stays unchecked.
+        let mut none = c.clone();
+        resolve(
+            &mut none,
+            &public_offered(&Default::default()),
+            DepthSource::Public,
+        );
+        assert_eq!(none["A"][0].offered, None);
+        assert!(is_public(LambdaArchitecture));
     }
 
     #[test]

@@ -205,11 +205,16 @@ fn has_read_only(caller: &Caller, arn: &str) -> bool {
 }
 
 /// The values the region offers for one depth kind, or `None` when the probe failed.
+/// Answers at most the kinds `depth::live_probes` names, which the values-unchecked
+/// warning relies on.
 fn depth_probe(
     caller: &Caller,
     kind: DepthKind,
     checks: &BTreeMap<String, Vec<DepthCheck>>,
 ) -> Option<BTreeSet<String>> {
+    if !depth::live_probes(kind) {
+        return None;
+    }
     let ec2 = service("ec2");
     let set = |v: Result<Vec<String>>| v.ok().map(|v| v.into_iter().collect());
     match kind {
@@ -251,6 +256,7 @@ fn depth_probe(
             "Marker",
             &depth::engines(checks, kind),
         ),
+        DepthKind::RdsInstanceClass => orderable_classes(caller, checks),
         DepthKind::CacheEngineVersion => engine_versions(
             caller,
             "elasticache",
@@ -259,13 +265,13 @@ fn depth_probe(
             "Marker",
             &depth::engines(checks, kind),
         ),
-        // Covered by the Knowledge MCP data only.
+        // Not probed, see `depth::live_probes`.
         DepthKind::CacheNodeType
         | DepthKind::NeptuneEngineVersion
         | DepthKind::DocumentDbEngineVersion
-        | DepthKind::RedshiftNodeType => None,
-        // Read from the resource schemas, not probed.
-        DepthKind::Property => None,
+        | DepthKind::RedshiftNodeType
+        | DepthKind::Property
+        | DepthKind::LambdaArchitecture => None,
     }
 }
 
@@ -297,6 +303,40 @@ fn bedrock(caller: &Caller, op: &str, uri: &str, list: &str, id: &str) -> Option
             _ => return Some(out),
         }
     }
+}
+
+/// The input's `engine class` values that RDS can order in the region: one call per
+/// pair, filtered by engine and class.
+fn orderable_classes(
+    caller: &Caller,
+    checks: &BTreeMap<String, Vec<DepthCheck>>,
+) -> Option<BTreeSet<String>> {
+    let s = service("rds");
+    let wanted: BTreeSet<&str> = checks
+        .values()
+        .flatten()
+        .filter(|c| c.kind == DepthKind::RdsInstanceClass)
+        .map(|c| c.value.as_str())
+        .collect();
+    let mut out = BTreeSet::new();
+    for v in wanted {
+        let Some((engine, class)) = v.split_once(' ') else {
+            continue;
+        };
+        let p = [
+            ("Engine", engine),
+            ("DBInstanceClass", class),
+            ("MaxRecords", "20"),
+        ];
+        match caller.call(s, "DescribeOrderableDBInstanceOptions", "POST", "/", &p) {
+            Outcome::Ok(body) if body.contains("<OrderableDBInstanceOption>") => {
+                out.insert(v.to_string());
+            }
+            Outcome::Ok(_) | Outcome::NoEndpoint => {}
+            _ => return None,
+        }
+    }
+    Some(out)
 }
 
 /// `engine version` pairs for each engine. Each listed version element is read only up

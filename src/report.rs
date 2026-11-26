@@ -13,27 +13,40 @@ use crate::provider::knowledge::State;
 use crate::provider::live::LiveProvenance;
 use crate::remediation::{self, Cause, CauseType, Context, RequiredChange, Tier};
 
-/// Version of the JSON report's shape. Adding a field or an enum value keeps it;
-/// removing or renaming a field, or changing what one means, increments it.
-pub const SCHEMA_VERSION: u32 = 1;
-
 #[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
 pub struct TerraformProvenance {
     pub aws_provider_version: String,
     pub awscc_provider_version: String,
 }
 
-#[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
+#[derive(Debug, Clone)]
 pub struct KnowledgeProvenance {
+    /// Where products, services and APIs came from: the AWS Knowledge MCP server, or the
+    /// AWS SDK endpoint data for China.
     pub url: String,
-    /// Types, services or operations the server does not know.
+    /// Where the CloudFormation types and config values came from: the Builder Center
+    /// capabilities API, the Knowledge MCP server when the API failed, or the Region's
+    /// schema bundle for China.
+    pub cloudformation_url: String,
+    /// Where the product and roadmap states came from: the capabilities API, with the
+    /// Knowledge MCP server for the not-expanding state, or the Knowledge MCP server
+    /// alone when the API failed. Null for China, which publishes none.
+    pub products_url: Option<String>,
+    /// Types, services or operations the sources do not know.
     pub unknown: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
+#[derive(Debug, Clone)]
 pub struct Provenance {
     pub tool_version: String,
+    /// The input as named on the command line, `.` or `stdin`.
+    pub input: String,
+    /// `--from`: the Region the workload runs in today.
+    pub source_region: Option<String>,
+    /// Stacks of a CDK assembly or template, by the stack prefixes of the ids.
+    pub stacks: usize,
     pub source_format: SourceFormat,
+    pub input_kind: crate::model::InputKind,
     pub target_region: String,
     /// The account the input moves to, when `--account` is given.
     pub target_account: Option<String>,
@@ -41,7 +54,8 @@ pub struct Provenance {
     pub input_environments: Vec<DeployEnv>,
     /// botocore release of the bundled partition data.
     pub partitions_version: String,
-    /// Null when the server has no data for the target, so live mode decides alone.
+    /// The public availability data; null when no public source covers the target, so
+    /// live mode decides alone.
     pub knowledge: Option<KnowledgeProvenance>,
     /// ESC User Guide service pages, when the target is in its partition.
     pub user_guide: Option<GuideProvenance>,
@@ -54,13 +68,10 @@ pub struct Provenance {
     /// publishes no schema bundle and live mode is off.
     pub schemas: Option<crate::provider::schema::SchemaProvenance>,
     /// CloudFormation resource types in the input, for the unchecked-properties warning.
-    #[serde(skip)]
     pub schema_types: usize,
     /// Live mode was refused `cloudformation:DescribeType`.
-    #[serde(skip)]
     pub schema_denied: bool,
     /// Macros in the template's `Transform`, which skip the property checks.
-    #[serde(skip)]
     pub macros: Vec<String>,
 }
 
@@ -75,23 +86,27 @@ pub struct Summary {
     pub planned: usize,
     /// Property values with a hardcoded hazard; each is one place to fix.
     pub hazards: usize,
-    /// Property values written for the input's own environment (see `environment_literals`).
-    pub environment_literals: usize,
+    /// Hazards with a literal that breaks in the target, and hazards whose literals
+    /// only tie the input to one Region or account; together `hazards`.
+    pub hazards_breaking: usize,
+    pub hazards_portability: usize,
+    /// Property values written for the input's own environment (see
+    /// `run.input_environments`).
+    pub environment_literal_places: usize,
     pub divergences: usize,
     /// Depth checks whose value the target region does not offer, plus a zone
-    /// shortfall (see `zones`).
+    /// shortfall.
     pub depth_blockers: usize,
     /// Account checks that block deployment (see `account`).
     pub account_blockers: usize,
     /// Resources that use a feature the ESC User Guide or another AWS page documents as
     /// not available.
-    pub deviations: usize,
-    /// Guide restrictions the Knowledge MCP data contradicts; warnings, not blockers.
+    pub deviation_blockers: usize,
+    /// Guide restrictions the public availability data contradicts; warnings, not blockers.
     pub guide_conflicts: usize,
     /// Features that work with a documented difference.
     pub caveats: usize,
-    /// Documented dependencies outside the target, one per resource and rule (see
-    /// `dependencies`).
+    /// Documented dependencies outside the target, one per resource and rule.
     pub dependencies: usize,
     /// Required changes by tier: applied as stated, applied after a yes, owner decides.
     pub fixes: usize,
@@ -122,8 +137,9 @@ pub struct Outcome {
 impl Outcome {
     pub fn of(s: &Summary) -> Self {
         Self {
-            blocker: s.depth_blockers + s.deviations + s.not_available + s.account_blockers > 0,
-            hazard: s.hazards + s.environment_literals + s.dependencies > 0,
+            blocker: s.depth_blockers + s.deviation_blockers + s.not_available + s.account_blockers
+                > 0,
+            hazard: s.hazards + s.environment_literal_places + s.dependencies > 0,
             disputed: s.disputed + s.cannot_assess + s.guide_conflicts > 0,
         }
     }
@@ -134,11 +150,14 @@ impl Outcome {
 pub enum WarningCode {
     /// The input was produced for another Region than the target.
     InputRegionMismatch,
-    /// The Knowledge MCP server does not know some types, services or operations.
-    KnowledgeUnknown,
-    /// The Knowledge MCP server has no data for the target; live mode decides alone.
-    KnowledgeRegionUnlisted,
-    /// The ESC User Guide and the Knowledge MCP data disagree.
+    /// The public availability data does not know some types, services or operations.
+    PublicDataUnknown,
+    /// No public availability data covers the target; live mode decides alone.
+    PublicDataRegionUnlisted,
+    /// No source answered for instance types, engine versions or node types the input
+    /// sets (AWS China publishes none), so they were not checked.
+    ValuesUnchecked,
+    /// The ESC User Guide and the public availability data disagree.
     GuideConflict,
     /// Rules matched, but the guide no longer contains their sentence.
     StaleRules,
@@ -148,37 +167,52 @@ pub enum WarningCode {
     AccountChecksSkipped,
 }
 
+/// A run-level condition. `code` is stable and `message` is prose for people;
+/// `items` names what the condition is about (types, values, rule ids, Regions).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, schemars::JsonSchema)]
-pub struct Warning {
-    pub code: WarningCode,
+pub struct Warning<C> {
+    pub code: C,
     pub message: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub items: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, schemars::JsonSchema)]
+impl<C> Warning<C> {
+    pub fn new(code: C, message: String, items: Vec<String>) -> Self {
+        Self {
+            code,
+            message,
+            items,
+        }
+    }
+}
+
+/// The scan in memory. The terminal summary reads it as it is; `output::scan` shapes
+/// the JSON from it.
+#[derive(Debug, Clone)]
 pub struct Report {
-    #[schemars(extend("const" = 1))]
-    pub schema_version: u32,
     pub data_provenance: Provenance,
     pub summary: Summary,
     pub outcome: Outcome,
     pub findings: Vec<Finding>,
+    /// The hazards and dependencies behind the required changes; the tests read them.
+    #[cfg_attr(not(test), allow(dead_code))]
     pub hazards: Vec<crate::extractor::Hazard>,
     pub deviations: Vec<Deviation>,
+    #[cfg_attr(not(test), allow(dead_code))]
     pub dependencies: Vec<Dependency>,
     /// Differences the ESC User Guide documents for the services in the input.
     pub documented_differences: Vec<Documented>,
     pub environment_literals: Vec<EnvLiterals>,
-    pub zones: Option<ZoneCheck>,
     pub required_changes: Vec<RequiredChange>,
     /// Terraform resources of providers other than aws and awscc.
     pub out_of_scope: Vec<OutOfScope>,
     /// Live mode's checks of the target account; null in public mode.
     pub account: Option<crate::account::AccountChecks>,
-    pub warnings: Vec<Warning>,
+    pub warnings: Vec<Warning<WarningCode>>,
     /// For a warning that carries a command: its index, the prose without the
     /// command, and the command, so the terminal shows the command on its own line.
     /// The JSON warning has both in one message.
-    #[serde(skip)]
     pub warning_commands: Vec<(usize, String, String)>,
 }
 
@@ -206,8 +240,10 @@ pub fn build(
     let mut s = Summary {
         resources: findings.len(),
         hazards: hazards.len(),
-        environment_literals: env_literals.iter().map(|e| e.places).sum(),
-        deviations: guide.deviations.iter().filter(|d| d.blocks()).count(),
+        hazards_breaking: hazards.iter().filter(|h| breaks(h)).count(),
+        hazards_portability: hazards.iter().filter(|h| !breaks(h)).count(),
+        environment_literal_places: env_literals.iter().map(|e| e.places).sum(),
+        deviation_blockers: guide.deviations.iter().filter(|d| d.blocks()).count(),
         guide_conflicts: guide
             .deviations
             .iter()
@@ -336,15 +372,53 @@ pub fn build(
         let finding = findings.iter().find(|f| f.logical_id == c.logical_id);
         c.cdk_path = finding.and_then(|f| f.cdk_path.clone());
         c.decided_by = decided_by(c, finding, &guide);
+        if c.cause.kind != CauseType::Hazard && c.resource_type.is_none() {
+            c.resource_type = finding.map(|f| f.resource_type.clone());
+        }
+        if c.cause.kind == CauseType::Availability {
+            c.roadmap = finding.and_then(|f| f.roadmap.clone());
+        }
+        if matches!(c.cause.kind, CauseType::Availability | CauseType::Deviation)
+            && let Some(f) = finding
+        {
+            let partition = ctx
+                .facts
+                .map(|p| p.target_partition.as_str())
+                .unwrap_or_default();
+            // A whole-service substitute answers an unavailable type; a feature gap is
+            // answered only by mitigations for its rule.
+            let t = crate::sam::base_type(&f.resource_type).unwrap_or(&f.resource_type);
+            let t = (c.cause.kind == CauseType::Availability).then_some(t);
+            c.mitigations = crate::mitigations::find(t, &c.cause.ids, partition);
+        }
         match c.tier {
             Tier::Fix => s.fixes += 1,
             Tier::Propose => s.proposals += 1,
             Tier::Flag => s.flags += 1,
         }
     }
-    let (warnings, warning_commands) = warnings(&provenance, &guide, ctx, produce);
+    let open: Vec<(&Finding, &crate::depth::DepthCheck)> = findings
+        .iter()
+        .flat_map(|f| f.depth.iter().map(move |d| (f, d)))
+        .filter(|(_, d)| d.offered.is_none() && crate::depth::is_public(d.kind))
+        .collect();
+    let label = |f: &Finding, d: &crate::depth::DepthCheck| {
+        format!(
+            "{} {}",
+            crate::output::property_path(&f.resource_type, &d.path),
+            d.value
+        )
+    };
+    let unchecked: Vec<String> = unique(open.iter().map(|(f, d)| label(f, d)));
+    // The values live mode can check; it probes only some kinds.
+    let probed: Vec<String> = unique(
+        open.iter()
+            .filter(|(_, d)| crate::depth::live_probes(d.kind))
+            .map(|(f, d)| label(f, d)),
+    );
+    let (warnings, warning_commands) =
+        warnings(&provenance, &guide, ctx, produce, &unchecked, &probed);
     Report {
-        schema_version: SCHEMA_VERSION,
         data_provenance: provenance,
         outcome: Outcome::of(&s),
         summary: s,
@@ -354,13 +428,18 @@ pub fn build(
         dependencies: guide.dependencies,
         documented_differences: guide.documented,
         environment_literals: env_literals,
-        zones,
         required_changes: changes,
         out_of_scope,
         account: ctx.account.cloned(),
         warnings,
         warning_commands,
     }
+}
+
+fn breaks(h: &crate::extractor::Hazard) -> bool {
+    h.literals
+        .iter()
+        .any(|l| l.impact == crate::extractor::Impact::Breaks)
 }
 
 fn availability_change(f: &Finding, target: &str, ctx: &Context) -> RequiredChange {
@@ -378,9 +457,9 @@ fn availability_change(f: &Finding, target: &str, ctx: &Context) -> RequiredChan
             format!("remove or replace {svc}"),
         )
     } else if type_gap || f.service.is_none() {
-        let what = match &f.service {
-            Some(s) => format!("{s} type not registered"),
-            None => "resource type not registered".into(),
+        let what = match f.resource_type.split("::").nth(1) {
+            Some(ns) => format!("{ns} type missing in CloudFormation"),
+            None => "resource type missing in CloudFormation".into(),
         };
         let substitute = ctx
             .facts
@@ -393,17 +472,20 @@ fn availability_change(f: &Finding, target: &str, ctx: &Context) -> RequiredChan
                 .unwrap_or_else(|| "use another type or deploy it without CloudFormation".into()),
         )
     } else if let Some(rm) = &f.roadmap {
+        // The product's own name reads better than the service key.
+        let name = rm.product.as_str();
         remediation::brief(
-            format!("{svc} {}", rm.short()),
+            format!("{name} {}", rm.short()),
             match (&rm.status, &rm.launch) {
-                (State::Planned, Some(q)) => format!("replace {svc} or wait for {q}"),
-                _ => format!("remove or replace {svc}"),
+                (State::Planned, Some(q)) => format!("replace {name} or wait for {q}"),
+                _ => format!("remove or replace {name}"),
             },
         )
     } else {
+        let name = f.resource_type.split("::").nth(1).unwrap_or(svc);
         remediation::brief(
-            format!("{svc} not available"),
-            format!("remove or replace {svc}"),
+            format!("{name} not available"),
+            format!("remove or replace {name}"),
         )
     }
     .about(&f.resource_type);
@@ -439,8 +521,8 @@ fn decided_by(c: &RequiredChange, finding: Option<&Finding>, guide: &GuideFindin
                     .find(|d| c.cause.ids.contains(&remediation::id(d.kind)))
             })
             .and_then(|d| d.source)
-            .map_or(DecidedBy::Knowledge, |s| match s {
-                DepthSource::Knowledge => DecidedBy::Knowledge,
+            .map_or(DecidedBy::Public, |s| match s {
+                DepthSource::Public => DecidedBy::Public,
                 DepthSource::Live => DecidedBy::Live,
                 DepthSource::Schema => DecidedBy::Schema,
             }),
@@ -450,17 +532,22 @@ fn decided_by(c: &RequiredChange, finding: Option<&Finding>, guide: &GuideFindin
     }
 }
 
+/// For a warning that carries a command: its index, the prose and the command.
+type WarningCommands = Vec<(usize, String, String)>;
+
 /// The report's warnings, and the commands split from them for the terminal.
 fn warnings(
     prov: &Provenance,
     guide: &GuideFindings,
     ctx: &Context,
     produce: &str,
-) -> (Vec<Warning>, Vec<(usize, String, String)>) {
+    unchecked: &[String],
+    probed: &[String],
+) -> (Vec<Warning<WarningCode>>, WarningCommands) {
     let target = &prov.target_region;
-    let mut warnings: Vec<Warning> = Vec::new();
-    let mut warn = |code, message: String| {
-        let w = Warning { code, message };
+    let mut warnings: Vec<Warning<WarningCode>> = Vec::new();
+    let mut warn = |code, message: String, items: Vec<String>| {
+        let w = Warning::new(code, message, items);
         let new = !warnings.contains(&w);
         if new {
             warnings.push(w);
@@ -469,10 +556,31 @@ fn warnings(
     };
     if prov.knowledge.is_none() {
         warn(
-            WarningCode::KnowledgeRegionUnlisted,
+            WarningCode::PublicDataRegionUnlisted,
             format!(
-                "The AWS Knowledge MCP server has no data for {target}, so the verdicts come from live mode alone, without roadmap states."
+                "No public availability data covers {target}, so the verdicts come from live mode alone, without roadmap states."
             ),
+            vec![target.clone()],
+        );
+    }
+    if !unchecked.is_empty() {
+        warn(
+            WarningCode::ValuesUnchecked,
+            format!(
+                "No source says whether {target} offers {}, so these values were not checked.{}",
+                unchecked.join(", "),
+                if prov.live.is_some() || probed.is_empty() {
+                    " Check them in the target before you deploy.".to_string()
+                } else if probed.len() == unchecked.len() {
+                    " Run in live mode to check them in the account.".to_string()
+                } else {
+                    format!(
+                        " Run in live mode to check {} in the account, and check the others in the target before you deploy.",
+                        probed.join(", ")
+                    )
+                }
+            ),
+            unchecked.to_vec(),
         );
     }
     let mut warning_commands = Vec::new();
@@ -493,7 +601,11 @@ fn warnings(
             "The input was produced for {region}, not {target}. {produce} it for the target region so region-specific values resolve as they will be deployed."
         );
         if let (Some(i), Some(c)) = (
-            warn(WarningCode::InputRegionMismatch, format!("{prose}{how}")),
+            warn(
+                WarningCode::InputRegionMismatch,
+                format!("{prose}{how}"),
+                vec![region.clone()],
+            ),
             cmd,
         ) {
             warning_commands.push((i, prose, c));
@@ -501,11 +613,12 @@ fn warnings(
     }
     if let Some(k) = prov.knowledge.as_ref().filter(|k| !k.unknown.is_empty()) {
         warn(
-            WarningCode::KnowledgeUnknown,
+            WarningCode::PublicDataUnknown,
             format!(
-                "The Knowledge MCP data does not know {}; only live mode can assess these resources.",
+                "The public availability data does not know {}; only live mode can assess these resources.",
                 k.unknown.join(", ")
             ),
+            k.unknown.clone(),
         );
     }
     let conflicts = unique(
@@ -519,9 +632,10 @@ fn warnings(
         warn(
             WarningCode::GuideConflict,
             format!(
-                "The ESC User Guide says these features are not available, while the Knowledge MCP data lists them as available: {}. The guide is likely outdated. Ask your AWS team to confirm and to have the guide corrected.",
+                "The ESC User Guide says these features are not available, while the public availability data lists them as available: {}. The guide is likely outdated. Ask your AWS team to confirm and to have the guide corrected.",
                 conflicts.join(", ")
             ),
+            conflicts.clone(),
         );
     }
     if let Some(a) = ctx.account {
@@ -534,6 +648,7 @@ fn warnings(
             warn(
                 WarningCode::AccountChecksSkipped,
                 format!("These account checks were skipped: {}.", skipped.join("; ")),
+                a.skipped.iter().map(|s| s.check.clone()).collect(),
             );
         }
     }
@@ -544,6 +659,7 @@ fn warnings(
                 "The template uses the transform {}, which rewrites resources when it is deployed, so resource properties were not checked against the target's schemas. Check the processed template instead.",
                 prov.macros.join(", ")
             ),
+            prov.macros.clone(),
         );
     } else if prov.schemas.is_none() && prov.schema_types > 0 {
         warn(
@@ -554,6 +670,11 @@ fn warnings(
                 format!(
                     "{target} publishes no CloudFormation schema bundle, so resource properties were not checked against it. Run in live mode to check them with cloudformation:DescribeType."
                 )
+            },
+            if prov.schema_denied {
+                vec!["cloudformation:DescribeType".to_string()]
+            } else {
+                vec![target.clone()]
             },
         );
     }
@@ -568,6 +689,7 @@ fn warnings(
                 "These rules match the input, but the ESC User Guide no longer contains the sentence they quote, so they were skipped: {}. Check the guide: the restriction may have been lifted or reworded.",
                 g.stale_rules.join(", ")
             ),
+            g.stale_rules.clone(),
         );
     }
     (warnings, warning_commands)
@@ -585,6 +707,7 @@ fn env_label(e: &DeployEnv) -> String {
 /// Gaps-only view: drops findings that are cleanly available, keeps everything
 /// that needs action or verification. Summary and provenance stay complete.
 pub fn gaps_only(r: &mut Report) {
+    r.documented_differences.clear();
     r.findings.retain(|f| {
         f.divergence
             || f.depth.iter().any(|d| d.offered != Some(true))
@@ -592,633 +715,12 @@ pub fn gaps_only(r: &mut Report) {
     });
 }
 
-pub fn to_json(v: &impl Serialize) -> String {
-    let mut s = serde_json::to_string_pretty(v).expect("serializes");
-    s.push('\n');
-    s
-}
-
-/// How the terminal summary may draw. Glyphs need a terminal; color additionally
-/// honours `NO_COLOR`.
-#[derive(Debug, Clone, Copy, Default)]
-pub struct Style {
-    pub color: bool,
-    pub unicode: bool,
-}
+pub use crate::summary::text_summary;
+#[cfg(test)]
+use crate::tui::Style;
 
 /// Introduces the synth command in a region warning.
-const CDK_HINT: &str = "For a CDK app without a hardcoded env:";
-
-/// Required-change lines shown before the rest is left to the JSON report.
-const MAX_CHANGE_LINES: usize = 8;
-/// Warning prose wraps at this width.
-const WRAP: usize = 100;
-/// Longest "what" column before it is cut with an ellipsis.
-const MAX_WHAT: usize = 42;
-/// Longest action and detail text before it is cut.
-const MAX_ACTION: usize = 54;
-const MAX_DETAIL: usize = 76;
-
-/// The human-readable summary on stderr. Every line is built from structured fields
-/// of the report, never by parsing its prose, so the same report gives the same text.
-pub fn text_summary(r: &Report, st: Style) -> String {
-    let s = &r.summary;
-    let p = &r.data_provenance;
-    let pen = Pen::new(st);
-    let Pen {
-        ok,
-        bad,
-        warn,
-        unk,
-        dot,
-        ..
-    } = pen;
-
-    let mut out = vec![
-        pen.paint(
-            BOLD,
-            &format!(
-                "{}esc-preflight{dot}{} resources{dot}{}",
-                pen.g("◆ ", ""),
-                s.resources,
-                p.target_region
-            ),
-        ),
-        format!(
-            "  {}",
-            pen.paint(
-                DIM,
-                &[
-                    p.knowledge.as_ref().map(|_| "Knowledge MCP".to_string()),
-                    p.user_guide
-                        .as_ref()
-                        .map(|g| format!("ESC User Guide {} pages", g.pages)),
-                    Some(
-                        if p.live.is_some() {
-                            "live mode"
-                        } else {
-                            "public mode"
-                        }
-                        .into()
-                    ),
-                ]
-                .into_iter()
-                .flatten()
-                .collect::<Vec<_>>()
-                .join(dot)
-            )
-        ),
-        String::new(),
-    ];
-
-    out.push(pen.paint(BOLD, "  AVAILABILITY"));
-    pen.row(&mut out, ok, GREEN, "available", s.available, String::new());
-    let na = types_of(r, |f| f.verdict == Verdict::NotAvailable);
-    pen.row(
-        &mut out,
-        if s.not_available > 0 { bad } else { ok },
-        if s.not_available > 0 { RED } else { GREEN },
-        "not available",
-        s.not_available,
-        na,
-    );
-    if s.cannot_assess > 0 {
-        let custom = r
-            .findings
-            .iter()
-            .filter(|f| f.verdict == Verdict::CannotAssess)
-            .all(|f| {
-                f.resource_type.starts_with("Custom::")
-                    || f.resource_type.ends_with("CustomResource")
-            });
-        let detail = if custom {
-            "custom resources, backed by their own code".to_string()
-        } else {
-            types_of(r, |f| f.verdict == Verdict::CannotAssess)
-        };
-        pen.row(
-            &mut out,
-            unk,
-            YELLOW,
-            "cannot assess",
-            s.cannot_assess,
-            detail,
-        );
-    }
-    if s.disputed > 0 {
-        let d = types_of(r, |f| f.verdict == Verdict::Disputed);
-        pen.row(&mut out, warn, YELLOW, "disputed", s.disputed, d);
-    }
-    if s.divergences > 0 {
-        let d = types_of(r, |f| f.divergence);
-        pen.row(&mut out, warn, YELLOW, "live vs public", s.divergences, d);
-    }
-
-    out.push(String::new());
-    out.push(pen.paint(BOLD, "  PORTABILITY"));
-    out.extend(portability_rows(r, &pen));
-    out.push(String::new());
-    out.extend(change_lines(r, &pen));
-    out.extend(warning_lines(r, &pen));
-    out.join("\n") + "\n"
-}
-
-/// The PORTABILITY rows; one line when there is nothing to report.
-fn portability_rows(r: &Report, pen: &Pen) -> Vec<String> {
-    let (s, p) = (&r.summary, &r.data_provenance);
-    let Pen {
-        ok, bad, warn, dot, ..
-    } = *pen;
-    let mut out = Vec::new();
-    if s.hazards > 0 {
-        let mut lits: Vec<&crate::extractor::Literal> =
-            r.hazards.iter().flat_map(|h| &h.literals).collect();
-        // Literals that break the deployment first.
-        lits.sort_by_key(|l| l.impact);
-        let values = unique(lits.iter().map(|l| l.value.as_str()));
-        let resources = unique(r.hazards.iter().map(|h| h.logical_id.as_str())).len();
-        let breaking = r
-            .hazards
-            .iter()
-            .filter(|h| {
-                h.literals
-                    .iter()
-                    .any(|l| l.impact == crate::extractor::Impact::Breaks)
-            })
-            .count();
-        // Room for the breaking count, when not all of them break.
-        let room = if breaking < s.hazards { 1 } else { 3 };
-        let shown = list(
-            &values
-                .iter()
-                .map(|v| format!("`{}`", clean(v)))
-                .collect::<Vec<_>>(),
-            room,
-        );
-        // The count is property values (fields) that contain a literal; the detail
-        // names the distinct literals, so the two do not have to match.
-        pen.row(
-            &mut out,
-            warn,
-            YELLOW,
-            "hardcoded fields",
-            s.hazards,
-            format!(
-                "{}{resources} {}: {shown}",
-                if breaking < s.hazards {
-                    format!("{breaking} breaking{dot}")
-                } else {
-                    String::new()
-                },
-                plural(resources, "resource")
-            ),
-        );
-    }
-    if s.environment_literals > 0 {
-        let envs: Vec<String> = r
-            .environment_literals
-            .iter()
-            .map(|e| clean(&env_label(&e.env)))
-            .collect();
-        let verb = match p.source_format {
-            SourceFormat::Cloudformation => "synthesized",
-            SourceFormat::TerraformPlan => "planned",
-        };
-        pen.row(
-            &mut out,
-            warn,
-            YELLOW,
-            "env literals",
-            s.environment_literals,
-            format!("{verb} for {}", list(&envs, 2)),
-        );
-    }
-    let rules_of = |keep: &dyn Fn(&Deviation) -> bool| {
-        unique(
-            r.deviations
-                .iter()
-                .filter(|d| keep(d))
-                .map(|d| d.rule.replace('-', " ")),
-        )
-    };
-    // Where the rules come from: the ESC User Guide, other AWS pages, or both.
-    let sources_of = |keep: &dyn Fn(&Deviation) -> bool| {
-        let by = |b: DecidedBy| r.deviations.iter().any(|d| keep(d) && d.decided_by == b);
-        match (by(DecidedBy::Guide), by(DecidedBy::Rule)) {
-            (true, true) => "ESC User Guide, AWS docs",
-            (false, true) => "AWS docs",
-            _ => "ESC User Guide",
-        }
-    };
-    if s.deviations > 0 {
-        let rules = rules_of(&|d| d.blocks());
-        // A documented deviation means the feature does not work in the target.
-        pen.row(
-            &mut out,
-            bad,
-            RED,
-            "deviations",
-            s.deviations,
-            format!("{} ({})", list(&rules, 2), sources_of(&|d| d.blocks())),
-        );
-    }
-    if s.guide_conflicts > 0 {
-        let rules = rules_of(&|d| d.conflict.is_some());
-        pen.row(
-            &mut out,
-            warn,
-            YELLOW,
-            "guide conflicts",
-            s.guide_conflicts,
-            format!("{} (guide likely outdated)", list(&rules, 2)),
-        );
-    }
-    if s.caveats > 0 {
-        let rules = rules_of(&|d| d.severity == Severity::Caveat);
-        pen.row(
-            &mut out,
-            warn,
-            YELLOW,
-            "caveats",
-            s.caveats,
-            format!(
-                "{} ({})",
-                list(&rules, 2),
-                sources_of(&|d| d.severity == Severity::Caveat)
-            ),
-        );
-    }
-    if s.dependencies > 0 {
-        let rules = unique(r.dependencies.iter().map(|d| d.rule.replace('-', " ")));
-        pen.row(
-            &mut out,
-            warn,
-            YELLOW,
-            "dependencies",
-            s.dependencies,
-            format!("{} (AWS docs)", list(&rules, 2)),
-        );
-    }
-    if s.account_blockers > 0 {
-        pen.row(
-            &mut out,
-            bad,
-            RED,
-            "account blockers",
-            s.account_blockers,
-            "the target account blocks the deployment (live)".into(),
-        );
-    }
-    if s.depth_blockers > 0 {
-        pen.row(
-            &mut out,
-            bad,
-            RED,
-            "depth blockers",
-            s.depth_blockers,
-            if r.findings
-                .iter()
-                .flat_map(|f| &f.depth)
-                .any(|d| d.kind == crate::depth::DepthKind::Property && d.offered == Some(false))
-            {
-                "values or properties the region does not offer".into()
-            } else {
-                "values the region does not offer".into()
-            },
-        );
-    }
-    if out.is_empty() {
-        out.push(format!(
-            "  {} nothing hardcoded or region-specific",
-            pen.paint(GREEN, ok)
-        ));
-    }
-    out
-}
-
-/// The REQUIRED CHANGES heading and the changes, grouped by what they say in short,
-/// worst tier first.
-fn change_lines(r: &Report, pen: &Pen) -> Vec<String> {
-    let (s, st) = (&r.summary, pen.st);
-    let Pen {
-        ok,
-        bad,
-        dot,
-        arrow,
-        ..
-    } = *pen;
-    let mut out = Vec::new();
-    let tiers = [
-        (Tier::Flag, s.flags),
-        (Tier::Propose, s.proposals),
-        (Tier::Fix, s.fixes),
-    ];
-    let counts: Vec<String> = tiers
-        .iter()
-        .filter(|(_, n)| *n > 0)
-        .map(|(t, n)| format!("{n} {}", t.label()))
-        .collect();
-    out.push(format!(
-        "{}  {}",
-        pen.paint(BOLD, "  REQUIRED CHANGES"),
-        if counts.is_empty() {
-            "none".to_string()
-        } else {
-            counts.join(dot)
-        }
-    ));
-    let groups = change_groups(r);
-    if groups.is_empty() {
-        out.push(format!("  {} no changes needed", pen.paint(GREEN, ok)));
-    }
-    let shown = &groups[..groups.len().min(MAX_CHANGE_LINES)];
-    let tier_label = |grp: &Group| match grp.n {
-        1 => grp.tier.label().to_string(),
-        n if st.unicode => format!("{} ×{n}", grp.tier.label()),
-        n => format!("{} ({n})", grp.tier.label()),
-    };
-    let tier_w = shown
-        .iter()
-        .map(|x| tier_label(x).chars().count())
-        .max()
-        .unwrap_or(0);
-    let ell = pen.g("…", "~");
-    let what_w = shown
-        .iter()
-        .map(|x| x.shown_what(ell).chars().count())
-        .max()
-        .unwrap_or(0);
-    for grp in shown {
-        // Colors mean one thing each: red blocks deployment, yellow warns, green is
-        // fine, cyan is code to type, dim is metadata. Only a flag blocks, so only
-        // its glyph is colored; the tier word stays plain.
-        let glyph = match grp.tier {
-            Tier::Flag => pen.paint(RED, bad),
-            Tier::Propose | Tier::Fix => pen.g("●", "*").to_string(),
-        };
-        let action = clip(&grp.action, MAX_ACTION, ell);
-        // A replacement is code to type: cyan instead of backticks when colored.
-        let action = match action.strip_prefix('`').and_then(|a| a.strip_suffix('`')) {
-            Some(code) if grp.code && st.color => pen.paint(CYAN, code),
-            _ => action,
-        };
-        let what = grp.shown_what(ell);
-        let pad = what_w - what.chars().count();
-        let tier = tier_label(grp);
-        out.push(format!(
-            "  {glyph} {tier:<tier_w$}  {what}{}  {} {action}",
-            " ".repeat(pad),
-            pen.paint(DIM, arrow),
-        ));
-        // The resource types behind a service-level line, under the "what" column.
-        if !grp.subjects.is_empty() {
-            let res = if grp.resources > 1 {
-                format!("{} resources: ", grp.resources)
-            } else {
-                String::new()
-            };
-            let types = clip(
-                &format!("{res}{}", list(&grp.subjects, 2)),
-                MAX_WHAT + 4 + MAX_ACTION,
-                ell,
-            );
-            out.push(format!(
-                "  {}  {}",
-                " ".repeat(tier_w + 2),
-                pen.paint(DIM, &types)
-            ));
-        }
-    }
-    if groups.len() > MAX_CHANGE_LINES {
-        let rest: usize = groups[MAX_CHANGE_LINES..].iter().map(|x| x.n).sum();
-        out.push(pen.paint(
-            DIM,
-            &format!("  {} {rest} more in the JSON report", pen.g("…", "...")),
-        ));
-    }
-    out
-}
-
-/// The warnings, each command on its own line after its prose.
-fn warning_lines(r: &Report, pen: &Pen) -> Vec<String> {
-    let warn = pen.warn;
-    let mut out = Vec::new();
-    if !r.warnings.is_empty() {
-        out.push(String::new());
-    }
-    for (i, w) in r.warnings.iter().enumerate() {
-        if i > 0 {
-            out.push(String::new());
-        }
-        let split = r.warning_commands.iter().find(|(k, _, _)| *k == i);
-        let text = clean(split.map_or(w.message.as_str(), |(_, prose, _)| prose.as_str()));
-        let cmd = split.map(|(_, _, c)| clean(c));
-        for (k, l) in wrap(&text, WRAP - 2).iter().enumerate() {
-            let lead = if k == 0 {
-                pen.paint(YELLOW, warn)
-            } else {
-                " ".repeat(warn.chars().count())
-            };
-            out.push(format!("{lead} {l}"));
-        }
-        if let Some(c) = cmd {
-            out.push(format!("  {}", pen.paint(DIM, CDK_HINT)));
-            out.push(format!(
-                "    {} {}",
-                pen.paint(DIM, "$"),
-                pen.paint(CYAN, &c)
-            ));
-        }
-    }
-    out
-}
-
-/// The glyphs and colors of the terminal summary in one style.
-#[derive(Clone, Copy)]
-struct Pen {
-    st: Style,
-    ok: &'static str,
-    bad: &'static str,
-    warn: &'static str,
-    unk: &'static str,
-    dot: &'static str,
-    arrow: &'static str,
-}
-
-const RED: &str = "31";
-const YELLOW: &str = "33";
-const GREEN: &str = "32";
-const CYAN: &str = "36";
-const BOLD: &str = "1";
-const DIM: &str = "2;3";
-
-impl Pen {
-    fn new(st: Style) -> Self {
-        let g = |uni, ascii| if st.unicode { uni } else { ascii };
-        Self {
-            st,
-            ok: g("✔", "ok"),
-            bad: g("✘", "x"),
-            warn: g("⚠", "!"),
-            unk: "?",
-            dot: g(" · ", ", "),
-            arrow: g("→", "->"),
-        }
-    }
-
-    fn g(&self, uni: &'static str, ascii: &'static str) -> &'static str {
-        if self.st.unicode { uni } else { ascii }
-    }
-
-    fn paint(&self, code: &str, text: &str) -> String {
-        if self.st.color {
-            format!("\x1b[{code}m{text}\x1b[0m")
-        } else {
-            text.to_string()
-        }
-    }
-
-    /// Rows: glyph, color, label, count, detail. Zero rows are hidden, except
-    /// "available" and "not available", which always answer the main question.
-    fn row(
-        &self,
-        out: &mut Vec<String>,
-        glyph: &str,
-        code: &str,
-        label: &str,
-        n: usize,
-        detail: String,
-    ) {
-        let count = self.paint(BOLD, &format!("{n:>4}"));
-        let detail = if detail.is_empty() {
-            String::new()
-        } else {
-            format!("   {}", clip(&detail, MAX_DETAIL, self.g("…", "~")))
-        };
-        // ASCII glyphs differ in width ("ok", "x"); pad them so labels line up.
-        let w = if self.st.unicode { 1 } else { 2 };
-        out.push(format!(
-            "  {} {label:<18}{count}{detail}",
-            self.paint(code, &format!("{glyph:<w$}"))
-        ));
-    }
-}
-
-struct Group {
-    tier: Tier,
-    what: String,
-    action: String,
-    /// `action` is a replacement to type, not prose.
-    code: bool,
-    n: usize,
-    /// Distinct resource types, for lines that name a service or feature.
-    subjects: Vec<String>,
-    resources: usize,
-    /// " in N resources", kept apart so clipping `what` never cuts the count.
-    count: String,
-}
-
-impl Group {
-    fn shown_what(&self, ellipsis: &str) -> String {
-        let max = MAX_WHAT.saturating_sub(self.count.chars().count());
-        format!("{}{}", clip(&self.what, max, ellipsis), self.count)
-    }
-}
-
-/// Required changes that read the same in short, worst tier first, then the most
-/// frequent. A group of several resources says how many.
-fn change_groups(r: &Report) -> Vec<Group> {
-    let format_of = |c: &RequiredChange| match r.data_provenance.source_format {
-        SourceFormat::TerraformPlan => 2,
-        SourceFormat::Cloudformation if c.cdk_path.is_some() => 1,
-        SourceFormat::Cloudformation => 0,
-    };
-    let mut groups: Vec<(Group, Vec<&str>)> = Vec::new();
-    for c in &r.required_changes {
-        // A single, uniform replacement is the most precise action there is.
-        let reps: Vec<&str> = c
-            .edits
-            .iter()
-            .map(|e| match format_of(c) {
-                1 => e.replace.cdk.as_str(),
-                2 => e.replace.terraform.as_str(),
-                _ => e.replace.cloudformation.as_str(),
-            })
-            .collect();
-        let (action, code) = match reps.first() {
-            Some(first) if reps.iter().all(|x| x == first) => (format!("`{first}`"), true),
-            _ => (c.brief.action.clone(), false),
-        };
-        let (what, action) = (clean(&c.brief.what), clean(&action));
-        let i = match groups
-            .iter()
-            .position(|(x, _)| x.tier == c.tier && x.what == what && x.action == action)
-        {
-            Some(i) => {
-                groups[i].0.n += 1;
-                i
-            }
-            None => {
-                groups.push((
-                    Group {
-                        tier: c.tier,
-                        what,
-                        action,
-                        code,
-                        n: 1,
-                        subjects: Vec::new(),
-                        resources: 0,
-                        count: String::new(),
-                    },
-                    Vec::new(),
-                ));
-                groups.len() - 1
-            }
-        };
-        let (x, ids) = &mut groups[i];
-        if !ids.contains(&c.logical_id.as_str()) {
-            ids.push(&c.logical_id);
-        }
-        if let Some(t) = &c.brief.subject
-            && !x.subjects.contains(&clean(t))
-        {
-            x.subjects.push(clean(t));
-        }
-    }
-    let mut out: Vec<Group> = groups
-        .into_iter()
-        .map(|(mut x, ids)| {
-            x.resources = ids.len();
-            // Without a subject line, say how many resources share the line.
-            if x.subjects.is_empty() && ids.len() > 1 {
-                x.count = format!(" in {} resources", ids.len());
-            }
-            x
-        })
-        .collect();
-    out.sort_by(|a, b| {
-        b.tier
-            .cmp(&a.tier)
-            .then(b.n.cmp(&a.n))
-            .then(a.what.cmp(&b.what))
-    });
-    out
-}
-
-/// The distinct resource types of the findings that match, at most two, each with its
-/// product's roadmap state.
-fn types_of(r: &Report, keep: impl Fn(&Finding) -> bool) -> String {
-    let types = unique(
-        r.findings
-            .iter()
-            .filter(|f| keep(f))
-            .map(|f| match &f.roadmap {
-                Some(rm) => format!("{} ({})", clean(&f.resource_type), rm.short()),
-                None => clean(&f.resource_type),
-            }),
-    );
-    list(&types, 2)
-}
+pub(crate) const CDK_HINT: &str = "For a CDK app without a hardcoded env:";
 
 /// Text from the input with control characters replaced, so a template cannot send
 /// terminal escape sequences and every character takes one column.
@@ -1228,30 +730,11 @@ pub(crate) fn clean(s: &str) -> String {
         .collect()
 }
 
-fn list(items: &[String], max: usize) -> String {
+pub(crate) fn list(items: &[String], max: usize) -> String {
     match items.len() {
         n if n <= max => items.join(", "),
         n => format!("{}, +{} more", items[..max].join(", "), n - max),
     }
-}
-
-/// Greedy word wrap; a word longer than the width stays whole on its own line.
-fn wrap(text: &str, width: usize) -> Vec<String> {
-    let mut lines = Vec::new();
-    let mut cur = String::new();
-    for w in text.split_whitespace() {
-        if !cur.is_empty() && cur.chars().count() + 1 + w.chars().count() > width {
-            lines.push(std::mem::take(&mut cur));
-        }
-        if !cur.is_empty() {
-            cur.push(' ');
-        }
-        cur.push_str(w);
-    }
-    if !cur.is_empty() {
-        lines.push(cur);
-    }
-    lines
 }
 
 /// The items in first-seen order, without repeats.
@@ -1263,24 +746,6 @@ pub(crate) fn unique<T: PartialEq>(it: impl IntoIterator<Item = T>) -> Vec<T> {
         }
     }
     out
-}
-
-fn plural(n: usize, word: &str) -> String {
-    if n == 1 {
-        word.into()
-    } else {
-        format!("{word}s")
-    }
-}
-
-fn clip(s: &str, max: usize, ellipsis: &str) -> String {
-    if s.chars().count() <= max {
-        s.to_string()
-    } else {
-        let mut t: String = s.chars().take(max - 1).collect();
-        t.push_str(ellipsis);
-        t
-    }
 }
 
 /// RFC 3339 UTC timestamp from the system clock, without a date-time dependency.
@@ -1310,6 +775,29 @@ pub fn now_utc() -> String {
 
 #[cfg(test)]
 pub(crate) mod tests {
+    /// The scan summary of `r` without a run's time or JSON destination.
+    fn text_summary(r: &Report, st: Style) -> String {
+        crate::summary::text_summary(r, st, &crate::tui::Run::default())
+    }
+
+    /// The rows inside the frame, without its borders.
+    fn rows(text: &str) -> Vec<String> {
+        text.lines()
+            .map(|l| {
+                let c: Vec<char> = l.chars().collect();
+                if c.len() > 4 {
+                    c[2..c.len() - 2]
+                        .iter()
+                        .collect::<String>()
+                        .trim_end()
+                        .to_string()
+                } else {
+                    String::new()
+                }
+            })
+            .collect()
+    }
+
     use super::*;
     use crate::extractor::{HazardKind, Impact};
     use crate::provider::{PublicData, guide, knowledge, partition, terraform};
@@ -1317,25 +805,18 @@ pub(crate) mod tests {
 
     /// Marks every property of every object in a JSON schema as required: the reports
     /// always write every key, null where a value is absent.
-    fn require_all(v: &mut serde_json::Value) {
-        match v {
-            serde_json::Value::Object(m) => {
-                if let Some(serde_json::Value::Object(props)) = m.get("properties") {
-                    let keys: Vec<_> = props.keys().cloned().map(serde_json::Value::from).collect();
-                    m.insert("required".into(), keys.into());
-                }
-                m.values_mut().for_each(require_all);
-            }
-            serde_json::Value::Array(a) => a.iter_mut().for_each(require_all),
-            _ => {}
-        }
+    /// The JSON Schema of what `T` serializes to: keys it skips are not required.
+    pub(crate) fn output_schema<T: schemars::JsonSchema>() -> serde_json::Value {
+        let g = schemars::generate::SchemaSettings::default()
+            .for_serialize()
+            .into_generator();
+        serde_json::to_value(g.into_root_schema_for::<T>()).unwrap()
     }
 
     /// The committed `schema/<file>` is the JSON Schema of `T`. Set `UPDATE_GOLDEN=1`
     /// to rewrite it.
     pub(crate) fn assert_committed_schema<T: schemars::JsonSchema>(file: &str) {
-        let mut v = serde_json::to_value(schemars::schema_for!(T)).unwrap();
-        require_all(&mut v);
+        let v = output_schema::<T>();
         let text = format!("{}\n", serde_json::to_string_pretty(&v).unwrap());
         let path = format!("{}/schema/{file}", env!("CARGO_MANIFEST_DIR"));
         if std::env::var_os("UPDATE_GOLDEN").is_some() {
@@ -1343,7 +824,7 @@ pub(crate) mod tests {
         }
         assert!(
             std::fs::read_to_string(&path).unwrap_or_default() == text,
-            "schema/{file} is out of date: run UPDATE_GOLDEN=1 cargo test schema, and decide whether SCHEMA_VERSION changes"
+            "schema/{file} is out of date: run UPDATE_GOLDEN=1 cargo test schema, and decide whether output::SCHEMA_VERSION changes"
         );
     }
 
@@ -1351,6 +832,12 @@ pub(crate) mod tests {
         PublicData {
             partition: partition::facts("eusc-de-east-1").unwrap(),
             knowledge: knowledge::tests::fixture(),
+            urls: Some((
+                knowledge::URL.into(),
+                crate::provider::capabilities::URL.into(),
+                Some(crate::provider::capabilities::URL.into()),
+            )),
+            bundle: None,
             guide: Some(guide::tests::fixture()),
             tf: Some(terraform::tests::fixture()),
         }
@@ -1371,16 +858,117 @@ pub(crate) mod tests {
         )
     }
 
+    #[test]
+    fn unanswered_values_are_a_warning() {
+        let (w, _) = warnings(
+            &prov(SourceFormat::Cloudformation, vec![]),
+            &GuideFindings::default(),
+            &Context::default(),
+            "Synthesize",
+            &["InstanceType m7i.large".to_string()],
+            &["InstanceType m7i.large".to_string()],
+        );
+        assert_eq!(w.len(), 1);
+        assert_eq!(w[0].code, WarningCode::ValuesUnchecked);
+        assert!(
+            w[0].message.contains("InstanceType m7i.large") && w[0].message.contains("live mode")
+        );
+        let (none, _) = warnings(
+            &prov(SourceFormat::Cloudformation, vec![]),
+            &GuideFindings::default(),
+            &Context::default(),
+            "Synthesize",
+            &[],
+            &[],
+        );
+        assert!(none.is_empty());
+        // Live mode probes no Lambda architectures, so it is not offered for them.
+        let (arch, _) = warnings(
+            &prov(SourceFormat::Cloudformation, vec![]),
+            &GuideFindings::default(),
+            &Context::default(),
+            "Synthesize",
+            &["Properties.Architectures[] arm64".to_string()],
+            &[],
+        );
+        assert!(
+            arch[0]
+                .message
+                .ends_with("Check them in the target before you deploy.")
+        );
+        assert_eq!(arch[0].items, ["Properties.Architectures[] arm64"]);
+        let both = [
+            "Properties.Architectures[] arm64".to_string(),
+            "Properties.InstanceType m7i.large".to_string(),
+        ];
+        let (mixed, _) = warnings(
+            &prov(SourceFormat::Cloudformation, vec![]),
+            &GuideFindings::default(),
+            &Context::default(),
+            "Synthesize",
+            &both,
+            &both[1..],
+        );
+        assert!(
+            mixed[0].message.contains(
+                "live mode to check Properties.InstanceType m7i.large in the account, and check the others"
+            ),
+            "{}",
+            mixed[0].message
+        );
+        // Unchecked properties name the target, or the call that was refused.
+        let (props, _) = warnings(
+            &Provenance {
+                schema_types: 1,
+                ..prov(SourceFormat::Cloudformation, vec![])
+            },
+            &GuideFindings::default(),
+            &Context::default(),
+            "Synthesize",
+            &[],
+            &[],
+        );
+        assert_eq!(
+            (props[0].code, props[0].items.as_slice()),
+            (
+                WarningCode::PropertiesUnchecked,
+                ["eusc-de-east-1".to_string()].as_slice()
+            )
+        );
+        let (denied, _) = warnings(
+            &Provenance {
+                schema_types: 1,
+                schema_denied: true,
+                ..prov(SourceFormat::Cloudformation, vec![])
+            },
+            &GuideFindings::default(),
+            &Context::default(),
+            "Synthesize",
+            &[],
+            &[],
+        );
+        assert_eq!(denied[0].items, ["cloudformation:DescribeType"]);
+    }
+
     fn prov(format: SourceFormat, envs: Vec<DeployEnv>) -> Provenance {
         Provenance {
             tool_version: "test".into(),
+            input: "template.yaml".into(),
+            source_region: None,
+            stacks: 1,
             source_format: format,
+            input_kind: match format {
+                SourceFormat::Cloudformation => crate::model::InputKind::Cloudformation,
+                SourceFormat::TerraformPlan => crate::model::InputKind::TerraformPlan,
+            },
             target_region: "eusc-de-east-1".into(),
             target_account: None,
             input_environments: envs,
             partitions_version: "test".into(),
             knowledge: Some(KnowledgeProvenance {
                 url: knowledge::URL.into(),
+                cloudformation_url: crate::provider::capabilities::URL.into(),
+                products_url: Some(crate::provider::capabilities::URL.into()),
                 unknown: vec![],
             }),
             user_guide: None,
@@ -1395,10 +983,10 @@ pub(crate) mod tests {
     }
 
     fn fixed_report(input: &str) -> String {
-        to_json(&fixed(input))
+        crate::output::to_json(&crate::output::scan(&fixed(input)), true)
     }
 
-    fn fixed(input: &str) -> Report {
+    pub(crate) fn fixed(input: &str) -> Report {
         fixed_t(reader::parse_text(input).unwrap())
     }
 
@@ -1432,7 +1020,7 @@ pub(crate) mod tests {
         };
         let mut depth = depth::checks(&t, &data.partition.target_region);
         let offered = depth::public_offered(&data.knowledge);
-        depth::resolve(&mut depth, &offered, depth::DepthSource::Knowledge);
+        depth::resolve(&mut depth, &offered, depth::DepthSource::Public);
         let findings = matcher::assess(&t, &data.knowledge, data.tf.as_ref(), None, &depth);
         let scan = extractor::hazards(&t, &data.partition);
         let (g, gp) = deviation::assess(
@@ -1444,7 +1032,7 @@ pub(crate) mod tests {
         );
         let prov = Provenance {
             user_guide: gp,
-            schema_types: crate::provider::schema::types(&t).len(),
+            schema_types: crate::provider::schema::types(&t, data.tf.as_ref()).len(),
             macros: t.macros.clone(),
             ..prov
         };
@@ -1492,6 +1080,7 @@ pub(crate) mod tests {
                     Style {
                         color: false,
                         unicode: true,
+                        ..Style::default()
                     },
                     "unicode",
                 ),
@@ -1499,6 +1088,7 @@ pub(crate) mod tests {
                     Style {
                         color: false,
                         unicode: false,
+                        ..Style::default()
                     },
                     "ascii",
                 ),
@@ -1535,6 +1125,7 @@ pub(crate) mod tests {
                 Style {
                     color: false,
                     unicode: false,
+                    ..Style::default()
                 },
             );
             assert!(ascii.is_ascii(), "{name}: non-ASCII in ASCII mode");
@@ -1543,39 +1134,69 @@ pub(crate) mod tests {
                 Style {
                     color: false,
                     unicode: true,
+                    ..Style::default()
                 },
             );
-            let lines: Vec<&str> = text.lines().collect();
-            let start = lines
-                .iter()
-                .position(|l| l.starts_with("  REQUIRED CHANGES"))
-                .unwrap();
-            let block: Vec<&str> = lines[start + 1..]
-                .iter()
-                .take_while(|l| !l.is_empty())
-                .copied()
-                .collect();
+            let block = section_rows(&text, "Required changes");
+            // One-line rows share the arrow column; a long action has its own row.
             let arrows: std::collections::BTreeSet<usize> = block
                 .iter()
-                .filter_map(|l| l.char_indices().position(|(_, ch)| ch == '→'))
+                .filter(|l| !l.trim_start().starts_with('→'))
+                .filter_map(|l| l.chars().position(|ch| ch == '→'))
                 .collect();
             assert!(arrows.len() <= 1, "{name}: arrows at {arrows:?}");
-            let shown: usize = block
-                .iter()
-                .filter(|l| l.contains('→'))
-                .map(|l| {
-                    l.split_once('×')
-                        .and_then(|(_, rest)| rest.split_whitespace().next())
-                        .and_then(|n| n.parse().ok())
-                        .unwrap_or(1)
-                })
-                .sum::<usize>()
-                + block
-                    .iter()
-                    .filter_map(|l| l.trim().strip_prefix("… "))
-                    .filter_map(|l| l.split_whitespace().next()?.parse::<usize>().ok())
-                    .sum::<usize>();
-            assert_eq!(shown, r.required_changes.len(), "{name}");
+            // Every change is in a group, and the lines shown plus the rest add up.
+            let groups = crate::summary::change_groups(&r);
+            assert_eq!(
+                groups.iter().map(|g| g.n).sum::<usize>(),
+                r.required_changes.len(),
+                "{name}"
+            );
+            let shown = crate::summary::pick(&groups, crate::summary::MAX_CHANGE_LINES);
+            assert_eq!(
+                block.iter().filter(|l| l.contains('→')).count(),
+                shown.len(),
+                "{name}"
+            );
+        }
+    }
+
+    /// The rows of the section titled `title`, up to the next blank row.
+    fn section_rows(text: &str, title: &str) -> Vec<String> {
+        rows(text)
+            .into_iter()
+            .skip_while(|l| !l.contains(&format!(" {title} ")))
+            .skip(1)
+            .take_while(|l| !l.trim().is_empty())
+            .collect()
+    }
+
+    /// At the narrowest and the widest width every row fits the frame, and every code
+    /// replacement shown is whole.
+    #[test]
+    fn frames_fit_and_keep_replacements_whole() {
+        for (r, name) in fixture_reports() {
+            let groups = crate::summary::change_groups(&r);
+            let shown = crate::summary::pick(&groups, crate::summary::MAX_CHANGE_LINES);
+            for width in [crate::tui::MIN_WIDTH, crate::tui::MAX_WIDTH] {
+                for unicode in [true, false] {
+                    let st = Style {
+                        unicode,
+                        width,
+                        ..Style::default()
+                    };
+                    let text = text_summary(&r, st);
+                    for l in text.lines() {
+                        assert_eq!(crate::tui::width(l), width, "{name}: {l}");
+                    }
+                    for g in shown.iter().filter(|g| g.code) {
+                        assert!(
+                            text.contains(&format!("`{}`", g.action)),
+                            "{name} at {width}:\n{text}"
+                        );
+                    }
+                }
+            }
         }
     }
 
@@ -1597,24 +1218,30 @@ pub(crate) mod tests {
             Style {
                 color: false,
                 unicode: true,
+                ..Style::default()
             },
         );
-        assert!(text.contains(&format!("    $ {cmd}\n")), "{text}");
+        assert!(
+            text.lines()
+                .any(|l| l.contains(CDK_HINT) && l.contains(cmd)),
+            "{text}"
+        );
         assert!(!text.contains(&format!("deployed. {CDK_HINT}")), "{text}");
     }
 
     #[test]
-    fn colored_replacements_are_cyan_without_backticks() {
+    fn colored_replacements_are_accented_without_backticks() {
         let (r, _) = fixture_reports().remove(0);
         let text = text_summary(
             &r,
             Style {
                 color: true,
                 unicode: true,
+                ..Style::default()
             },
         );
         assert!(
-            text.contains("\x1b[36marn:${AWS::Partition}:\x1b[0m"),
+            text.contains("\x1b[38;5;79marn:${AWS::Partition}:\x1b[0m"),
             "{text}"
         );
         let plain = text_summary(
@@ -1622,6 +1249,7 @@ pub(crate) mod tests {
             Style {
                 color: false,
                 unicode: true,
+                ..Style::default()
             },
         );
         assert!(plain.contains("`arn:${AWS::Partition}:`"), "{plain}");
@@ -1646,23 +1274,21 @@ pub(crate) mod tests {
             Style {
                 color: false,
                 unicode: true,
+                ..Style::default()
             },
         );
-        let block: Vec<&str> = text
-            .lines()
-            .skip_while(|l| !l.starts_with("  REQUIRED CHANGES"))
-            .skip(1)
-            .take_while(|l| !l.is_empty())
-            .collect();
-        assert_eq!(
-            block.iter().filter(|l| l.contains('→')).count(),
-            MAX_CHANGE_LINES
-        );
-        let rest = r.required_changes.len() - MAX_CHANGE_LINES;
+        let block = section_rows(&text, "Required changes");
+        let max = crate::summary::MAX_CHANGE_LINES;
+        assert_eq!(block.iter().filter(|l| l.contains('→')).count(), max);
+        let groups = crate::summary::change_groups(&r);
+        let shown: usize = crate::summary::pick(&groups, max).iter().map(|g| g.n).sum();
+        let rest = r.required_changes.len() - shown;
         assert!(
             block.last().unwrap().contains(&format!("{rest} more")),
             "{text}"
         );
+        // The fixes are not hidden behind the flags.
+        assert!(block.iter().any(|l| l.contains(" fix ")), "{text}");
     }
 
     #[test]
@@ -1672,7 +1298,10 @@ pub(crate) mod tests {
 
     #[test]
     fn wrap_keeps_long_words_whole() {
-        assert_eq!(wrap("a verylongword b", 4), vec!["a", "verylongword", "b"]);
+        assert_eq!(
+            crate::tui::wrap("a verylongword b", 4),
+            vec!["a", "verylongword", "b"]
+        );
     }
 
     /// Set `UPDATE_GOLDEN=1` to rewrite the golden files after an intended change.
@@ -1764,9 +1393,20 @@ pub(crate) mod tests {
             },
         );
         assert_eq!(r.summary.depth_blockers, 1);
-        assert_eq!(r.zones.unwrap().used.len(), 3);
+        let zones = |r: &Report| {
+            r.required_changes
+                .iter()
+                .filter(|c| c.cause.kind == CauseType::Zones)
+                .count()
+        };
+        assert_eq!(zones(&r), 1);
         assert!(
-            build(
+            r.required_changes
+                .iter()
+                .any(|c| c.reason.contains("3 zones"))
+        );
+        assert_eq!(
+            zones(&build(
                 prov,
                 vec![],
                 scan,
@@ -1776,9 +1416,8 @@ pub(crate) mod tests {
                     target_zones: Some(3),
                     ..Context::default()
                 }
-            )
-            .zones
-            .is_none()
+            )),
+            0
         );
     }
 
@@ -1789,61 +1428,95 @@ pub(crate) mod tests {
         assert!(t.ends_with('Z') && t.as_bytes()[10] == b'T');
     }
 
-    /// The JSON Schema of the report. Every key is always emitted, so every property
-    /// is required.
-    fn schema() -> serde_json::Value {
-        let mut v = serde_json::to_value(schemars::schema_for!(Report)).unwrap();
-        require_all(&mut v);
-        v
-    }
-
-    /// Every key the schema declares is in the JSON, also where the value is absent.
-    fn missing_keys(
+    /// Where `v` breaks `schema`: a key the schema does not declare, a required key
+    /// that is missing, or a null or empty list, which the output leaves out.
+    pub(crate) fn schema_errors(
         v: &serde_json::Value,
         schema: &serde_json::Value,
         root: &serde_json::Value,
         at: &str,
         out: &mut Vec<String>,
     ) {
+        use serde_json::Value;
         if let Some(r) = schema["$ref"].as_str() {
             let name = r.trim_start_matches("#/$defs/");
-            return missing_keys(v, &root["$defs"][name], root, at, out);
+            return schema_errors(v, &root["$defs"][name], root, at, out);
         }
-        if v.is_null() {
-            return;
+        match v {
+            Value::Null => return out.push(format!("{at}: null")),
+            Value::Array(a) if a.is_empty() => return out.push(format!("{at}: []")),
+            _ => {}
         }
         if let Some(branches) = schema["anyOf"].as_array().or(schema["oneOf"].as_array()) {
-            for b in branches.iter().filter(|b| b["type"] != "null") {
-                missing_keys(v, b, root, at, out);
+            let fits = branches.iter().any(|b| {
+                let mut e = Vec::new();
+                schema_errors(v, b, root, at, &mut e);
+                e.is_empty() && type_fits(v, b, root)
+            });
+            if !fits {
+                out.push(format!("{at}: no branch fits"));
             }
+            return;
         }
-        if let Some(props) = schema["properties"].as_object() {
-            for (k, s) in props {
-                match v.get(k) {
-                    Some(x) => missing_keys(x, s, root, &format!("{at}.{k}"), out),
-                    None => out.push(format!("{at}.{k}")),
+        if let (Some(m), Some(props)) = (v.as_object(), schema["properties"].as_object()) {
+            for k in schema["required"].as_array().into_iter().flatten() {
+                if !m.contains_key(k.as_str().unwrap_or_default()) {
+                    out.push(format!("{at}.{k}: missing"));
                 }
+            }
+            for (k, x) in m {
+                match props.get(k) {
+                    Some(s) => schema_errors(x, s, root, &format!("{at}.{k}"), out),
+                    None => out.push(format!("{at}.{k}: undeclared")),
+                }
+            }
+        } else if let (Some(m), Some(s)) = (v.as_object(), schema.get("additionalProperties")) {
+            for (k, x) in m {
+                schema_errors(x, s, root, &format!("{at}.{k}"), out);
             }
         }
         if let (Some(items), Some(a)) = (schema.get("items"), v.as_array()) {
             for (i, x) in a.iter().enumerate() {
-                missing_keys(x, items, root, &format!("{at}[{i}]"), out);
+                schema_errors(x, items, root, &format!("{at}[{i}]"), out);
             }
         }
     }
 
+    fn type_fits(
+        v: &serde_json::Value,
+        schema: &serde_json::Value,
+        root: &serde_json::Value,
+    ) -> bool {
+        if let Some(r) = schema["$ref"].as_str() {
+            return type_fits(v, &root["$defs"][r.trim_start_matches("#/$defs/")], root);
+        }
+        let name = match v {
+            serde_json::Value::Object(_) => "object",
+            serde_json::Value::Array(_) => "array",
+            serde_json::Value::String(_) => "string",
+            serde_json::Value::Bool(_) => "boolean",
+            serde_json::Value::Number(_) => "integer",
+            serde_json::Value::Null => "null",
+        };
+        match &schema["type"] {
+            serde_json::Value::String(t) => t == name || (t == "number" && name == "integer"),
+            serde_json::Value::Array(ts) => ts.iter().any(|t| t == name),
+            _ => true,
+        }
+    }
+
     #[test]
-    fn every_key_is_always_present() {
-        let schema = schema();
+    fn reports_follow_their_schema_and_leave_out_empty_keys() {
+        let schema = output_schema::<crate::output::Scan>();
         for input in [
             crate::test_inputs::SAMPLE_TEMPLATE,
             include_str!("../tests/fixtures/tf-plan.json"),
             crate::test_inputs::CUSTOM_RESOURCES_TEMPLATE,
         ] {
             let v: serde_json::Value = serde_json::from_str(&fixed_report(input)).unwrap();
-            let mut missing = Vec::new();
-            missing_keys(&v, &schema, &schema, "", &mut missing);
-            assert!(missing.is_empty(), "{missing:?}");
+            let mut errors = Vec::new();
+            schema_errors(&v, &schema, &schema, "", &mut errors);
+            assert!(errors.is_empty(), "{errors:?}");
         }
     }
 
@@ -1862,11 +1535,17 @@ pub(crate) mod tests {
         );
         assert_eq!(
             r.warnings.iter().map(|w| w.code).collect::<Vec<_>>(),
-            [WarningCode::KnowledgeRegionUnlisted]
+            [WarningCode::PublicDataRegionUnlisted]
         );
         let text = text_summary(&r, Style::default());
-        let sources = text.lines().nth(1).unwrap_or_default();
-        assert_eq!(sources.trim(), "public mode", "{text}");
+        let target = text
+            .lines()
+            .find(|l| l.contains("-> eusc-de-east-1"))
+            .unwrap_or_default();
+        assert!(
+            target.contains("public mode") && !target.contains("Knowledge"),
+            "{text}"
+        );
     }
 
     /// A dependency and a doc-rule deviation: their lists, counts, outcome, required
@@ -1900,15 +1579,8 @@ pub(crate) mod tests {
             "doc rules bring their remediation"
         );
         let text = text_summary(&r, Style::default());
-        assert!(
-            text.contains("lambda runtime create blocked (AWS docs)"),
-            "{text}"
-        );
-        assert!(
-            text.lines()
-                .any(|l| l.contains("dependencies") && l.contains("(AWS docs)")),
-            "{text}"
-        );
+        assert!(text.contains("lambda runtime create blocked"), "{text}");
+        assert!(text.contains("iam requested region condition"), "{text}");
     }
 
     /// A property the target schema lacks is a depth blocker decided by the schema, and
@@ -1949,7 +1621,7 @@ pub(crate) mod tests {
             "AWS::Lambda::Function".to_string(),
             ["Runtime".to_string()].into(),
         )]);
-        let mut depth = crate::provider::schema::checks(&t, &schemas);
+        let mut depth = crate::provider::schema::checks(&t, &schemas, None);
         let data = data();
         let findings = matcher::assess(&t, &data.knowledge, None, None, &depth);
         depth.clear();
@@ -1983,10 +1655,7 @@ pub(crate) mod tests {
             )
         );
         let text = text_summary(&r, Style::default());
-        assert!(
-            text.contains("values or properties the region does not offer"),
-            "{text}"
-        );
+        assert!(text.contains("not offered"), "{text}");
     }
 
     /// Failing account checks are blockers decided by live mode; skipped ones warn.
@@ -2001,6 +1670,7 @@ pub(crate) mod tests {
                 quota_code: "L-F678F1CE".into(),
                 name: "VPCs per Region".into(),
                 needed: 6,
+                used: None,
                 uncounted: 0,
                 quota: 5.0,
                 value_source: QuotaSource::Default,
@@ -2016,6 +1686,7 @@ pub(crate) mod tests {
                     verdict: ScpVerdict::DeniesTarget,
                     conditional: true,
                 }],
+                services_denied: vec![],
             }),
             ssm_parameters: vec![SsmParameterCheck {
                 name: "/aws/service/x".into(),
@@ -2061,7 +1732,82 @@ pub(crate) mod tests {
                     && w.message.contains("region-opt-in"))
         );
         let text = text_summary(&r, Style::default());
-        assert!(text.contains("account blockers"), "{text}");
+        assert!(text.contains("blockers") && text.contains("SCP"), "{text}");
+    }
+
+    /// A Terraform policy set from a policy document read at apply time is checked
+    /// through the document's statements.
+    #[test]
+    fn terraform_policy_documents_are_checked() {
+        let plan = r#"{"format_version":"1.2",
+          "planned_values":{"root_module":{"resources":[
+            {"address":"aws_iam_policy.p","mode":"managed","type":"aws_iam_policy","name":"p",
+             "provider_name":"registry.terraform.io/hashicorp/aws","values":{"name":"p"}}]}},
+          "resource_changes":[
+            {"address":"data.aws_iam_policy_document.d","mode":"data","type":"aws_iam_policy_document","name":"d",
+             "change":{"actions":["read"],"after":{"statement":[{"effect":"Deny","actions":["*"],
+               "condition":[{"test":"StringNotEquals","variable":"aws:RequestedRegion","values":["eu-central-1"]}]}]}}}],
+          "configuration":{"root_module":{"resources":[
+            {"address":"aws_iam_policy.p","mode":"managed","type":"aws_iam_policy","name":"p",
+             "expressions":{"policy":{"references":["data.aws_iam_policy_document.d.json","data.aws_iam_policy_document.d"]}}}]}}}"#;
+        let r = fixed_for(plan, "eusc-de-east-1", None);
+        assert!(
+            r.dependencies
+                .iter()
+                .any(|d| d.rule == "iam-requested-region-condition"
+                    && d.logical_id == "aws_iam_policy.p"),
+            "{:?}",
+            r.dependencies
+        );
+    }
+
+    /// A SAM function is assessed as the Lambda function it deploys as, with Globals.
+    #[test]
+    fn sam_resources_are_assessed_as_their_base_type() {
+        let input = r#"{"Transform":"AWS::Serverless-2016-10-31",
+            "Globals":{"Function":{"Runtime":"python3.7","Environment":{"Variables":{"R":"eu-central-1"}}}},
+            "Resources":{
+              "F":{"Type":"AWS::Serverless::Function","Properties":{"Handler":"a.h","CodeUri":"src/","AcceleratorConfig":{}}},
+              "C":{"Type":"AWS::Serverless::Connector","Properties":{}}}}"#;
+        let r = fixed_for(input, "eu-west-1", None);
+        let f = r.findings.iter().find(|f| f.logical_id == "F").unwrap();
+        assert_eq!(f.resource_type, "AWS::Serverless::Function");
+        assert_eq!(f.verdict, crate::matcher::Verdict::Available);
+        assert!(
+            r.deviations
+                .iter()
+                .any(|d| d.rule == "lambda-runtime-create-blocked" && d.logical_id == "F"),
+            "{:?}",
+            r.deviations
+        );
+        // A literal in Globals is reported where it is written, not on the function.
+        assert!(
+            r.hazards.iter().all(|h| h.logical_id != "F"),
+            "{:?}",
+            r.hazards
+        );
+        assert!(
+            r.hazards
+                .iter()
+                .any(|h| h.logical_id == "Globals/Function"
+                    && h.path.starts_with("Globals.Function.")),
+            "{:?}",
+            r.hazards
+        );
+        let t = reader::parse_text(input).unwrap();
+        assert_eq!(
+            crate::provider::schema::types(&t, None),
+            ["AWS::Lambda::Function".to_string()].into()
+        );
+        let schemas = crate::provider::schema::Schemas::from([(
+            "AWS::Lambda::Function".to_string(),
+            ["Runtime", "Handler", "Environment"]
+                .map(String::from)
+                .into(),
+        )]);
+        let checks = crate::provider::schema::checks(&t, &schemas, None);
+        let props: Vec<&str> = checks["F"].iter().map(|c| c.value.as_str()).collect();
+        assert_eq!(props, ["AcceleratorConfig"]);
     }
 
     /// Each scan addition fires on an input that has it and not on one that does not,
@@ -2188,7 +1934,7 @@ pub(crate) mod tests {
                 .collect::<Vec<_>>()
         };
         assert_eq!(by(CauseType::Deviation), [DecidedBy::Guide]);
-        assert_eq!(by(CauseType::Availability), [DecidedBy::Knowledge]);
+        assert_eq!(by(CauseType::Availability), [DecidedBy::Public]);
         assert!(
             by(CauseType::Hazard)
                 .iter()
@@ -2203,6 +1949,6 @@ pub(crate) mod tests {
 
     #[test]
     fn committed_schema_matches_the_report_types() {
-        assert_committed_schema::<Report>("report.schema.json");
+        assert_committed_schema::<crate::output::Scan>("report.schema.json");
     }
 }

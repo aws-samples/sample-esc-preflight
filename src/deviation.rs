@@ -28,7 +28,7 @@ pub struct Deviation {
     pub severity: Severity,
     #[serde(skip)]
     pub(crate) feature: Option<String>,
-    /// The feature the Knowledge MCP data lists as available although the guide says it
+    /// The feature the public availability data lists as available although the guide says it
     /// is not: a guide conflict, reported as a warning.
     pub conflict: Option<String>,
     #[serde(skip)]
@@ -36,7 +36,7 @@ pub struct Deviation {
 }
 
 impl Deviation {
-    /// Blocks deployment: a blocker the Knowledge MCP data does not contradict.
+    /// Blocks deployment: a blocker the public availability data does not contradict.
     pub fn blocks(&self) -> bool {
         self.severity == Severity::Blocker && self.conflict.is_none()
     }
@@ -171,7 +171,7 @@ fn find(
         let hits: Vec<_> = template
             .resources
             .values()
-            .filter(|r| rule.matches(&r.resource_type, &r.properties, facts))
+            .filter(|r| rule.matches(r.deployed_type(), r.deployed_properties(), facts))
             .collect();
         if hits.is_empty() {
             continue;
@@ -321,6 +321,7 @@ mod tests {
                 origin,
                 env: None,
                 cdk_path: None,
+                deployed: None,
             },
         );
         [Kind::Deviation, Kind::Dependency]
@@ -403,17 +404,25 @@ mod tests {
         let client =
             crate::provider::http::Client::new(std::time::Duration::from_secs(30)).unwrap();
         let g = guide::fetch(&client).unwrap();
-        let k = crate::provider::knowledge::fetch(
+        let k = crate::provider::availability(
             &client,
-            "eusc-de-east-1",
+            &["eusc-de-east-1"],
             &crate::provider::knowledge::Needs::default(),
         )
-        .unwrap();
+        .unwrap()
+        .regions
+        .remove(0);
         let gone: Vec<_> = rules::all()
             .iter()
             .filter_map(|r| r.feature.as_ref().filter(|f| !k.products.contains_key(*f)))
             .collect();
         assert!(gone.is_empty(), "{gone:?}");
+        let (service, feature) = crate::depth::GRAVITON_FEATURE;
+        assert!(
+            k.features
+                .contains_key(&(service.to_string(), feature.to_string())),
+            "the Lambda arm64 check reads this feature"
+        );
         let stale: Vec<_> = guide_rules()
             .into_iter()
             .filter(|(r, ..)| anchor(r, &g).is_none())
