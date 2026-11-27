@@ -1,6 +1,6 @@
 # AGENTS.md
 
-`esc-preflight` is a Rust CLI that checks CloudFormation templates, CDK cloud assemblies and Terraform plans for the AWS European Sovereign Cloud or any other target Region (`scan`), plans the move (`plan`) and compares two Regions (`compare`). User docs: `README.md`. Contributor docs: `docs/DEVELOPMENT.md`.
+`esc-preflight` is a Rust CLI that checks CloudFormation and AWS SAM templates, CDK cloud assemblies and Terraform plans for the AWS European Sovereign Cloud or any other target Region (`scan`), plans the move (`plan`) and compares two Regions (`compare`). User docs: `README.md` (overview) and `docs/user-guide.md` (report, live mode, `plan`, `compare`); keep the README short and put details in the guide. Contributor docs: `docs/DEVELOPMENT.md`.
 
 ## Commands
 
@@ -13,12 +13,12 @@ UPDATE_GOLDEN=1 cargo test                  # after an intended report change; r
 
 ## Pipeline
 
-`reader` → `type_mapper` → `matcher` (availability) + `deviation` (documented differences and dependencies) + `extractor` (hardcoded values) + `depth` (offered values and properties) + `account` (live account checks) → `remediation` (fix, propose, flag) → `report`. `plan` reads the report and the mechanism rules; `compare` reads two Regions' public data.
+`reader` → `type_mapper` → `matcher` (availability) + `deviation` (documented differences and dependencies) + `extractor` (hardcoded values) + `depth` (offered values and properties) + `account` (live account checks) → `remediation` (fix, propose, flag) → `report` → `summary` (terminal) and `output` (JSON). `plan` reads the report and the mechanism rules; `compare` reads two Regions' public data.
 
 | Path | Role |
 |---|---|
 | `src/reader.rs`, `src/reader/` | Parse templates, `cdk.out` and Terraform plan JSON into `src/model.rs` |
-| `src/provider/` | Fetch public data (AWS Knowledge MCP, ESC User Guide, Terraform provider data), read bundled partition facts, and run live-mode calls |
+| `src/provider/` | Fetch public data (Builder Center capabilities API, AWS Knowledge MCP, ESC User Guide, CloudFormation schemas, Terraform provider data), read bundled partition facts, and run live-mode calls |
 | `src/remediation.rs` | Tier and edit for every required change |
 | `src/plan.rs`, `src/compare.rs` | The `plan` and `compare` commands |
 | `data/rules.json` | Rules database, see `docs/DEVELOPMENT.md` |

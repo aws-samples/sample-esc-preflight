@@ -1,61 +1,59 @@
 # Development
 
-## Build and test
+This guide is for contributors who change or extend esc-preflight: how the code is organized, how to test it, and how to add a rule.
+
+## Build and Test
 
 Requires Rust 1.99 or later.
 
 ```bash
-cargo test                                    # offline, against tests/fixtures
+cargo test                                   # offline, against tests/fixtures
 cargo clippy --all-targets -- -D warnings
-cargo deny check                              # licenses, advisories, sources
-cargo test -- --ignored --skip live_esc       # also the live public sources
+cargo deny check                             # licenses, advisories, sources
+cargo test -- --ignored --skip live_esc      # also against the live public sources
 ESC_PREFLIGHT_PROFILE=<profile> cargo test -- --ignored live_esc   # live mode in an ESC account
 ```
 
-The ignored public tests check the Builder Center capabilities API, the Knowledge MCP data, the China sources (`live_china`), the ESC User Guide (`no_stale_rules_on_the_live_guide`), every quoted sentence of the rules (`doc_quotes_are_on_their_pages`), the Lambda runtime lists against the deprecation table (`runtime_lists_follow_the_deprecation_table`) and a real schema bundle (`live_bundle`). The `live_esc` tests read an ESC account outside an organization: registry and probes, resource schemas (`live_esc_schemas`) and account checks (`live_esc_account`).
+The ignored tests catch drift in the outside world: every quoted sentence of the rules must still be on its page, every ESC User Guide rule on the live guide, and the public sources must still answer in the shape the code reads. Run them before a release and after changing `data/`. The offline tests read a recorded Knowledge MCP response, `tests/fixtures/knowledge.json`; record it again when tests should see newer data.
 
-After an intended change to the output, regenerate the golden files and the three schema files in `schema/` with `UPDATE_GOLDEN=1 cargo test` and review the diff. If a field was removed or renamed, or its meaning changed, increment the schema version (`SCHEMA_VERSION` in `src/output.rs`, shared by the three outputs) and the version the skill checks. The JSON is built in `src/output.rs` from the in-memory results, which the terminal summaries read; a field there that no summary needs can stay out of memory.
+The terminal summaries and the JSON reports are compared against golden files in `tests/fixtures/`. After an intended output change, run `UPDATE_GOLDEN=1 cargo test`, which also regenerates the JSON schemas in `schema/`, and review the diff. If a JSON field is removed or renamed, or its meaning changes, increment `SCHEMA_VERSION` in `src/output.rs` and the version the agent skill checks.
 
-## Code
+## How the Code Fits Together
 
-| Path | Role |
+A run reads the input into one model, checks it against the target, and renders the results twice: as a summary for people and as JSON for automation.
+
+| Step | Code |
 |---|---|
-| `src/cli.rs` | Commands `scan`, `plan` and `compare` |
-| `src/reader.rs`, `src/reader/` | Templates, `cdk.out` and Terraform plan JSON into `src/model.rs` |
-| `src/output.rs` | The JSON of `scan`, `plan` and `compare`: grouping, the `run` and `sources` blocks, and the schema types |
-| `src/rules.rs` | Loads `data/rules.json`; conditions, scopes, literal and exemption rules |
-| `src/deviation.rs` | Deviation and dependency rules against the input |
-| `src/extractor.rs` | Hardcoded literals |
-| `src/depth.rs` | Values the target must offer |
-| `src/account.rs` | Live account checks |
-| `src/plan.rs`, `src/compare.rs` | The `plan` and `compare` outputs |
-| `src/summary.rs`, `src/summary/` | The terminal summaries of `scan`, `plan` and `compare`, built from the in-memory results |
-| `src/tui.rs` | The terminal look the summaries share: frame, tabs, colors, ASCII fallback, terminal width, and the progress line on stderr |
-| `src/provider/schema.rs` | CloudFormation resource schemas: per-Region bundles and `DescribeType`; reads the bundle zip with `miniz_oxide` |
-| `src/provider/` (others) | Builder Center capabilities API, Knowledge MCP, AWS China sources, ESC User Guide, Terraform provider data, signed AWS calls, partition facts |
+| Read CloudFormation, SAM, `cdk.out` or a Terraform plan into one model | `src/reader.rs`, `src/reader/`, `src/model.rs` |
+| Fetch availability data, the ESC User Guide and resource schemas | `src/provider/` |
+| Find unavailable types and services, values the target does not offer, and documented deviations | `src/depth.rs`, `src/deviation.rs` |
+| Find hardcoded values | `src/extractor.rs` |
+| Turn findings into required changes with tiers and replacements | `src/remediation.rs` |
+| Run the live account checks | `src/account.rs` |
+| Build `plan` and `compare` | `src/plan.rs`, `src/compare.rs` |
+| Render the summaries and the JSON | `src/summary.rs`, `src/summary/`, `src/tui.rs`, `src/output.rs` |
+| Parse the command line and wire the steps | `src/cli.rs` |
 
-`tests/fixtures/schemas.zip` holds two trimmed schemas from a bundle, one stored and one deflated, written with Python's `zipfile`.
+Availability data is never bundled. Every run fetches it, so the output reflects the target as of the run, and the `sources` block of the report records what was read.
 
 ## Data
 
-`data/` holds maps, partition facts and the rules. Availability data is never bundled; every run fetches it from the Builder Center capabilities API and the AWS Knowledge MCP server, and for AWS China from the Region's schema bundle and the AWS SDK endpoint data.
+`data/` holds what does not change from run to run:
 
-| File | Update |
-|---|---|
-| `botocore-services.json`, `partitions.json` | `uv run --with botocore python3 scripts/gen-botocore-services.py <names_data.hcl>`; needed for a new partition or Region |
-| `rules.json` | By hand, see below |
-| `cfn-products.json` | By hand: CloudFormation namespaces and types whose Knowledge MCP product name does not follow from the namespace. `cargo test -- --ignored` fails on a name the server no longer lists, here and in rule `feature`s |
-| `cdk-sdk-v2-to-v3.json` | Copied from `aws-cdk-lib` |
-| `esc-guide-pages.json` | By hand; the ignored live guide test lists unmapped pages |
-| `cfn-service-overrides.json` | By hand |
-| `sam.json` | From the AWS SAM resource reference: per SAM type its base CloudFormation type and the properties SAM passes through, each with the sentence that says so; the ignored doc-quote test checks every sentence |
-| `mitigations.json` | By hand: known mitigations for gaps, each with a quoted sentence from docs.aws.amazon.com or aws.amazon.com/blogs, the types or rule ids it answers, the partitions it applies to, and `validation` (`documented`, or `field-proven` with evidence in the pull request). Internal-only workarounds do not belong here |
-
-`tests/fixtures/knowledge.json` is a recorded Knowledge MCP response for eusc-de-east-1; record it again when tests should see newer data.
+| File | Content | Update |
+|---|---|---|
+| `rules.json` | Deviations, dependencies, literal forms, quotas and plan mechanisms | By hand, see [Rules](#rules) |
+| `mitigations.json` | Known mitigations for gaps, each with a quoted AWS sentence and a `validation` of `documented` or `field-proven` | By hand; `field-proven` needs evidence in the pull request, and internal-only workarounds do not belong here |
+| `sam.json` | Per SAM type, its base CloudFormation type and the properties SAM passes through | From the AWS SAM resource reference |
+| `cfn-products.json` | CloudFormation namespaces and types whose product name does not follow from the namespace | By hand; the ignored tests fail on a name the sources no longer list |
+| `cfn-service-overrides.json` | CloudFormation namespaces whose SDK endpoint prefix is not the lowercased namespace | By hand |
+| `esc-guide-pages.json` | ESC User Guide pages per service | By hand, when the live guide test lists an unmapped page |
+| `botocore-services.json`, `partitions.json` | Services and partition facts | `uv run --with botocore python3 scripts/gen-botocore-services.py <names_data.hcl>`, for a new partition or Region |
+| `cdk-sdk-v2-to-v3.json` | CDK SDK name mapping | Copied from `aws-cdk-lib` |
 
 ## Rules
 
-`data/rules.json` is the one rule set for every command. A rule needs an AWS-documented deviation or a deterministic target state; availability itself comes from the public availability data and live mode, never from rules. A deviation rule ties one documented difference to the resources that use the feature:
+`data/rules.json` is the one rule set for every command. A rule needs an AWS-documented difference or a deterministic target state; whether a service is available comes from the public data and live mode, never from a rule. This deviation rule ties one sentence of the ESC User Guide to the resources that use the feature:
 
 ```json
 {
@@ -69,70 +67,47 @@ After an intended change to the output, regenerate the golden files and the thre
 }
 ```
 
-Kinds:
+| Kind | Use |
+|---|---|
+| `deviation` | A feature the target does not offer, or offers differently (`severity: caveat`) |
+| `dependency` | Something the resource needs stays outside the target |
+| `literal` | A literal form that works only in some Regions |
+| `exemption` | A literal the target requires at a property, so it is not a hazard there |
+| `quota` | A quota the input counts against, for live mode |
+| `mechanism` | How a resource moves, for `plan` |
 
-| Kind | Meaning | Extra fields |
-|---|---|---|
-| `deviation` | A feature the target does not offer, or offers differently (`severity` `caveat`) | `feature`, `remediation` |
-| `dependency` | Something the resource needs stays outside the target; always a flag | `remediation` (required) |
-| `literal` | A literal form that works only in some Regions | `pattern` (two captures: the literal, its Region), `replace` per source format |
-| `exemption` | A literal the target requires at a property, so it is no hazard there | `paths`, `literal` |
-| `quota` | A quota the input counts against; live mode | `quota` (`service_code`, `quota_code`, `name`, `reserve`); `paths` to sum, else one per resource |
-| `mechanism` | How a resource moves, for `plan` | `mechanism` (`boundary`, `content`, `path`, `via`, `data`, `crosses_partition`, `layer`, optional `fallback` with its own `url` and `quote`) |
+Every rule rests on a source. A `guide` source must match a difference on the [ESC User Guide](https://docs.aws.eu/esc/latest/userguide/services.html), and the rule stops firing when the sentence leaves the guide. A `doc` source quotes a sentence from docs.aws.amazon.com verbatim. `scope` limits a rule to partitions or Regions, and `when` lists alternative conditions on property paths; the structs in `src/rules.rs` define every field.
 
-- `scope`: the target `partitions` or `regions` the rule applies to, both empty for any target; `except_regions`; `within_partition` for moves inside one partition (the input's environment is in the target's partition, or, without an environment, `--account` is set).
-- `source.guide`: `text`, and every `also` fragment, must appear in one difference on the [ESC User Guide](https://docs.aws.eu/esc/latest/userguide/services.html) page. The rule fires only while it does, and only for targets that read the guide. `source.doc`: a `url` on docs.aws.amazon.com and the sentence the rule rests on, verbatim, as `quote`; these rules apply to every target in their scope.
-- `when` conditions are alternatives; `all` requires every condition in it. A condition tests `path` with `equals` or `one_of` (case-insensitive; booleans and numbers as text), `prefix`, `contains`, `not_in` (a string outside the list), `no_other_region` (a string without a breaking Region or zone hazard) or `absent` (no value), or without an operator requires a value. Empty `when`: the type alone fires the rule. For mechanism rules, rules with conditions are tried first.
-- `feature`: the product or feature of the public availability data the sentence restricts. When the data lists it as available, the blocker becomes a guide conflict warning. A feature name the capabilities API lists under several services with different states (such as "PrivateLink Support") is also listed per service as `<service>: <feature>`, because each state is right for its service, and `compare` compares those entries. The bare name keeps the state of a service of that name, else the most available state, so a lookup by name finds the feature where some service offers it.
-- Types-only deviation rules carry Terraform `aws_*` types only: the public availability data and live mode decide CloudFormation types. The exception is a rule with `remediation`.
-- `remediation` (`action`, `change`, `consequence`, `doc`; `action` is the short form for the terminal summary). On guide rules, only for features that cannot exist in a single-region partition.
-- The Lambda runtime lists are static, so the output does not depend on the date. Update them when the deprecation table changes; the ignored test fails when it does.
+Three constraints keep rules from contradicting the availability data:
 
-A blocker fails someone's build, so a wrong rule is costly. To add or change a rule:
+- A rule's `feature` names the product the sentence restricts. Where the public data lists it as available, the blocker becomes a guide conflict warning instead.
+- A blocker deviation rule without conditions lists Terraform `aws_*` types only, unless it carries a `remediation`; the availability data already decides CloudFormation types.
+- The Lambda runtime lists are static, so the output does not depend on the date. The ignored tests fail when the deprecation table changes.
 
-1. Quote a sentence that says the feature is not available, or for a caveat how it differs, and match only values the template shows.
-2. Add a case that fires and a near miss to `tests/fixtures/rule-cases.json` (deviation and dependency rules with conditions).
+A blocker fails someone's build, so a wrong rule is costly. To add or change one:
+
+1. Quote the sentence that says the feature is not available, or how it differs, and match only values the input shows.
+2. Add a case that fires and a near miss to `tests/fixtures/rule-cases.json`.
 3. Check types and paths against the CloudFormation and Terraform schemas:
    ```bash
    curl -sSfLO https://schema.cloudformation.us-east-1.amazonaws.com/CloudformationSchema.zip
    terraform providers schema -json > tf-schema.json   # in a config with the aws and awscc providers
    python3 scripts/check-rules.py CloudformationSchema.zip tf-schema.json
    ```
-4. Run `cargo test -- --ignored`, which fails if a guide rule's sentence is not on the live guide or a quote is not on its page.
+4. Run `cargo test -- --ignored`, which fails if the sentence is not on its page.
 
-## Limitations
+## Known Limits
 
-Scan:
+These are the main gaps, and good places to contribute:
 
-- Only what the input declares is assessed, not settings made outside it.
-- Custom resources backed by your own code and nested stacks in a single template are reported as not assessable. Scan `cdk.out` or the processed template instead.
-- SAM resources are assessed as their base CloudFormation type with the properties SAM passes through unchanged (`data/sam.json`); properties SAM transforms, resources it generates from event sources, `AWS::Serverless::Application` and `AWS::Serverless::Connector` are not checked. `Globals` apply to the checks of each resource; hardcoded literals in `Globals` are reported at `Globals/<section>`.
-- Terraform `aws_*` resources are assessed per service, not per resource type, and their properties are not checked: no public source maps their arguments to CloudFormation properties. Plan with the awscc provider, or use live mode, for type-level answers and property checks.
-- Roadmap states need a product name for the namespace; namespaces without one show no roadmap.
-- Terraform resource IDs count only where the configuration writes them as constants; IDs in variable defaults and locals are not reported.
-- S3 Signature Version 2 is a client setting, not part of IaC, and is not checked.
-- Property checks compare top-level properties of `AWS::` CloudFormation types, of SAM resources through their base type, and of Terraform awscc resources (attribute names compared without case and underscores); custom resources (including `AWS::CloudFormation::CustomResource`) and Terraform `aws_*` resources are not checked. A value under `Fn::If` counts as set. Any transform other than SAM and language extensions, in any stack of a CDK assembly, turns the checks off with a warning. In AWS GovCloud (US), some types have older schemas (for example `AWS::CloudFormation::Stack`), so properties such as `StackName` are reported there.
-- `aws:RequestedRegion` is found in IAM, SCP, S3 bucket, KMS key and VPC endpoint policies the input writes out. A Terraform policy set from an `aws_iam_policy_document` data source is read from the data source when the plan has not rendered it.
-- A fixed S3 bucket name inside `Fn::Sub` or `Fn::Join` is not checked. In a Terraform plan with `--account`, a name that already holds the planning account may be flagged. A bucket name in a CDK assembly that holds the environment's Region gets neither a hazard nor the dependency.
-- The deprecated-runtime caveat is a caveat in ESC too; no source lists ESC's runtimes separately.
-- Lambda `arm64` is checked against the capabilities API's AWS Lambda feature "Graviton (ARM) Support", also in live mode, since no API lists a Region's Lambda architectures; every Lambda runtime supports both architectures. In AWS China, and when the capabilities API fails, the value is reported as unchecked.
-- `scripts/check-rules.py` does not check SAM paths.
-
-Live account checks:
-
-- Quotas count the account's current use of VPCs, internet gateways, Elastic IPs and reserved Lambda concurrency in the target; other quotas are not checked.
-- Service control policies are read only from the management account or a delegated administrator. Region conditions are evaluated for `aws:RequestedRegion` with String operators; `conditional` marks a denying statement with further conditions or limited actions. Service allow lists (an `Allow` counts only for all resources) and unconditional denies on all resources are evaluated per IAM service prefix for CloudFormation, CDK and SAM input, derived from the CloudFormation namespace (a table in `src/account.rs` for the namespaces that differ); a deny of some actions of a service, or one with conditions other than the Region, is not evaluated.
-- Public SSM parameters overridden at deploy time, and Terraform `aws_ssm_parameter` data sources, are not checked.
-
-Plan and compare:
-
-- `plan` covers the most frequent resource types; `unknown` means no rule covers the type, or its mechanism is not documented across the partitions of the move. Waves, in the JSON only, follow references within a stack, `Fn::ImportValue` across stacks of a CDK assembly, nested-stack outputs, and Terraform references; values passed into nested stacks as parameters, and Terraform references through `locals` (absent from the plan JSON), are not followed; a module output that goes through a local counts as a dependency on the whole module, which can close a cycle the configuration does not have (the warning says so). Proposals count as blocking until applied.
-- `compare` compares properties only when `--from` publishes a schema bundle. The `--to` properties come from its bundle, or from the account in live mode with `--properties`.
-
-AWS China:
-
-- China publishes no product, roadmap or config value data: roadmap states are not reported, instance types and engine versions are checked only in live mode, and `compare` covers resource types and properties.
+- Only what the input declares is checked, not settings made outside it.
+- Custom resources backed by your own code, and nested stacks in a single template, are not assessed. Scanning `cdk.out` or the processed template covers more.
+- Terraform `aws_*` resources are checked per service, not per type, and their properties are not checked, because no public source maps their arguments to CloudFormation properties. The `awscc` provider and live mode give type-level answers.
+- SAM resources are checked as their base type; resources SAM generates from event sources are not.
+- Live quota checks cover VPCs, internet gateways, Elastic IPs and Lambda reserved concurrency only.
+- `plan` covers the most frequent resource types; others are reported as needing a decision.
+- AWS China publishes no product, roadmap or config value data, so those checks need live mode there.
 
 ## Releases
 
-Not published to crates.io. For a new version, bump `version` in `Cargo.toml` and in the skill's metadata and `compatibility`, tag `<version>` (no `v` prefix, e.g. `0.3.0`) and update the tag in the README install command.
+esc-preflight is not published to crates.io. For a new version, bump `version` in `Cargo.toml` and in the skill's metadata and `compatibility`, update the tag in the README install command, merge to `main`, and tag the merge commit `<version>` (no `v` prefix, for example `0.3.1`).
